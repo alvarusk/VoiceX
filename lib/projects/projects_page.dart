@@ -19,10 +19,12 @@ class ProjectsPage extends StatefulWidget {
     required this.db,
     required this.isDark,
     required this.onToggleTheme,
+    this.autoSyncOnStart = true,
   });
   final AppDatabase db;
   final bool isDark;
   final VoidCallback onToggleTheme;
+  final bool autoSyncOnStart;
 
   @override
   State<ProjectsPage> createState() => _ProjectsPageState();
@@ -61,7 +63,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
   void initState() {
     super.initState();
     _loadManualFolders();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
+    if (widget.autoSyncOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
+    }
   }
 
   Future<void> _loadManualFolders() async {

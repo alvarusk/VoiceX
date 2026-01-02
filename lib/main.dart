@@ -15,7 +15,14 @@ Future<void> main() async {
 }
 
 class VoiceXApp extends StatefulWidget {
-  const VoiceXApp({super.key});
+  const VoiceXApp({
+    super.key,
+    this.autoSyncOnStart = true,
+    this.showSplash = true,
+  });
+
+  final bool autoSyncOnStart;
+  final bool showSplash;
 
   @override
   State<VoiceXApp> createState() => _VoiceXAppState();
@@ -24,17 +31,19 @@ class VoiceXApp extends StatefulWidget {
 class _VoiceXAppState extends State<VoiceXApp> {
   late final AppDatabase _db = AppDatabase();
   int _tab = 0;
-  bool _showSplash = true;
+  late bool _showSplash = widget.showSplash;
   ThemeMode _themeMode = ThemeMode.dark;
 
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() => _showSplash = false);
-      }
-    });
+    if (widget.showSplash) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() => _showSplash = false);
+        }
+      });
+    }
   }
 
   @override
@@ -69,6 +78,7 @@ class _VoiceXAppState extends State<VoiceXApp> {
                       db: _db,
                       isDark: _themeMode == ThemeMode.dark,
                       onToggleTheme: _toggleTheme,
+                      autoSyncOnStart: widget.autoSyncOnStart,
                     ),
                     SettingsPage(
                       db: _db,
