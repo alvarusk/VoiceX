@@ -406,14 +406,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   );
                 },
               );
-              if (context.mounted) {
-                await _loadManualFolders();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sincronizacion cloud completa.'),
-                  ),
-                );
-              }
+              if (!context.mounted) return;
+              await _loadManualFolders();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sincronizacion cloud completa.'),
+                ),
+              );
             },
           ),
           IconButton(

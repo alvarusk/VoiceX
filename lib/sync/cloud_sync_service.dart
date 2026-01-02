@@ -148,8 +148,9 @@ class CloudSyncService {
         final path = f.assPath;
         if (path.isEmpty ||
             path.startsWith('http://') ||
-            path.startsWith('https://'))
+            path.startsWith('https://')) {
           continue;
+        }
         try {
           final file = File(path);
           if (await file.exists()) {

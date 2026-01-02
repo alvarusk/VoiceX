@@ -778,8 +778,15 @@ Si dudas, prioriza estas grafías tal cual.
           _seekVideoForIndex(project.projectId, project.currentIndex);
         }
 
-        return WillPopScope(
-          onWillPop: () => _confirmExitIfDirty(project),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final shouldPop = await _confirmExitIfDirty(project);
+            if (shouldPop && context.mounted) {
+              Navigator.of(context).pop();
+            }
+          },
           child: Scaffold(
             appBar: AppBar(
               title: FittedBox(
