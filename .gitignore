@@ -6,6 +6,9 @@
 *.swp
 .buildlog/
 .history
+*.pfx
+*.env
+*.env*
 
 
 
