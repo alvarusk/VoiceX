@@ -119,7 +119,7 @@ class ReviewService {
     final files = await (db.select(db.projectFiles)..where((t) => t.projectId.equals(projectId))).get();
 
     // Borra ficheros locales grandes.
-    Future<void> _deleteIfLocal(String path) async {
+    Future<void> deleteIfLocal(String path) async {
       if (path.isEmpty) return;
       if (path.startsWith('http://') || path.startsWith('https://')) return;
       try {
@@ -131,10 +131,10 @@ class ReviewService {
     }
 
     for (final f in files) {
-      await _deleteIfLocal(f.assPath);
+      await deleteIfLocal(f.assPath);
     }
     if (project != null) {
-      await _deleteIfLocal(project.baseAssPath);
+      await deleteIfLocal(project.baseAssPath);
     }
 
     await (db.delete(db.projectFiles)..where((t) => t.projectId.equals(projectId))).go();

@@ -19,10 +19,12 @@ class ProjectsPage extends StatefulWidget {
     required this.db,
     required this.isDark,
     required this.onToggleTheme,
+    this.autoSyncOnStart = true,
   });
   final AppDatabase db;
   final bool isDark;
   final VoidCallback onToggleTheme;
+  final bool autoSyncOnStart;
 
   @override
   State<ProjectsPage> createState() => _ProjectsPageState();
@@ -61,7 +63,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
   void initState() {
     super.initState();
     _loadManualFolders();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
+    if (widget.autoSyncOnStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
+    }
   }
 
   Future<void> _loadManualFolders() async {
@@ -406,14 +410,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   );
                 },
               );
-              if (context.mounted) {
-                await _loadManualFolders();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sincronizacion cloud completa.'),
-                  ),
-                );
-              }
+              if (!context.mounted) return;
+              await _loadManualFolders();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sincronizacion cloud completa.'),
+                ),
+              );
             },
           ),
           IconButton(
