@@ -1,0 +1,304 @@
+import 'package:flutter/material.dart';
+
+import '../db/app_db.dart';
+import '../review/review_page.dart';
+import '../review/review_service.dart';
+import '../sync/cloud_sync_service.dart';
+import 'project_import_sheet.dart';
+
+class ProjectsPage extends StatelessWidget {
+  const ProjectsPage({super.key, required this.db});
+  final AppDatabase db;
+
+  @override
+  Widget build(BuildContext context) {
+    final svc = ReviewService(db);
+    final cloud = CloudSyncService(db);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('VoiceX'),
+        actions: [
+          IconButton(
+            tooltip: 'Sincronizar con cloud',
+            icon: const Icon(Icons.sync),
+            onPressed: () async {
+              await cloud.ensureInit();
+              if (!cloud.isReady) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Supabase no configurado (URL/key).'),
+                    ),
+                  );
+                }
+                return;
+              }
+              await cloud.syncAllProjects();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sincronización cloud completa.'),
+                  ),
+                );
+              }
+            },
+          ),
+          IconButton(
+            tooltip: 'Importar desde cloud',
+            icon: const Icon(Icons.cloud_download),
+            onPressed: () async {
+              await cloud.ensureInit();
+              if (!cloud.isReady) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Supabase no configurado (URL/key).'),
+                    ),
+                  );
+                }
+                return;
+              }
+              if (!context.mounted) return;
+              await showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => _CloudImportSheet(cloud: cloud, db: db),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'Nuevo proyecto',
+            icon: const Icon(Icons.add),
+            onPressed: () async {
+              final projectId = await showModalBottomSheet<String?>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => ProjectImportSheet(db: db),
+              );
+              if (projectId == null || !context.mounted) return;
+
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ReviewPage(db: db, projectId: projectId),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<ProjectSummary>>(
+        stream: svc.watchProjectSummaries(),
+        builder: (context, snap) {
+          final items = snap.data ?? const [];
+          if (items.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No hay proyectos todavía.\nPulsa + para importar un ASS.',
+                ),
+              ),
+            );
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final p = items[i];
+              return Card(
+                child: ListTile(
+                  title: Text(p.title),
+                  subtitle: Text(
+                    '${p.reviewed}/${p.total} • línea ${p.currentIndex + 1}/${p.total}',
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (v) async {
+                      if (v == 'open') {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ReviewPage(db: db, projectId: p.projectId),
+                          ),
+                        );
+                      } else if (v == 'export') {
+                        await svc.exportAndShareProject(
+                          context,
+                          projectId: p.projectId,
+                        );
+                      } else if (v == 'sync_up') {
+                        await cloud.ensureInit();
+                        if (!cloud.isReady) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Supabase no configurado (URL/key).',
+                                ),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        await cloud.pushProject(p.projectId);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Proyecto subido.')),
+                          );
+                        }
+                      } else if (v == 'sync_down') {
+                        await cloud.ensureInit();
+                        if (!cloud.isReady) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Supabase no configurado (URL/key).',
+                                ),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        await cloud.pullProject(p.projectId);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Proyecto descargado.'),
+                            ),
+                          );
+                        }
+                      } else if (v == 'delete') {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Eliminar proyecto'),
+                            content: const Text(
+                              'Se borrarán líneas y métricas. ¿Seguro?',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancelar'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Eliminar'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok == true) {
+                          await svc.deleteProject(p.projectId);
+                          await cloud.ensureInit();
+                          if (cloud.isReady) {
+                            await cloud.deleteRemoteProject(p.projectId);
+                          }
+                        }
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'open', child: Text('Abrir')),
+                      PopupMenuItem(
+                        value: 'export',
+                        child: Text('Exportar ASS'),
+                      ),
+                      PopupMenuItem(
+                        value: 'sync_up',
+                        child: Text('Subir a cloud'),
+                      ),
+                      PopupMenuItem(
+                        value: 'sync_down',
+                        child: Text('Bajar de cloud'),
+                      ),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+                    ],
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ReviewPage(db: db, projectId: p.projectId),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CloudImportSheet extends StatelessWidget {
+  const _CloudImportSheet({required this.cloud, required this.db});
+
+  final CloudSyncService cloud;
+  final AppDatabase db;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: cloud.listRemoteProjects(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final items = snap.data ?? const [];
+            if (items.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('No hay proyectos en cloud.'),
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Importar desde cloud',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final m = items[i];
+                      final title = (m['title'] as String?) ?? '(sin título)';
+                      final pid = m['project_id'] as String? ?? '';
+                      return ListTile(
+                        title: Text(title),
+                        subtitle: Text(pid),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await cloud.pullProject(pid);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Proyecto descargado: $title'),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
