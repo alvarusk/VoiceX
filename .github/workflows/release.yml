@@ -14,6 +14,23 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+      - name: Cache Pub (Windows)
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\AppData\Local\Pub\Cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+      - name: Cache Gradle (Windows)
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
       - name: Build Windows release
@@ -38,6 +55,23 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+      - name: Cache Pub (Linux)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+      - name: Cache Gradle (Linux)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
       - name: Build APK release
@@ -46,6 +80,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: >
           flutter build apk --release
+          --target-platform android-arm64
           --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
       - name: Upload Android artifact
