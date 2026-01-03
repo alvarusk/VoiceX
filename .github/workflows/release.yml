@@ -78,7 +78,10 @@ jobs:
           $msix = Get-ChildItem build/msix/*.msix | Select-Object -First 1
           if (-not $msix) { throw "MSIX no encontrado en build/msix" }
           $timestamp = "http://timestamp.digicert.com"
-          & $signtool sign /debug /v /f $pfx /p $env:WINDOWS_PFX_PASSWORD /fd SHA256 /tr $timestamp /td SHA256 $msix.FullName
+          $signtoolFixed = "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\x64\signtool.exe"
+          if (-not (Test-Path $signtoolFixed)) { throw "signtool.exe no encontrado en ruta fija" }
+          Write-Host "Using signtool: $signtoolFixed"
+          & $signtoolFixed sign /debug /v /f $pfx /p $env:WINDOWS_PFX_PASSWORD /fd SHA256 /tr $timestamp /td SHA256 $msix.FullName
       - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
