@@ -101,8 +101,6 @@ msix_config:
   logo_path: assets/voicex.png
   capabilities: internetClient
   publisher: CN=g0d
-  certificate_path: voicex_dev.pfx
-  certificate_password: K4l3ld4b35t5n0m4tt3rwh4tuth1nk!
 
 
   # To add assets to your application, add an assets section, like this:
