@@ -45,12 +45,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
-        run: >
-          flutter pub run msix:create
-          --output-path build/msix
-          --certificate-path windows/certs/code_sign.pfx
-          --certificate-password $env:WINDOWS_PFX_PASSWORD
-          --build-args "--dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}"
+        run: |
+          flutter build windows --release `
+            --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} `
+            --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          flutter pub run msix:create `
+            --output-path build/msix `
+            --certificate-path windows/certs/code_sign.pfx `
+            --certificate-password $env:WINDOWS_PFX_PASSWORD `
+            --build-windows false
       - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
