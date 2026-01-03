@@ -95,12 +95,12 @@ flutter_launcher_icons:
 
 msix_config:
   display_name: VoiceX
-  publisher_display_name: g0d
+  publisher_display_name: Kingdom M
   identity_name: com.ajhaven.voicex
   msix_version: 1.0.0.0
   logo_path: assets/voicex.png
   capabilities: internetClient
-  publisher: CN=g0d
+  publisher: CN=Kingdom M
 
 
   # To add assets to your application, add an assets section, like this:
