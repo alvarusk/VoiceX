@@ -94,7 +94,7 @@ flutter_launcher_icons:
     image_path: assets/voicex.png
 
 msix_config:
-  display_name: VoiceXforWindows
+  display_name: VoiceX
   publisher_display_name: Kingdom M
   identity_name: KingdomM.VoiceXforWindows
   msix_version: 1.0.0.0
