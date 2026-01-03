@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../db/app_db.dart';
 import '../sync/cloud_sync_service.dart';
@@ -187,6 +188,16 @@ class _SettingsPageState extends State<SettingsPage> {
     return res != 'cancel';
   }
 
+  Future<void> _launchUpdater() async {
+    final uri = Uri.parse('https://github.com/alvarusk/VoiceX/releases/latest');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el enlace de actualización.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final disabledOpenAiMode =
@@ -326,6 +337,26 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 16),
             const _VoiceCommandsBox(),
             const SizedBox(height: 16),
+            if (Platform.isWindows) ...[
+              const Text(
+                'Actualizaciones',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _launchUpdater,
+                icon: const Icon(Icons.system_update),
+                label: const Text('Actualizar (Windows)'),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Abre la última versión en GitHub Releases y descarga el MSIX.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             FilledButton.icon(
               onPressed: _save,
               icon: const Icon(Icons.save),
