@@ -89,6 +89,21 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
+      - name: Decode keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then echo "Missing ANDROID_KEYSTORE_BASE64 secret"; exit 1; fi
+          mkdir -p android/app/keystores
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystores/upload.jks
+      - name: Create key.properties
+        run: |
+          cat <<'EOF' > android/key.properties
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=keystores/upload.jks
+          EOF
       - name: Build APK release (deprecated; prefer AAB)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
