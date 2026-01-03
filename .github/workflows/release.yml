@@ -48,9 +48,17 @@ jobs:
           WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         shell: pwsh
         run: |
-          $sdkRoot = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          $signtoolDir = Join-Path $sdkRoot.FullName "x64"
-          $signtool = Join-Path $signtoolDir "signtool.exe"
+          # Localiza signtool x64 del Windows SDK
+          $verDir = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\" -Directory |
+            Where-Object { $_.Name -match '^\d' } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          $signtool = Join-Path $verDir.FullName "x64\signtool.exe"
+          if (-not (Test-Path $signtool)) {
+            $fallback = "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe"
+            if (-not (Test-Path $fallback)) { throw "signtool.exe no encontrado" }
+            $signtool = $fallback
+          }
           flutter build windows --release `
             --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} `
             --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
