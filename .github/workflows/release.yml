@@ -51,7 +51,7 @@ jobs:
           # Localiza signtool x64 del Windows SDK (busca en varias rutas)
           $signtool = $null
           $candidates = @(
-            Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue,
+            Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue;
             Get-ChildItem "C:\Program Files (x86)\Microsoft SDKs\Windows" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue
           ) | Where-Object { $_.FullName -match 'x64' } | Sort-Object FullName -Descending
           if ($candidates.Count -gt 0) { $signtool = $candidates[0].FullName }
