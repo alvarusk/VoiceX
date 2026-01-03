@@ -33,19 +33,29 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
-      - name: Build Windows release
+      - name: Decode signing certificate
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+        run: |
+          if (-not $env:WINDOWS_PFX_BASE64) { throw "Missing WINDOWS_PFX_BASE64 secret" }
+          New-Item -ItemType Directory -Force -Path windows/certs | Out-Null
+          [IO.File]::WriteAllBytes("windows/certs/code_sign.pfx", [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+      - name: Build Windows MSIX
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         run: >
-          flutter build windows --release
-          --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-      - name: Upload Windows artifact
+          flutter pub run msix:create
+          --output-path build/msix
+          --certificate-path windows/certs/code_sign.pfx
+          --certificate-password $env:WINDOWS_PFX_PASSWORD
+          --build-args "--dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}"
+      - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
-          name: voicex-windows
-          path: build/windows/x64/runner/Release/**
+          name: voicex-windows-msix
+          path: build/msix/*.msix
 
   build-android:
     runs-on: ubuntu-latest
@@ -98,7 +108,7 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: voicex-windows
+          name: voicex-windows-msix
           path: artifacts/windows
       - name: Download Android artifact
         uses: actions/download-artifact@v4
@@ -107,9 +117,7 @@ jobs:
           path: artifacts/android
       - name: Package assets
         run: |
-          cd artifacts
-          tar -czf voicex-windows.tar.gz windows
-          cd android
+          cd artifacts/android
           zip -r ../voicex-android.zip .
           cd ..
       - name: Create GitHub Release
@@ -120,5 +128,5 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/voicex-windows.tar.gz
+            artifacts/windows/*.msix
             artifacts/voicex-android.zip
