@@ -54,7 +54,8 @@ jobs:
             --output-path build/msix `
             --certificate-path windows/certs/code_sign.pfx `
             --certificate-password $env:WINDOWS_PFX_PASSWORD `
-            --build-windows false
+            --build-windows false `
+            --install-certificate false
       - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
