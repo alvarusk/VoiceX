@@ -48,22 +48,14 @@ jobs:
           WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         shell: pwsh
         run: |
-          # Localiza signtool x64 del Windows SDK
-          $preferred = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
-          if (Test-Path $preferred) {
-            $signtool = $preferred
-          } else {
-            $verDir = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\" -Directory |
-              Where-Object { $_.Name -match '^\d' } |
-              Sort-Object Name -Descending |
-              Select-Object -First 1
-            $signtool = Join-Path $verDir.FullName "x64\signtool.exe"
-            if (-not (Test-Path $signtool)) {
-              $fallback = "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe"
-              if (-not (Test-Path $fallback)) { throw "signtool.exe no encontrado" }
-              $signtool = $fallback
-            }
-          }
+          # Localiza signtool x64 del Windows SDK (busca en varias rutas)
+          $signtool = $null
+          $candidates = @(
+            Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue,
+            Get-ChildItem "C:\Program Files (x86)\Microsoft SDKs\Windows" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue
+          ) | Where-Object { $_.FullName -match 'x64' } | Sort-Object FullName -Descending
+          if ($candidates.Count -gt 0) { $signtool = $candidates[0].FullName }
+          if (-not $signtool) { throw "signtool.exe no encontrado en rutas conocidas" }
           Write-Host "Using signtool: $signtool"
           flutter build windows --release `
             --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} `
@@ -78,10 +70,7 @@ jobs:
           $msix = Get-ChildItem build/msix/*.msix | Select-Object -First 1
           if (-not $msix) { throw "MSIX no encontrado en build/msix" }
           $timestamp = "http://timestamp.digicert.com"
-          $signtoolFixed = "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\x64\signtool.exe"
-          if (-not (Test-Path $signtoolFixed)) { throw "signtool.exe no encontrado en ruta fija" }
-          Write-Host "Using signtool: $signtoolFixed"
-          & $signtoolFixed sign /debug /v /f $pfx /p $env:WINDOWS_PFX_PASSWORD /fd SHA256 /tr $timestamp /td SHA256 $msix.FullName
+          & $signtool sign /debug /v /f $pfx /p $env:WINDOWS_PFX_PASSWORD /fd SHA256 /tr $timestamp /td SHA256 $msix.FullName
       - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
