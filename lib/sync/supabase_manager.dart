@@ -92,15 +92,11 @@ Future<void> _loadEnvFromCandidates() async {
       }
       if (exists) {
         try {
-          final content = await file.readAsString();
-          final parsed = _parseEnv(content);
-          final merged = dotenv.isInitialized
-              ? Map<String, String>.from(dotenv.env)
-              : <String, String>{};
-          merged.addAll(parsed);
-          dotenv.env
-            ..clear()
-            ..addAll(merged);
+          Map<String, String> merged = const <String, String>{};
+          if (dotenv.isInitialized) {
+            merged = Map<String, String>.from(dotenv.env);
+          }
+          await dotenv.load(fileName: path, mergeWith: merged);
         } catch (e) {
           if (kDebugMode) {
             debugPrint('[supabase] error leyendo $path: $e');
@@ -112,20 +108,4 @@ Future<void> _loadEnvFromCandidates() async {
       // sigue con el siguiente
     }
   }
-}
-
-Map<String, String> _parseEnv(String content) {
-  final map = <String, String>{};
-  for (final rawLine in content.split(RegExp(r'\r?\n'))) {
-    var line = rawLine.trim();
-    if (line.isEmpty || line.startsWith('#')) continue;
-    final idx = line.indexOf('=');
-    if (idx <= 0) continue;
-    final key = line.substring(0, idx).trim();
-    final value = line.substring(idx + 1).trim();
-    if (key.isNotEmpty) {
-      map[key] = value;
-    }
-  }
-  return map;
 }
