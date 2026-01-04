@@ -1,4 +1,3 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
@@ -29,11 +28,11 @@ class SupabaseManager {
       }
     }
     _initAttempted = true;
-    await _loadEnvFromCandidates();
+    final fileEnv = await _readEnvFromCandidates();
 
     final platformEnv = Platform.environment;
-    final envUrl = dotenv.isInitialized ? (dotenv.env['SUPABASE_URL'] ?? '') : '';
-    final envKey = dotenv.isInitialized ? (dotenv.env['SUPABASE_ANON_KEY'] ?? '') : '';
+    final envUrl = fileEnv['SUPABASE_URL'] ?? '';
+    final envKey = fileEnv['SUPABASE_ANON_KEY'] ?? '';
 
     final url = const String.fromEnvironment('SUPABASE_URL', defaultValue: '')
         .ifEmpty(() => platformEnv['SUPABASE_URL'] ?? '')
@@ -72,7 +71,7 @@ extension on String {
   String ifEmpty(String Function() fallback) => isEmpty ? fallback() : this;
 }
 
-Future<void> _loadEnvFromCandidates() async {
+Future<Map<String, String>> _readEnvFromCandidates() async {
   final candidates = <String>{'.env'};
   try {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
@@ -91,21 +90,30 @@ Future<void> _loadEnvFromCandidates() async {
         debugPrint('[supabase] buscando .env en $path (exists=$exists)');
       }
       if (exists) {
-        try {
-          Map<String, String> merged = const <String, String>{};
-          if (dotenv.isInitialized) {
-            merged = Map<String, String>.from(dotenv.env);
-          }
-          await dotenv.load(fileName: path, mergeWith: merged);
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[supabase] error leyendo $path: $e');
-          }
-        }
-        return;
+        final content = await file.readAsLines();
+        return _parseEnv(content);
       }
-    } catch (_) {
-      // sigue con el siguiente
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[supabase] error leyendo $path: $e');
+      }
     }
   }
+  return const {};
+}
+
+Map<String, String> _parseEnv(List<String> lines) {
+  final map = <String, String>{};
+  for (final rawLine in lines) {
+    final line = rawLine.trim();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    final idx = line.indexOf('=');
+    if (idx <= 0) continue;
+    final key = line.substring(0, idx).trim();
+    final value = line.substring(idx + 1).trim();
+    if (key.isNotEmpty) {
+      map[key] = value;
+    }
+  }
+  return map;
 }
