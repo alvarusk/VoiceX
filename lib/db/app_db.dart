@@ -126,19 +126,59 @@ class AppDatabase extends _$AppDatabase {
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
-          if (from == 1) {
-            await m.addColumn(projects, projects.folder);
+          if (from <= 1) {
+            final hasFolder =
+                await _columnExists(this, projects.actualTableName, 'folder');
+            if (!hasFolder) {
+              await m.addColumn(projects, projects.folder);
+            }
             from = 2;
           }
           if (from == 2) {
-            await m.createTable(sessionLogs);
+            final hasSessionLogs =
+                await _tableExists(this, sessionLogs.actualTableName);
+            if (!hasSessionLogs) {
+              await m.createTable(sessionLogs);
+            }
             from = 3;
           }
           if (from == 3) {
-            await m.addColumn(projects, projects.archived);
+            final hasArchived =
+                await _columnExists(this, projects.actualTableName, 'archived');
+            if (!hasArchived) {
+              await m.addColumn(projects, projects.archived);
+            }
           }
         },
       );
+
+  Future<bool> _columnExists(
+    GeneratedDatabase db,
+    String tableName,
+    String columnName,
+  ) async {
+    final rows = await db
+        .customSelect('PRAGMA table_info($tableName)')
+        .get();
+    return rows.any(
+      (r) =>
+          (r.data['name'] as String?)?.toLowerCase() ==
+          columnName.toLowerCase(),
+    );
+  }
+
+  Future<bool> _tableExists(
+    GeneratedDatabase db,
+    String tableName,
+  ) async {
+    final rows = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+          variables: [Variable<String>(tableName)],
+        )
+        .get();
+    return rows.isNotEmpty;
+  }
 
   static QueryExecutor _openConnection() {
     // Drift recomienda driftDatabase() en Flutter y, por defecto, guarda en un directorio de soporte. :contentReference[oaicite:2]{index=2}
