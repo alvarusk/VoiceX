@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -14,15 +15,58 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+      - name: Cache Pub (Windows)
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\AppData\Local\Pub\Cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+      - name: Cache Gradle (Windows)
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
-      - name: Build Windows release
-        run: flutter build windows --release
-      - name: Upload Windows artifact
+      - name: Decode signing certificate
+        env:
+          WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
+        run: |
+          if (-not $env:WINDOWS_PFX_BASE64) { throw "Missing WINDOWS_PFX_BASE64 secret" }
+          New-Item -ItemType Directory -Force -Path windows/certs | Out-Null
+          [IO.File]::WriteAllBytes("windows/certs/code_sign.pfx", [Convert]::FromBase64String($env:WINDOWS_PFX_BASE64))
+      - name: Build Windows MSIX
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
+        shell: pwsh
+        run: |
+          flutter build windows --release `
+            --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }} `
+            --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          # Genera MSIX sin firmar (la Store re-firma)
+          flutter pub run msix:create `
+            --output-path build/msix `
+            --build-windows false `
+            --publisher "CN=CCDE0167-EDA3-4A6F-B196-577B92A14DEC" `
+            --publisher-display-name "Kingdom M" `
+            --display-name "VoiceX for TakoWorks" `
+            --identity-name "KingdomM.VoiceXforTakoWorks" `
+            --certificate-path windows/certs/code_sign.pfx `
+            --certificate-password $env:WINDOWS_PFX_PASSWORD `
+            --install-certificate false
+      - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
         with:
-          name: voicex-windows
-          path: build/windows/x64/runner/Release/**
+          name: voicex-windows-msix
+          path: build/msix/*.msix
 
   build-android:
     runs-on: ubuntu-latest
@@ -32,15 +76,64 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+      - name: Cache Pub (Linux)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+      - name: Cache Gradle (Linux)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
-      - name: Build APK release
-        run: flutter build apk --release
-      - name: Upload Android artifact
+      - name: Decode keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then echo "Missing ANDROID_KEYSTORE_BASE64 secret"; exit 1; fi
+          mkdir -p android/app/keystores
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystores/upload.jks
+      - name: Create key.properties
+        run: |
+          cat <<'EOF' > android/key.properties
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=keystores/upload.jks
+          EOF
+      - name: Build APK release (deprecated; prefer AAB)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: >
+          flutter build apk --release
+          --target-platform android-arm64
+          --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Build AAB release
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: >
+          flutter build appbundle --release
+          --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: voicex-android
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/app-release.aab
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -51,7 +144,7 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: voicex-windows
+          name: voicex-windows-msix
           path: artifacts/windows
       - name: Download Android artifact
         uses: actions/download-artifact@v4
@@ -60,9 +153,7 @@ jobs:
           path: artifacts/android
       - name: Package assets
         run: |
-          cd artifacts
-          tar -czf voicex-windows.tar.gz windows
-          cd android
+          cd artifacts/android
           zip -r ../voicex-android.zip .
           cd ..
       - name: Create GitHub Release
@@ -73,5 +164,5 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/voicex-windows.tar.gz
+            artifacts/windows/*.msix
             artifacts/voicex-android.zip

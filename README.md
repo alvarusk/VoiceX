@@ -82,3 +82,7 @@ keyPassword=TU_PASSWORD
 ## Notes
 - If no video is imported, line navigation still works (playback buttons are no-ops).
 - Folders are stored in app settings; deleting a folder via UI removes it from cache/persisted list, but deleting projects alone won’t delete the folder.
+
+## Versioning
+- App title shows the current version in parentheses, e.g. `VoiceX for TakoWorks (v1.0.1+2)`.
+- Scheme (see `VERSIONING.md`): start at `1.0.0`; each commit en `dev` incrementa patch `0.0.1`; cada merge de `dev` a `main` incrementa minor `0.1`.

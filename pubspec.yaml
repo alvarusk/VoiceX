@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.10.4
@@ -53,6 +53,7 @@ dependencies:
   video_player_win: ^3.2.2
   flutter_dotenv: ^6.0.0
   msix: ^3.16.12
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
@@ -81,7 +82,6 @@ flutter:
 
   assets:
     - assets/
-    - .env
 
 flutter_launcher_icons:
   android: true
@@ -94,15 +94,13 @@ flutter_launcher_icons:
     image_path: assets/voicex.png
 
 msix_config:
-  display_name: VoiceX
-  publisher_display_name: g0d
-  identity_name: com.ajhaven.voicex
+  display_name: VoiceX for TakoWorks
+  publisher_display_name: Kingdom M
+  identity_name: KingdomM.VoiceXforTakoWorks
   msix_version: 1.0.0.0
   logo_path: assets/voicex.png
   capabilities: internetClient
-  publisher: CN=g0d
-  certificate_path: voicex_dev.pfx
-  certificate_password: K4l3ld4b35t5n0m4tt3rwh4tuth1nk!
+  publisher: CN=CCDE0167-EDA3-4A6F-B196-577B92A14DEC
 
 
   # To add assets to your application, add an assets section, like this:
@@ -135,3 +133,4 @@ msix_config:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+

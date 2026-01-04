@@ -13,6 +13,7 @@
 .swiftpm/
 migrate_working_dir/
 *.pfx
+pfx.b64
 .env
 .env*
 
