@@ -29,6 +29,7 @@ class SupabaseManager {
       }
     }
     _initAttempted = true;
+
     final fileEnv = await _readEnvFromCandidates();
 
     final platformEnv = Platform.environment;

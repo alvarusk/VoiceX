@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show InsertMode, Value, Variable;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -1019,15 +1018,7 @@ class CloudSyncService {
       if (fromDefine.isNotEmpty) return fromDefine;
       final fromPlatform = Platform.environment[key];
       if (fromPlatform != null && fromPlatform.isNotEmpty) return fromPlatform;
-      if (!dotenv.isInitialized) {
-        try {
-          dotenv.load(fileName: '.env');
-        } catch (_) {}
-      }
-      if (dotenv.isInitialized) {
-        final val = dotenv.env[key] ?? '';
-        if (val.isNotEmpty) return val;
-      }
+      // No cargamos dotenv aquí para evitar FileNotFound; asumimos que main lo cargó.
       return '';
     }
 
