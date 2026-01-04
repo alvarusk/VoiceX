@@ -57,8 +57,8 @@ jobs:
             --build-windows false `
             --publisher "CN=CCDE0167-EDA3-4A6F-B196-577B92A14DEC" `
             --publisher-display-name "Kingdom M" `
-            --display-name "VoiceX" `
-            --identity-name "KingdomM.VoiceXforWindows" `
+            --display-name "VoiceX for TakoWorks" `
+            --identity-name "KingdomM.VoiceXforTakoWorks" `
             --install-certificate false
       - name: Upload Windows MSIX
         uses: actions/upload-artifact@v4
