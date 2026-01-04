@@ -13,16 +13,22 @@ class SupabaseManager {
   SupabaseManager._();
   static final SupabaseManager instance = SupabaseManager._();
 
-  bool _initAttempted = false;
   bool _ready = false;
+  bool _initAttempted = false;
 
   bool get isReady => _ready;
   SupabaseClient get client => Supabase.instance.client;
 
   Future<void> init() async {
-    if (_initAttempted) return;
-    _initAttempted = true;
+    if (_ready) return;
 
+    // Permit reintentos si la primera inicialización falló.
+    if (_initAttempted && !_ready) {
+      if (kDebugMode) {
+        debugPrint('[supabase] reintentando inicialización...');
+      }
+    }
+    _initAttempted = true;
     await _loadEnvFromCandidates();
 
     final platformEnv = Platform.environment;
@@ -38,13 +44,19 @@ class SupabaseManager {
 
     if (url.isEmpty || key.isEmpty) {
       if (kDebugMode) {
-        debugPrint('[supabase] Faltan SUPABASE_URL o SUPABASE_ANON_KEY');
+        debugPrint('[supabase] Faltan SUPABASE_URL o SUPABASE_ANON_KEY. Candidatos: '
+            'envUrl=${envUrl.isNotEmpty}, envKey=${envKey.isNotEmpty}, '
+            'platformUrl=${(platformEnv['SUPABASE_URL'] ?? '').isNotEmpty}, '
+            'platformKey=${(platformEnv['SUPABASE_ANON_KEY'] ?? '').isNotEmpty}');
       }
       _ready = false;
       return;
     }
 
     try {
+      if (kDebugMode) {
+        debugPrint('[supabase] inicializando con url length=${url.length}, key length=${key.length}');
+      }
       await Supabase.initialize(url: url, anonKey: key);
       _ready = true;
     } catch (e) {
