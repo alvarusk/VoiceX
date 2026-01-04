@@ -34,6 +34,10 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
       - name: Decode signing certificate
         env:
           WINDOWS_PFX_BASE64: ${{ secrets.WINDOWS_PFX_BASE64 }}
@@ -95,6 +99,10 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Install dependencies
         run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
       - name: Decode keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
