@@ -86,7 +86,11 @@ Future<void> _loadEnvFromCandidates() async {
   for (final path in candidates) {
     try {
       final file = File(path);
-      if (await file.exists()) {
+      final exists = await file.exists();
+      if (kDebugMode) {
+        debugPrint('[supabase] buscando .env en $path (exists=$exists)');
+      }
+      if (exists) {
         await dotenv.load(
           fileName: path,
           mergeWith: dotenv.isInitialized ? Map<String, String>.from(dotenv.env) : <String, String>{},
