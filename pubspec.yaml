@@ -96,7 +96,7 @@ flutter_launcher_icons:
 msix_config:
   display_name: VoiceX for TakoWorks
   publisher_display_name: Kingdom M
-  identity_name: KingdomM.VoiceXforTakoworks
+  identity_name: KingdomM.VoiceXforTakoWorks
   msix_version: 1.0.0.0
   logo_path: assets/voicex.png
   capabilities: internetClient
