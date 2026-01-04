@@ -1,4 +1,4 @@
-# VoiceX & TakoWorks Companion
+# VoiceX (v1.0.1+2)
 
 Desktop toolkit (Flutter) to review ASS subtitles, manage series, attach per-folder glossaries, and track translation costs logged by TakoWorks. Includes tight Supabase integration, per-engine candidates (GPT, Claude, Gemini, DeepSeek), and handy keyboard shortcuts for fast editing.
 
