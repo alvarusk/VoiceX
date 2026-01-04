@@ -1,5 +1,9 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:path/path.dart' as p;
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 /// Gestiona la instancia de Supabase en toda la app.
 ///
@@ -19,20 +23,23 @@ class SupabaseManager {
     if (_initAttempted) return;
     _initAttempted = true;
 
-    // Carga .env si existe (sin fallar si no está)
-    try {
-      await dotenv.load(fileName: '.env');
-    } catch (_) {}
+    await _loadEnvFromCandidates();
 
+    final platformEnv = Platform.environment;
     final envUrl = dotenv.isInitialized ? (dotenv.env['SUPABASE_URL'] ?? '') : '';
     final envKey = dotenv.isInitialized ? (dotenv.env['SUPABASE_ANON_KEY'] ?? '') : '';
 
     final url = const String.fromEnvironment('SUPABASE_URL', defaultValue: '')
+        .ifEmpty(() => platformEnv['SUPABASE_URL'] ?? '')
         .ifEmpty(() => envUrl);
     final key = const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '')
+        .ifEmpty(() => platformEnv['SUPABASE_ANON_KEY'] ?? '')
         .ifEmpty(() => envKey);
 
     if (url.isEmpty || key.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('[supabase] Faltan SUPABASE_URL o SUPABASE_ANON_KEY');
+      }
       _ready = false;
       return;
     }
@@ -40,7 +47,10 @@ class SupabaseManager {
     try {
       await Supabase.initialize(url: url, anonKey: key);
       _ready = true;
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[supabase] init error: $e');
+      }
       _ready = false;
     }
   }
@@ -48,4 +58,31 @@ class SupabaseManager {
 
 extension on String {
   String ifEmpty(String Function() fallback) => isEmpty ? fallback() : this;
+}
+
+Future<void> _loadEnvFromCandidates() async {
+  final candidates = <String>{'.env'};
+  try {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    candidates.add(p.join(exeDir, '.env'));
+  } catch (_) {}
+  try {
+    final supportDir = await getApplicationSupportDirectory();
+    candidates.add(p.join(supportDir.path, '.env'));
+  } catch (_) {}
+
+  for (final path in candidates) {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await dotenv.load(
+          fileName: path,
+          mergeWith: dotenv.isInitialized ? Map<String, String>.from(dotenv.env) : <String, String>{},
+        );
+        return;
+      }
+    } catch (_) {
+      // sigue con el siguiente
+    }
+  }
 }
