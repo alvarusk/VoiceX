@@ -651,7 +651,11 @@ class CloudSyncService {
             storagePath,
             file,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
-          );
+          )
+          .timeout(const Duration(minutes: 3), onTimeout: () {
+        debugPrint('upload timeout (${f.engine}): $storagePath');
+        throw TimeoutException('upload ${f.engine} timed out');
+      });
       final publicUrl = client.storage
           .from(_bucket)
           .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
@@ -722,7 +726,12 @@ class CloudSyncService {
       }
       await request.sink.close();
 
-      final resp = await request.send();
+      final resp = await request
+          .send()
+          .timeout(const Duration(minutes: 3), onTimeout: () {
+        debugPrint('R2 upload timeout: $storagePath');
+        throw TimeoutException('R2 upload timeout');
+      });
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final base = cfg.publicBase?.isNotEmpty == true
             ? cfg.publicBase!
@@ -1005,15 +1014,20 @@ class CloudSyncService {
   }
 
   _R2Config? get _r2Config {
-    if (!dotenv.isInitialized) {
-      try {
-        dotenv.load(fileName: '.env');
-      } catch (_) {}
-    }
     String readEnv(String key) {
       final fromDefine = String.fromEnvironment(key);
       if (fromDefine.isNotEmpty) return fromDefine;
-      if (dotenv.isInitialized) return dotenv.env[key] ?? '';
+      final fromPlatform = Platform.environment[key];
+      if (fromPlatform != null && fromPlatform.isNotEmpty) return fromPlatform;
+      if (!dotenv.isInitialized) {
+        try {
+          dotenv.load(fileName: '.env');
+        } catch (_) {}
+      }
+      if (dotenv.isInitialized) {
+        final val = dotenv.env[key] ?? '';
+        if (val.isNotEmpty) return val;
+      }
       return '';
     }
 

@@ -1,8 +1,10 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:path/path.dart' as p;
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Gestiona la instancia de Supabase en toda la app.
 ///
@@ -28,11 +30,11 @@ class SupabaseManager {
       }
     }
     _initAttempted = true;
-    final fileEnv = await _readEnvFromCandidates();
+    await _loadDotEnv();
 
     final platformEnv = Platform.environment;
-    final envUrl = fileEnv['SUPABASE_URL'] ?? '';
-    final envKey = fileEnv['SUPABASE_ANON_KEY'] ?? '';
+    final envUrl = dotenv.isInitialized ? (dotenv.env['SUPABASE_URL'] ?? '') : '';
+    final envKey = dotenv.isInitialized ? (dotenv.env['SUPABASE_ANON_KEY'] ?? '') : '';
 
     final url = const String.fromEnvironment('SUPABASE_URL', defaultValue: '')
         .ifEmpty(() => platformEnv['SUPABASE_URL'] ?? '')
@@ -71,7 +73,7 @@ extension on String {
   String ifEmpty(String Function() fallback) => isEmpty ? fallback() : this;
 }
 
-Future<Map<String, String>> _readEnvFromCandidates() async {
+Future<void> _loadDotEnv() async {
   final candidates = <String>{'.env'};
   try {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
@@ -83,37 +85,18 @@ Future<Map<String, String>> _readEnvFromCandidates() async {
   } catch (_) {}
 
   for (final path in candidates) {
+    final file = File(path);
+    if (!await file.exists()) continue;
     try {
-      final file = File(path);
-      final exists = await file.exists();
+      await dotenv.load(fileName: path);
       if (kDebugMode) {
-        debugPrint('[supabase] buscando .env en $path (exists=$exists)');
+        debugPrint('[supabase] loaded env from $path');
       }
-      if (exists) {
-        final content = await file.readAsLines();
-        return _parseEnv(content);
-      }
+      return;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[supabase] error leyendo $path: $e');
+        debugPrint('[supabase] failed to load $path: $e');
       }
     }
   }
-  return const {};
-}
-
-Map<String, String> _parseEnv(List<String> lines) {
-  final map = <String, String>{};
-  for (final rawLine in lines) {
-    final line = rawLine.trim();
-    if (line.isEmpty || line.startsWith('#')) continue;
-    final idx = line.indexOf('=');
-    if (idx <= 0) continue;
-    final key = line.substring(0, idx).trim();
-    final value = line.substring(idx + 1).trim();
-    if (key.isNotEmpty) {
-      map[key] = value;
-    }
-  }
-  return map;
 }
