@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show InsertMode, Value, Variable;
 import 'package:flutter/foundation.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -25,6 +24,7 @@ class CloudSyncService {
   final _prefs = SyncPrefs();
   bool _supportsFolderColumn = true;
   bool _supportsArchivedColumn = true;
+  final Map<String, _DirtyCacheEntry> _dirtyCache = {};
 
   static const _bucket = 'voicex';
 
@@ -41,6 +41,12 @@ class CloudSyncService {
   }
 
   Future<bool> isProjectDirty(String projectId) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _dirtyCache[projectId];
+    if (cached != null && (now - cached.checkedAtMs) < 5000) {
+      return cached.isDirty;
+    }
+
     final last = await _prefs.getLastSynced(projectId);
     final proj = await (db.select(
       db.projects,
@@ -58,8 +64,12 @@ class CloudSyncService {
       proj.updatedAtMs,
       maxLine,
     ].reduce((a, b) => a > b ? a : b);
-    if (last == null) return true;
-    return localUpdated > last;
+    final result = last == null || localUpdated > last;
+    _dirtyCache[projectId] = _DirtyCacheEntry(
+      checkedAtMs: now,
+      isDirty: result,
+    );
+    return result;
   }
 
   Future<int?> lastSyncedAt(String projectId) =>
@@ -139,42 +149,6 @@ class CloudSyncService {
     }
   }
 
-  Future<void> _deleteProjectLocal(String projectId) async {
-    try {
-      final files = await (db.select(
-        db.projectFiles,
-      )..where((t) => t.projectId.equals(projectId))).get();
-      for (final f in files) {
-        final path = f.assPath;
-        if (path.isEmpty ||
-            path.startsWith('http://') ||
-            path.startsWith('https://')) {
-          continue;
-        }
-        try {
-          final file = File(path);
-          if (await file.exists()) {
-            await file.delete();
-          }
-        } catch (_) {}
-      }
-      await (db.delete(
-        db.selectionEvents,
-      )..where((t) => t.projectId.equals(projectId))).go();
-      await (db.delete(
-        db.subtitleLines,
-      )..where((t) => t.projectId.equals(projectId))).go();
-      await (db.delete(
-        db.projectFiles,
-      )..where((t) => t.projectId.equals(projectId))).go();
-      await (db.delete(
-        db.projects,
-      )..where((t) => t.projectId.equals(projectId))).go();
-    } catch (e) {
-      debugPrint('delete local project error: $e');
-    }
-  }
-
   /// Sincronización bidireccional: sube lo local más nuevo y baja lo remoto más nuevo.
   Future<void> syncAllProjects({
     void Function(double value, String stage)? onProgress,
@@ -202,8 +176,8 @@ class CloudSyncService {
         final remoteEntry = remoteById[local.projectId];
         final remoteUpdated = remoteEntry?['updated_at_ms'] as int? ?? 0;
         if (remoteEntry == null) {
-          await _deleteProjectLocal(local.projectId);
-          bump('Eliminado local ${local.projectId}');
+          await pushProject(local.projectId, onProgress: onProgress);
+          bump('Subiendo (solo local) ${local.projectId}');
         } else if (local.updatedAtMs > remoteUpdated) {
           await pushProject(local.projectId, onProgress: onProgress);
           bump('Subiendo ${local.projectId}');
@@ -358,11 +332,7 @@ class CloudSyncService {
         'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
       });
       onProgress?.call(0.7, 'Guardando lineas');
-      if (lines.isNotEmpty) {
-        await _client
-            .from('subtitle_lines')
-            .upsert(lines.map(_mapLine).toList());
-      }
+      await _upsertLinesInBatches(lines);
       onProgress?.call(1.0, 'Completado');
 
       final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -370,6 +340,10 @@ class CloudSyncService {
       await (db.update(db.projects)
             ..where((t) => t.projectId.equals(projectId)))
           .write(ProjectsCompanion(updatedAtMs: Value(nowMs)));
+      _dirtyCache[projectId] = _DirtyCacheEntry(
+        checkedAtMs: nowMs,
+        isDirty: false,
+      );
     } catch (e) {
       debugPrint('pushProject error: $e');
     }
@@ -496,6 +470,10 @@ class CloudSyncService {
 
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       await _prefs.setLastSynced(projectId, nowMs);
+      _dirtyCache[projectId] = _DirtyCacheEntry(
+        checkedAtMs: nowMs,
+        isDirty: false,
+      );
     } catch (e) {
       debugPrint('pullProject error: $e');
     }
@@ -552,6 +530,17 @@ class CloudSyncService {
     'doubt': l.doubt,
     'updated_at_ms': l.updatedAtMs,
   };
+
+  Future<void> _upsertLinesInBatches(
+    List<SubtitleLine> lines, {
+    int batchSize = 250,
+  }) async {
+    if (lines.isEmpty) return;
+    for (int i = 0; i < lines.length; i += batchSize) {
+      final chunk = lines.skip(i).take(batchSize).map(_mapLine).toList();
+      await _client.from('subtitle_lines').upsert(chunk);
+    }
+  }
 
   Future<void> _upsertProjectLocal(Map<String, dynamic> m) async {
     await db
@@ -661,7 +650,11 @@ class CloudSyncService {
             storagePath,
             file,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
-          );
+          )
+          .timeout(const Duration(minutes: 3), onTimeout: () {
+        debugPrint('upload timeout (${f.engine}): $storagePath');
+        throw TimeoutException('upload ${f.engine} timed out');
+      });
       final publicUrl = client.storage
           .from(_bucket)
           .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
@@ -681,13 +674,12 @@ class CloudSyncService {
     if (cfg == null) return null;
 
     try {
-      final bytes = await file.readAsBytes();
+      final payloadHash = await _sha256OfFile(file);
       final now = DateTime.now().toUtc();
       final amzDate = _fmtAmzDate(now);
       final datestamp = _fmtDate(now);
       final host = '${cfg.accountId}.r2.cloudflarestorage.com';
       final canonicalUri = '/${cfg.bucket}/$storagePath';
-      final payloadHash = sha256.convert(bytes).toString();
 
       final canonicalHeaders =
           'content-type:$contentType\nhost:$host\nx-amz-content-sha256:$payloadHash\nx-amz-date:$amzDate\n';
@@ -719,24 +711,33 @@ class CloudSyncService {
           'AWS4-HMAC-SHA256 Credential=${cfg.accessKey}/$credentialScope, SignedHeaders=$signedHeaders, Signature=$signature';
 
       final uri = Uri.https(host, canonicalUri);
-      final resp = await http.put(
-        uri,
-        headers: {
+      final request = http.StreamedRequest('PUT', uri)
+        ..headers.addAll({
           'Content-Type': contentType,
           'x-amz-date': amzDate,
           'x-amz-content-sha256': payloadHash,
           'Authorization': authorization,
-        },
-        body: bytes,
-      );
+        })
+        ..contentLength = await file.length();
 
+      await for (final chunk in file.openRead()) {
+        request.sink.add(chunk);
+      }
+      await request.sink.close();
+
+      final resp = await request
+          .send()
+          .timeout(const Duration(minutes: 3), onTimeout: () {
+        debugPrint('R2 upload timeout: $storagePath');
+        throw TimeoutException('R2 upload timeout');
+      });
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final base = cfg.publicBase?.isNotEmpty == true
             ? cfg.publicBase!
             : 'https://${cfg.bucket}.$host';
         return '$base/$storagePath';
       } else {
-        debugPrint('R2 upload failed: ${resp.statusCode} ${resp.body}');
+        debugPrint('R2 upload failed: ${resp.statusCode} ${resp.reasonPhrase}');
         return null;
       }
     } catch (e) {
@@ -1012,15 +1013,12 @@ class CloudSyncService {
   }
 
   _R2Config? get _r2Config {
-    if (!dotenv.isInitialized) {
-      try {
-        dotenv.load(fileName: '.env');
-      } catch (_) {}
-    }
     String readEnv(String key) {
       final fromDefine = String.fromEnvironment(key);
       if (fromDefine.isNotEmpty) return fromDefine;
-      if (dotenv.isInitialized) return dotenv.env[key] ?? '';
+      final fromPlatform = Platform.environment[key];
+      if (fromPlatform != null && fromPlatform.isNotEmpty) return fromPlatform;
+      // No cargamos dotenv aquí para evitar FileNotFound; asumimos que main lo cargó.
       return '';
     }
 
@@ -1061,6 +1059,11 @@ class CloudSyncService {
     return Hmac(sha256, key).convert(utf8.encode(message)).bytes;
   }
 
+  Future<String> _sha256OfFile(File file) async {
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString();
+  }
+
   String _fmtAmzDate(DateTime dt) =>
       '${dt.year.toString().padLeft(4, '0')}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}T${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}${dt.second.toString().padLeft(2, '0')}Z';
 
@@ -1082,4 +1085,13 @@ class _R2Config {
   final String secretKey;
   final String bucket;
   final String? publicBase;
+}
+
+class _DirtyCacheEntry {
+  _DirtyCacheEntry({
+    required this.checkedAtMs,
+    required this.isDirty,
+  });
+  final int checkedAtMs;
+  final bool isDirty;
 }

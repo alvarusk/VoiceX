@@ -53,6 +53,26 @@ class SessionDurationSummary {
   final Map<String, int> byPlatform;
 }
 
+class LineTiming {
+  LineTiming({
+    required this.lineId,
+    required this.dialogueIndex,
+    required this.startMs,
+    required this.endMs,
+    this.selectedText,
+    this.sourceText,
+    required this.originalText,
+  });
+
+  final String lineId;
+  final int dialogueIndex;
+  final int startMs;
+  final int endMs;
+  final String? selectedText;
+  final String? sourceText;
+  final String originalText;
+}
+
 class ReviewService {
   ReviewService(this.db);
 
@@ -591,6 +611,26 @@ class ReviewService {
 
     final totalMs = totals.values.fold<int>(0, (a, b) => a + b);
     return SessionDurationSummary(totalMs: totalMs, byPlatform: totals);
+  }
+
+  Future<List<LineTiming>> fetchLineTimings(String projectId) async {
+    final rows = await (db.select(db.subtitleLines)
+          ..where((t) => t.projectId.equals(projectId))
+          ..orderBy([(t) => OrderingTerm(expression: t.dialogueIndex)]))
+        .get();
+    return rows
+        .map(
+          (r) => LineTiming(
+            lineId: r.lineId,
+            dialogueIndex: r.dialogueIndex,
+            startMs: r.startMs,
+            endMs: r.endMs,
+            selectedText: r.selectedText,
+            sourceText: r.sourceText,
+            originalText: r.originalText,
+          ),
+        )
+        .toList();
   }
 
   Future<void> _touchProjectByLine(String lineId, int tsMs) async {

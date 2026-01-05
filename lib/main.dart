@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'db/app_db.dart';
 import 'projects/projects_page.dart';
 import 'settings/settings_page.dart';
@@ -9,6 +11,11 @@ import 'sync/supabase_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // Si no existe .env en assets, seguimos con dart-define/Platform.
+  }
   await SettingsService.instance.init();
   await SupabaseManager.instance.init();
   runApp(const VoiceXApp());

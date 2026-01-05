@@ -48,6 +48,23 @@ class _ReviewPageState extends State<ReviewPage> {
     return noTags.trim();
   }
 
+  void _cacheLineText(SubtitleLine line) {
+    _lineTextCache[line.lineId] = _currentSubtitleText(line);
+  }
+
+  String _textFromTiming(LineTiming timing) {
+    if (_currentLine?.lineId == timing.lineId) {
+      return _currentSubtitleText(_currentLine);
+    }
+    final cached = _lineTextCache[timing.lineId];
+    if (cached != null) return cached;
+    final selected = _stripSubtitleTags(timing.selectedText ?? '');
+    if (selected.isNotEmpty) return selected;
+    final source = _stripSubtitleTags(timing.sourceText ?? '');
+    if (source.isNotEmpty) return source;
+    return _stripSubtitleTags(timing.originalText);
+  }
+
   void _startSession(String projectId) {
     if (_sessionStarted) return;
     _sessionStarted = true;
@@ -123,6 +140,9 @@ class _ReviewPageState extends State<ReviewPage> {
   String? _videoPath;
   bool _videoError = false;
   SubtitleLine? _currentLine;
+  Future<List<LineTiming>>? _timingsFuture;
+  List<LineTiming> _lineTimings = const [];
+  final Map<String, String> _lineTextCache = {};
 
   // Toggles de visibilidad (MVP: en memoria)
   bool showGpt = true;
@@ -273,6 +293,16 @@ class _ReviewPageState extends State<ReviewPage> {
 
   Future<void> _ensurePageController(Project project) async {
     _pageController ??= PageController(initialPage: project.currentIndex);
+  }
+
+  Future<void> _ensureTimingsFuture(String projectId) async {
+    _timingsFuture ??= _svc.fetchLineTimings(projectId);
+    final list = await _timingsFuture!;
+    if (mounted) {
+      setState(() {
+        _lineTimings = list;
+      });
+    }
   }
 
   Future<void> _jumpToIndex(Project project, int idx) async {
@@ -773,6 +803,7 @@ Si dudas, prioriza estas grafías tal cual.
 
         _ensurePageController(project);
         _ensureVideo(project);
+        _ensureTimingsFuture(project.projectId);
         if (!_initialSeekDone) {
           _initialSeekDone = true;
           _seekVideoForIndex(project.projectId, project.currentIndex);
@@ -871,11 +902,15 @@ Si dudas, prioriza estas grafías tal cual.
                   return const Center(child: Text('Sin líneas.'));
                 }
 
-                return StreamBuilder<List<SubtitleLine>>(
-                  stream: _svc.watchAllLines(project.projectId),
+                final timingsFuture =
+                    _timingsFuture ?? _svc.fetchLineTimings(project.projectId);
+                _timingsFuture = timingsFuture;
+
+                return FutureBuilder<List<LineTiming>>(
+                  future: timingsFuture,
                   builder: (context, linesSnap) {
-                    final subtitleLines =
-                        linesSnap.data ?? const <SubtitleLine>[];
+                    final timings =
+                        linesSnap.data ?? _lineTimings;
                     return Column(
                       children: [
                         _VideoPanel(
@@ -884,8 +919,8 @@ Si dudas, prioriza estas grafías tal cual.
                           error: _videoError,
                           videoPath: _videoPath,
                           subtitle: _currentSubtitleText(_currentLine),
-                          subtitleLines: subtitleLines,
-                          getLineText: _currentSubtitleText,
+                          lineTimings: timings,
+                          getLineText: _textFromTiming,
                           subtitleStartMs: _currentLine?.startMs,
                           subtitleEndMs: _currentLine?.endMs,
                           height: _videoHeight,
@@ -931,20 +966,21 @@ Si dudas, prioriza estas grafías tal cual.
                                     );
                                   }
                                   _currentLine = line;
+                                  _cacheLineText(line);
 
                                   final voiceMode =
                                       SettingsService.instance.voiceInputMode;
                                   final sttAvailable = _speech.available.value;
                                   final statusText =
                                       voiceMode == VoiceInputMode.openai
-                                      ? (_recBusy
-                                            ? 'Procesando grabacion...'
-                                            : (_isRecording
+                                          ? (_recBusy
+                                              ? 'Procesando grabacion...'
+                                              : (_isRecording
                                                   ? 'Grabando para OpenAI...'
                                                   : 'Listo para grabar.'))
-                                      : (!sttAvailable
-                                            ? 'STT local no disponible (Windows beta).'
-                                            : (_speech.isListening
+                                          : (!sttAvailable
+                                              ? 'STT local no disponible (Windows beta).'
+                                              : (_speech.isListening
                                                   ? 'Escuchando...'
                                                   : 'Listo para dictar.'));
 
@@ -1074,7 +1110,7 @@ class _VideoPanel extends StatelessWidget {
     required this.error,
     required this.videoPath,
     required this.subtitle,
-    required this.subtitleLines,
+    required this.lineTimings,
     required this.getLineText,
     required this.subtitleStartMs,
     required this.subtitleEndMs,
@@ -1094,8 +1130,8 @@ class _VideoPanel extends StatelessWidget {
   final bool error;
   final String? videoPath;
   final String subtitle;
-  final List<SubtitleLine> subtitleLines;
-  final String Function(SubtitleLine) getLineText;
+  final List<LineTiming> lineTimings;
+  final String Function(LineTiming) getLineText;
   final int? subtitleStartMs;
   final int? subtitleEndMs;
   final double height;
@@ -1143,12 +1179,12 @@ class _VideoPanel extends StatelessWidget {
                     ? 16 / 9
                     : value.aspectRatio;
                 final posMs = value.position.inMilliseconds;
-                SubtitleLine? activeLine;
+                LineTiming? activeLine;
                 String activeSubtitle = subtitle;
                 int? startMs = subtitleStartMs;
                 int? endMs = subtitleEndMs;
-                if (subtitleLines.isNotEmpty) {
-                  activeLine = _findLineForMs(subtitleLines, posMs);
+                if (lineTimings.isNotEmpty) {
+                  activeLine = _findLineForMs(lineTimings, posMs);
                   if (activeLine != null) {
                     activeSubtitle = getLineText(activeLine);
                     startMs = activeLine.startMs;
@@ -1310,7 +1346,7 @@ class _VideoPanel extends StatelessWidget {
     );
   }
 
-  SubtitleLine? _findLineForMs(List<SubtitleLine> lines, int posMs) {
+  LineTiming? _findLineForMs(List<LineTiming> lines, int posMs) {
     if (lines.isEmpty) return null;
     int lo = 0;
     int hi = lines.length - 1;
