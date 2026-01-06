@@ -8,6 +8,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun resolveVersionCode(base: Int): Int {
+    val explicit = System.getenv("VERSION_CODE")?.toIntOrNull()
+    val runNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+
+    val candidate = when {
+        explicit != null -> explicit
+        runNumber != null -> base + runNumber // unique per CI run without extra dependencies
+        else -> null
+    }
+
+    return candidate?.coerceAtLeast(base + 1) ?: base
+}
+
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasKeystore = keystorePropertiesFile.exists()
@@ -36,7 +49,7 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
+        versionCode = resolveVersionCode(flutter.versionCode)
         versionName = flutter.versionName
     }
 
