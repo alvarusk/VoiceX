@@ -135,6 +135,28 @@ jobs:
           flutter build appbundle --release
           --dart-define SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           --dart-define SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Install fastlane
+        run: sudo gem install fastlane -N
+      - name: Decode Play service account
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then echo "Missing PLAY_SERVICE_ACCOUNT_JSON secret"; exit 1; fi
+          echo "$PLAY_SERVICE_ACCOUNT_JSON" | base64 -d > /tmp/play.json
+      - name: Upload AAB to Play (internal track)
+        env:
+          PLAY_PACKAGE_NAME: ${{ secrets.PLAY_PACKAGE_NAME }}
+        run: |
+          if [ -z "$PLAY_PACKAGE_NAME" ]; then echo "Missing PLAY_PACKAGE_NAME secret"; exit 1; fi
+          fastlane supply \
+            --aab build/app/outputs/bundle/release/app-release.aab \
+            --json_key /tmp/play.json \
+            --package_name "$PLAY_PACKAGE_NAME" \
+            --track internal \
+            --skip_upload_apk true \
+            --skip_upload_metadata true \
+            --skip_upload_images true \
+            --skip_upload_screenshots true
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
