@@ -127,57 +127,47 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onUpgrade: (m, from, to) async {
           if (from <= 1) {
-            final hasFolder =
-                await _columnExists(this, projects.actualTableName, 'folder');
-            if (!hasFolder) {
-              await m.addColumn(projects, projects.folder);
-            }
+            await _safeAddColumn(m, projects, projects.folder);
             from = 2;
           }
           if (from == 2) {
-            final hasSessionLogs =
-                await _tableExists(this, sessionLogs.actualTableName);
-            if (!hasSessionLogs) {
-              await m.createTable(sessionLogs);
-            }
+            await _safeCreateTable(m, sessionLogs);
             from = 3;
           }
           if (from == 3) {
-            final hasArchived =
-                await _columnExists(this, projects.actualTableName, 'archived');
-            if (!hasArchived) {
-              await m.addColumn(projects, projects.archived);
-            }
+            await _safeAddColumn(m, projects, projects.archived);
           }
         },
       );
 
-  Future<bool> _columnExists(
-    GeneratedDatabase db,
-    String tableName,
-    String columnName,
+  Future<void> _safeAddColumn(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
+    GeneratedColumn column,
   ) async {
-    final rows = await db
-        .customSelect('PRAGMA table_info($tableName)')
-        .get();
-    return rows.any(
-      (r) =>
-          (r.data['name'] as String?)?.toLowerCase() ==
-          columnName.toLowerCase(),
-    );
+    try {
+      await m.addColumn(table, column);
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      // Ignore duplicate column errors to keep migrations idempotent.
+      if (!msg.contains('duplicate column')) {
+        rethrow;
+      }
+    }
   }
 
-  Future<bool> _tableExists(
-    GeneratedDatabase db,
-    String tableName,
+  Future<void> _safeCreateTable(
+    Migrator m,
+    TableInfo<Table, dynamic> table,
   ) async {
-    final rows = await db
-        .customSelect(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-          variables: [Variable<String>(tableName)],
-        )
-        .get();
-    return rows.isNotEmpty;
+    try {
+      await m.createTable(table);
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      if (!msg.contains('already exists')) {
+        rethrow;
+      }
+    }
   }
 
   static QueryExecutor _openConnection() {
