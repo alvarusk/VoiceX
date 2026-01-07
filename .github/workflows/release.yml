@@ -14,11 +14,11 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_USER_EMAIL: ${{ secrets.SUPABASE_USER_EMAIL }}
       SUPABASE_USER_PASSWORD: ${{ secrets.SUPABASE_USER_PASSWORD }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-      R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
+      R2_ACCOUNT_ID: "${{ secrets.R2_ACCOUNT_ID }}"
+      R2_ACCESS_KEY: "${{ secrets.R2_ACCESS_KEY }}"
+      R2_SECRET_KEY: "${{ secrets.R2_SECRET_KEY }}"
+      R2_BUCKET: "${{ secrets.R2_BUCKET }}"
+      R2_PUBLIC_BASE: "${{ secrets.R2_PUBLIC_BASE }}"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Flutter
