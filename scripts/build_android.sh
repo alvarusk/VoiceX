@@ -3,12 +3,15 @@
 # Usage:
 #   chmod +x scripts/build_android.sh
 #   ./scripts/build_android.sh --supabase-url "https://xxx.supabase.co" --supabase-key "..." \
+#     --supabase-user-email "user@example.com" --supabase-user-password "..." \
 #     --r2-account "..." --r2-access "..." --r2-secret "..." --r2-bucket "voicex-video" --r2-public "https://pub-xxxx.r2.dev"
 
 set -euo pipefail
 
 SUPABASE_URL=""
 SUPABASE_KEY=""
+SUPABASE_USER_EMAIL=""
+SUPABASE_USER_PASSWORD=""
 R2_ACCOUNT=""
 R2_ACCESS=""
 R2_SECRET=""
@@ -19,6 +22,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --supabase-url) SUPABASE_URL="$2"; shift 2;;
     --supabase-key) SUPABASE_KEY="$2"; shift 2;;
+    --supabase-user-email) SUPABASE_USER_EMAIL="$2"; shift 2;;
+    --supabase-user-password) SUPABASE_USER_PASSWORD="$2"; shift 2;;
     --r2-account) R2_ACCOUNT="$2"; shift 2;;
     --r2-access) R2_ACCESS="$2"; shift 2;;
     --r2-secret) R2_SECRET="$2"; shift 2;;
@@ -31,6 +36,8 @@ done
 DEFINES=()
 [[ -n "$SUPABASE_URL" ]] && DEFINES+=("--dart-define=SUPABASE_URL=$SUPABASE_URL")
 [[ -n "$SUPABASE_KEY" ]] && DEFINES+=("--dart-define=SUPABASE_ANON_KEY=$SUPABASE_KEY")
+[[ -n "$SUPABASE_USER_EMAIL" ]] && DEFINES+=("--dart-define=SUPABASE_USER_EMAIL=$SUPABASE_USER_EMAIL")
+[[ -n "$SUPABASE_USER_PASSWORD" ]] && DEFINES+=("--dart-define=SUPABASE_USER_PASSWORD=$SUPABASE_USER_PASSWORD")
 [[ -n "$R2_ACCOUNT" ]] && DEFINES+=("--dart-define=R2_ACCOUNT_ID=$R2_ACCOUNT")
 [[ -n "$R2_ACCESS" ]] && DEFINES+=("--dart-define=R2_ACCESS_KEY=$R2_ACCESS")
 [[ -n "$R2_SECRET" ]] && DEFINES+=("--dart-define=R2_SECRET_KEY=$R2_SECRET")

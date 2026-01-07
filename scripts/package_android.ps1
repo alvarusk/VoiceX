@@ -1,6 +1,7 @@
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/package_android.ps1 `
 #   [-SkipPubGet] [-SkipAab] `
 #   [-SupabaseUrl "..."] [-SupabaseAnonKey "..."] `
+#   [-SupabaseUserEmail "user@example.com"] [-SupabaseUserPassword "..."] `
 #   [-R2AccountId "..."] [-R2AccessKey "..."] [-R2SecretKey "..."] `
 #   [-R2Bucket "..."] [-R2PublicBase "..."]
 #
@@ -11,6 +12,8 @@ param(
   [switch]$SkipAab,
   [string]$SupabaseUrl = "",
   [string]$SupabaseAnonKey = "",
+  [string]$SupabaseUserEmail = "",
+  [string]$SupabaseUserPassword = "",
   [string]$R2AccountId = "",
   [string]$R2AccessKey = "",
   [string]$R2SecretKey = "",
@@ -28,6 +31,8 @@ if (-not $SkipPubGet) {
 $defines = @()
 if ($SupabaseUrl) { $defines += "--dart-define=SUPABASE_URL=$SupabaseUrl" }
 if ($SupabaseAnonKey) { $defines += "--dart-define=SUPABASE_ANON_KEY=$SupabaseAnonKey" }
+if ($SupabaseUserEmail) { $defines += "--dart-define=SUPABASE_USER_EMAIL=$SupabaseUserEmail" }
+if ($SupabaseUserPassword) { $defines += "--dart-define=SUPABASE_USER_PASSWORD=$SupabaseUserPassword" }
 if ($R2AccountId) { $defines += "--dart-define=R2_ACCOUNT_ID=$R2AccountId" }
 if ($R2AccessKey) { $defines += "--dart-define=R2_ACCESS_KEY=$R2AccessKey" }
 if ($R2SecretKey) { $defines += "--dart-define=R2_SECRET_KEY=$R2SecretKey" }
@@ -62,7 +67,7 @@ if (-not $SkipAab -and (Test-Path $aabSrc)) {
   Copy-Item $aabSrc $aabDest -Force
 }
 
-Write-Host "Artefactos listos en $destRoot:"
+Write-Host "Artefactos listos en ${destRoot}:"
 Get-ChildItem $destRoot | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | ForEach-Object {
   Write-Host " - $($_.Name)"
 }

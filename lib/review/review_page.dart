@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
 import 'package:record/record.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
@@ -393,6 +394,14 @@ class _ReviewPageState extends State<ReviewPage> {
                   _gotoNextDoubt(project);
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.video_file),
+                title: const Text('Asignar o cambiar video'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickAndAttachVideo(project);
+                },
+              ),
               const Divider(),
               SwitchListTile(
                 title: const Text('Mostrar GPT'),
@@ -419,6 +428,39 @@ class _ReviewPageState extends State<ReviewPage> {
         );
       },
     );
+  }
+
+  Future<void> _pickAndAttachVideo(Project project) async {
+    if (kIsWeb) {
+      _showSnack('Asignar video no disponible en Web.');
+      return;
+    }
+    final res = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp4', 'mkv', 'mov'],
+      withData: false,
+    );
+    if (res == null || res.files.isEmpty) return;
+    final path = res.files.single.path;
+    if (path == null || path.isEmpty) {
+      _showSnack('No se pudo leer el archivo de video.');
+      return;
+    }
+    try {
+      await _svc.attachVideo(projectId: project.projectId, sourcePath: path);
+      if (!mounted) return;
+      _videoController?.dispose();
+      _videoController = null;
+      _videoInit = null;
+      _videoError = false;
+      _videoPath = null;
+      _initialSeekDone = false;
+      await _ensureVideo(project);
+      _showSnack('Video actualizado.');
+    } catch (e) {
+      debugPrint('attach video error: $e');
+      _showSnack('No se pudo actualizar el video.');
+    }
   }
 
   void _showSnack(String message) {
@@ -1034,7 +1076,7 @@ Si dudas, prioriza estas grafías tal cual.
     if (!_cloud.isReady) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Supabase no configurado (URL/key).')),
+          const SnackBar(content: Text('Supabase no disponible (config/auth).')),
         );
       }
       return;
@@ -1072,14 +1114,18 @@ Si dudas, prioriza estas grafías tal cual.
 
     bool ok = false;
     try {
-      await _cloud.pushProject(
+      ok = await _cloud.pushProject(
         project.projectId,
         onProgress: (v, stage) {
           final pct = (v * 100).toInt();
           notifier.value = '$stage ($pct %)';
         },
       );
-      ok = true;
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al guardar en cloud.')),
+        );
+      }
     } catch (e) {
       debugPrint('save cloud error: $e');
       if (mounted) {

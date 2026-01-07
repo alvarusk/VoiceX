@@ -3,12 +3,15 @@
 #   .\scripts\build_windows.ps1 `
 #     -SupabaseUrl "https://xxx.supabase.co" `
 #     -SupabaseAnonKey "..." `
+#     -SupabaseUserEmail "user@example.com" -SupabaseUserPassword "..." `
 #     -R2AccountId "..." -R2AccessKey "..." -R2SecretKey "..." `
 #     -R2Bucket "voicex-video" -R2PublicBase "https://pub-xxxx.r2.dev"
 
 param(
   [string]$SupabaseUrl = "",
   [string]$SupabaseAnonKey = "",
+  [string]$SupabaseUserEmail = "",
+  [string]$SupabaseUserPassword = "",
   [string]$R2AccountId = "",
   [string]$R2AccessKey = "",
   [string]$R2SecretKey = "",
@@ -21,6 +24,8 @@ $ErrorActionPreference = "Stop"
 $defines = @()
 if ($SupabaseUrl)   { $defines += "--dart-define=SUPABASE_URL=$SupabaseUrl" }
 if ($SupabaseAnonKey) { $defines += "--dart-define=SUPABASE_ANON_KEY=$SupabaseAnonKey" }
+if ($SupabaseUserEmail) { $defines += "--dart-define=SUPABASE_USER_EMAIL=$SupabaseUserEmail" }
+if ($SupabaseUserPassword) { $defines += "--dart-define=SUPABASE_USER_PASSWORD=$SupabaseUserPassword" }
 if ($R2AccountId)   { $defines += "--dart-define=R2_ACCOUNT_ID=$R2AccountId" }
 if ($R2AccessKey)   { $defines += "--dart-define=R2_ACCESS_KEY=$R2AccessKey" }
 if ($R2SecretKey)   { $defines += "--dart-define=R2_SECRET_KEY=$R2SecretKey" }

@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../db/app_db.dart';
 import '../export/export_service.dart';
@@ -373,6 +374,69 @@ class ReviewService {
             ))
             .getSingleOrNull();
     return row?.assPath;
+  }
+
+  Future<void> attachVideo({
+    required String projectId,
+    required String sourcePath,
+  }) async {
+    final supportDir = await getApplicationSupportDirectory();
+    final projDir = Directory(p.join(supportDir.path, 'voicex', projectId));
+    await projDir.create(recursive: true);
+
+    final ext = p.extension(sourcePath);
+    final dst = p.join(
+      projDir.path,
+      'video${ext.isNotEmpty ? ext : '.mp4'}',
+    );
+    await File(sourcePath).copy(dst);
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final existing =
+        await (db.select(db.projectFiles)..where(
+              (t) => t.projectId.equals(projectId) & t.engine.equals('video'),
+            ))
+            .getSingleOrNull();
+
+    Future<void> deleteIfLocal(String path) async {
+      if (path.isEmpty) return;
+      if (path.startsWith('http://') || path.startsWith('https://')) return;
+      if (path == dst) return;
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          await f.delete();
+        }
+      } catch (_) {}
+    }
+
+    if (existing != null) {
+      await deleteIfLocal(existing.assPath);
+      await (db.update(db.projectFiles)..where(
+            (t) => t.fileId.equals(existing.fileId),
+          )).write(
+        ProjectFilesCompanion(
+          assPath: Value(dst),
+          importedAtMs: Value(now),
+        ),
+      );
+    } else {
+      await db.into(db.projectFiles).insert(
+            ProjectFilesCompanion.insert(
+              fileId: const Uuid().v4(),
+              projectId: projectId,
+              engine: 'video',
+              assPath: dst,
+              importedAtMs: now,
+              dialogueCount: const Value(0),
+              unmatchedCount: const Value(0),
+            ),
+          );
+    }
+
+    await (db.update(db.projects)
+          ..where((t) => t.projectId.equals(projectId)))
+        .write(ProjectsCompanion(updatedAtMs: Value(now)));
   }
 
   Future<int?> findNextUnreviewed(String projectId, int fromIndex) async {

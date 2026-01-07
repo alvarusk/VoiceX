@@ -1,6 +1,7 @@
 -- Projects
 create table if not exists projects (
   project_id text primary key,
+  owner_user_id uuid not null,
   title text not null,
   folder text default '',
   archived boolean default false,
@@ -16,6 +17,7 @@ create table if not exists projects (
 create table if not exists project_files (
   file_id text primary key,
   project_id text not null references projects(project_id) on delete cascade,
+  owner_user_id uuid not null,
   engine text not null,
   ass_path text not null,
   imported_at_ms bigint not null,
@@ -28,6 +30,7 @@ create table if not exists project_files (
 create table if not exists subtitle_lines (
   line_id text primary key,
   project_id text not null references projects(project_id) on delete cascade,
+  owner_user_id uuid not null,
   dialogue_index int not null,
   events_row_index int not null,
   start_ms int not null,
@@ -59,6 +62,7 @@ create table if not exists subtitle_lines (
 create table if not exists selection_events (
   event_id bigint generated always as identity primary key,
   project_id text not null references projects(project_id) on delete cascade,
+  owner_user_id uuid not null,
   line_id text not null references subtitle_lines(line_id) on delete cascade,
   chosen_source text not null,
   chosen_text text not null,

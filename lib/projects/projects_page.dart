@@ -395,7 +395,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Supabase no configurado (URL/key).'),
+                      content: Text('Supabase no disponible (config/auth).'),
                     ),
                   );
                 }
@@ -425,7 +425,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Supabase no configurado (URL/key).'),
+                      content: Text('Supabase no disponible (config/auth).'),
                     ),
                   );
                 }
@@ -760,18 +760,19 @@ class _ProjectsPageState extends State<ProjectsPage> {
               if (!_cloud.isReady) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Supabase no configurado (URL/key).'),
+                    content: Text('Supabase no disponible (config/auth).'),
                   ),
                 );
                 return;
               }
               if (!mounted) return;
+              bool ok = false;
               await _runWithProgress(
                 context,
                 initial: 'Subiendo proyecto...',
                 action: (update) async {
                   update('Subiendo proyecto...');
-                  await _cloud.pushProject(
+                  ok = await _cloud.pushProject(
                     p.projectId,
                     onProgress: (v, stage) {
                       final pct = (v * 100).toInt();
@@ -781,14 +782,18 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 },
               );
               messenger.showSnackBar(
-                const SnackBar(content: Text('Proyecto subido.')),
+                SnackBar(
+                  content: Text(
+                    ok ? 'Proyecto subido.' : 'Error al subir proyecto.',
+                  ),
+                ),
               );
             } else if (v == 'sync_down') {
               await _cloud.ensureInit();
               if (!_cloud.isReady) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Supabase no configurado (URL/key).'),
+                    content: Text('Supabase no disponible (config/auth).'),
                   ),
                 );
                 return;

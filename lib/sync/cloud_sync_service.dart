@@ -25,12 +25,16 @@ class CloudSyncService {
   final _prefs = SyncPrefs();
   bool _supportsFolderColumn = true;
   bool _supportsArchivedColumn = true;
+  bool _supportsOwnerColumnProjects = true;
+  bool _supportsOwnerColumnFiles = true;
+  bool _supportsOwnerColumnLines = true;
   final Map<String, _DirtyCacheEntry> _dirtyCache = {};
 
   static const _bucket = 'voicex';
 
   bool get isReady => _supabase.isReady;
   SupabaseClient get _client => Supabase.instance.client;
+  String? get _ownerUserId => _supabase.userId;
 
   Future<void> ensureInit() async {
     await _supabase.init();
@@ -199,11 +203,11 @@ class CloudSyncService {
     }
   }
 
-  Future<void> pushProject(
+  Future<bool> pushProject(
     String projectId, {
     void Function(double value, String stage)? onProgress,
   }) async {
-    if (!isReady) return;
+    if (!isReady) return false;
     try {
       final project = await (db.select(
         db.projects,
@@ -291,24 +295,21 @@ class CloudSyncService {
       } on PostgrestException catch (e) {
         debugPrint('upsert projects error: $e');
         final missingFolder =
-            _supportsFolderColumn &&
-            (e.code == 'PGRST204' ||
-                e.code == '42703' ||
-                e.message.contains('folder'));
+            _supportsFolderColumn && _isMissingColumn(e, 'folder');
         final missingArchived =
-            _supportsArchivedColumn &&
-            (e.code == 'PGRST204' ||
-                e.code == '42703' ||
-                e.message.contains('archived'));
-        if (missingFolder) {
-          _supportsFolderColumn = false;
-          final fallback = Map<String, dynamic>.from(projectMap)
-            ..remove('folder');
-          await _client.from('projects').upsert(fallback);
-        } else if (missingArchived) {
-          _supportsArchivedColumn = false;
-          final fallback = Map<String, dynamic>.from(projectMap)
-            ..remove('archived');
+            _supportsArchivedColumn && _isMissingColumn(e, 'archived');
+        final missingOwner =
+            _supportsOwnerColumnProjects &&
+            _isMissingColumn(e, 'owner_user_id');
+        if (missingFolder) _supportsFolderColumn = false;
+        if (missingArchived) _supportsArchivedColumn = false;
+        if (missingOwner) _supportsOwnerColumnProjects = false;
+
+        if (missingFolder || missingArchived || missingOwner) {
+          final fallback = Map<String, dynamic>.from(projectMap);
+          if (!_supportsFolderColumn) fallback.remove('folder');
+          if (!_supportsArchivedColumn) fallback.remove('archived');
+          if (!_supportsOwnerColumnProjects) fallback.remove('owner_user_id');
           await _client.from('projects').upsert(fallback);
         } else {
           rethrow;
@@ -326,7 +327,20 @@ class CloudSyncService {
           mapped.add(_mapFile(f, assPathOverride: override));
         }
         if (mapped.isNotEmpty) {
-          await _client.from('project_files').upsert(mapped);
+          try {
+            await _client.from('project_files').upsert(mapped);
+          } on PostgrestException catch (e) {
+            if (_supportsOwnerColumnFiles &&
+                _isMissingColumn(e, 'owner_user_id')) {
+              _supportsOwnerColumnFiles = false;
+              for (final m in mapped) {
+                m.remove('owner_user_id');
+              }
+              await _client.from('project_files').upsert(mapped);
+            } else {
+              rethrow;
+            }
+          }
         }
       }
       await _uploadProjectMeta(project.projectId, {
@@ -346,8 +360,10 @@ class CloudSyncService {
         checkedAtMs: nowMs,
         isDirty: false,
       );
+      return true;
     } catch (e) {
       debugPrint('pushProject error: $e');
+      return false;
     }
   }
 
@@ -481,57 +497,81 @@ class CloudSyncService {
     }
   }
 
-  Map<String, dynamic> _mapProject(Project p, {String? assPathOverride}) => {
-    'project_id': p.projectId,
-    'title': p.title,
-    'folder': p.folder,
-    'archived': p.archived,
-    'created_at_ms': p.createdAtMs,
-    'updated_at_ms': p.updatedAtMs,
-    'base_ass_path': assPathOverride ?? p.baseAssPath,
-    'export_mode': p.exportMode,
-    'strict_export': p.strictExport,
-    'current_index': p.currentIndex,
-  };
+  Map<String, dynamic> _mapProject(
+    Project p, {
+    String? assPathOverride,
+  }) {
+    final map = <String, dynamic>{
+      'project_id': p.projectId,
+      'title': p.title,
+      'folder': p.folder,
+      'archived': p.archived,
+      'created_at_ms': p.createdAtMs,
+      'updated_at_ms': p.updatedAtMs,
+      'base_ass_path': assPathOverride ?? p.baseAssPath,
+      'export_mode': p.exportMode,
+      'strict_export': p.strictExport,
+      'current_index': p.currentIndex,
+    };
+    final ownerId = _ownerUserId;
+    if (_supportsOwnerColumnProjects && ownerId != null && ownerId.isNotEmpty) {
+      map['owner_user_id'] = ownerId;
+    }
+    return map;
+  }
 
-  Map<String, dynamic> _mapFile(ProjectFile f, {String? assPathOverride}) => {
-    'file_id': f.fileId,
-    'project_id': f.projectId,
-    'engine': f.engine,
-    'ass_path': assPathOverride ?? f.assPath,
-    'imported_at_ms': f.importedAtMs,
-    'dialogue_count': f.dialogueCount,
-    'unmatched_count': f.unmatchedCount,
-  };
+  Map<String, dynamic> _mapFile(ProjectFile f, {String? assPathOverride}) {
+    final map = <String, dynamic>{
+      'file_id': f.fileId,
+      'project_id': f.projectId,
+      'engine': f.engine,
+      'ass_path': assPathOverride ?? f.assPath,
+      'imported_at_ms': f.importedAtMs,
+      'dialogue_count': f.dialogueCount,
+      'unmatched_count': f.unmatchedCount,
+    };
+    final ownerId = _ownerUserId;
+    if (_supportsOwnerColumnFiles && ownerId != null && ownerId.isNotEmpty) {
+      map['owner_user_id'] = ownerId;
+    }
+    return map;
+  }
 
-  Map<String, dynamic> _mapLine(SubtitleLine l) => {
-    'line_id': l.lineId,
-    'project_id': l.projectId,
-    'dialogue_index': l.dialogueIndex,
-    'events_row_index': l.eventsRowIndex,
-    'start_ms': l.startMs,
-    'end_ms': l.endMs,
-    'style': l.style,
-    'name': l.name,
-    'effect': l.effect,
-    'source_text': l.sourceText,
-    'romanization': l.romanization,
-    'gloss': l.gloss,
-    'dialogue_prefix': l.dialoguePrefix,
-    'leading_tags': l.leadingTags,
-    'has_vector_drawing': l.hasVectorDrawing,
-    'original_text': l.originalText,
-    'cand_gpt': l.candGpt,
-    'cand_claude': l.candClaude,
-    'cand_gemini': l.candGemini,
-    'cand_deepseek': l.candDeepseek,
-    'cand_voice': l.candVoice,
-    'selected_source': l.selectedSource,
-    'selected_text': l.selectedText,
-    'reviewed': l.reviewed,
-    'doubt': l.doubt,
-    'updated_at_ms': l.updatedAtMs,
-  };
+  Map<String, dynamic> _mapLine(SubtitleLine l) {
+    final map = <String, dynamic>{
+      'line_id': l.lineId,
+      'project_id': l.projectId,
+      'dialogue_index': l.dialogueIndex,
+      'events_row_index': l.eventsRowIndex,
+      'start_ms': l.startMs,
+      'end_ms': l.endMs,
+      'style': l.style,
+      'name': l.name,
+      'effect': l.effect,
+      'source_text': l.sourceText,
+      'romanization': l.romanization,
+      'gloss': l.gloss,
+      'dialogue_prefix': l.dialoguePrefix,
+      'leading_tags': l.leadingTags,
+      'has_vector_drawing': l.hasVectorDrawing,
+      'original_text': l.originalText,
+      'cand_gpt': l.candGpt,
+      'cand_claude': l.candClaude,
+      'cand_gemini': l.candGemini,
+      'cand_deepseek': l.candDeepseek,
+      'cand_voice': l.candVoice,
+      'selected_source': l.selectedSource,
+      'selected_text': l.selectedText,
+      'reviewed': l.reviewed,
+      'doubt': l.doubt,
+      'updated_at_ms': l.updatedAtMs,
+    };
+    final ownerId = _ownerUserId;
+    if (_supportsOwnerColumnLines && ownerId != null && ownerId.isNotEmpty) {
+      map['owner_user_id'] = ownerId;
+    }
+    return map;
+  }
 
   Future<void> _upsertLinesInBatches(
     List<SubtitleLine> lines, {
@@ -540,7 +580,19 @@ class CloudSyncService {
     if (lines.isEmpty) return;
     for (int i = 0; i < lines.length; i += batchSize) {
       final chunk = lines.skip(i).take(batchSize).map(_mapLine).toList();
-      await _client.from('subtitle_lines').upsert(chunk);
+      try {
+        await _client.from('subtitle_lines').upsert(chunk);
+      } on PostgrestException catch (e) {
+        if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+          _supportsOwnerColumnLines = false;
+          for (final m in chunk) {
+            m.remove('owner_user_id');
+          }
+          await _client.from('subtitle_lines').upsert(chunk);
+        } else {
+          rethrow;
+        }
+      }
     }
   }
 
@@ -905,6 +957,12 @@ class CloudSyncService {
 
   bool _looksLikeUrl(String path) =>
       path.startsWith('http://') || path.startsWith('https://');
+
+  bool _isMissingColumn(PostgrestException e, String column) {
+    final msg = e.message.toLowerCase();
+    final col = column.toLowerCase();
+    return e.code == 'PGRST204' || e.code == '42703' || msg.contains(col);
+  }
 
   String _guessContentType(String ext, String engine) {
     final lower = ext.toLowerCase();
