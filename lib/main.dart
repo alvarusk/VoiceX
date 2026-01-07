@@ -8,6 +8,7 @@ import 'projects/projects_page.dart';
 import 'settings/settings_page.dart';
 import 'settings/settings_service.dart';
 import 'sync/supabase_manager.dart';
+import 'utils/app_version.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -118,7 +119,6 @@ class _VoiceXAppState extends State<VoiceXApp> {
 class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    const version = '1.0.0+1';
     final asset = defaultTargetPlatform == TargetPlatform.windows
         ? 'assets/voicex_splash_pc.png'
         : 'assets/voicex_splash_phone.png';
@@ -130,15 +130,24 @@ class _SplashScreen extends StatelessWidget {
             asset,
             fit: BoxFit.cover,
           ),
-          const Positioned(
+          Positioned(
             right: 12,
             bottom: 8,
-            child: Text(
-              'v$version',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-              ),
+            child: FutureBuilder<String>(
+              future: AppVersion.load(),
+              builder: (context, snap) {
+                final version = snap.data;
+                if (version == null || version.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  'v$version',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                );
+              },
             ),
           ),
         ],

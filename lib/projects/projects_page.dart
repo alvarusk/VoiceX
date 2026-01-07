@@ -11,6 +11,7 @@ import '../costs/costs_repository.dart';
 import '../costs/costs_sheet.dart';
 import '../sync/supabase_manager.dart';
 import '../settings/settings_service.dart';
+import '../utils/app_update_checker.dart';
 import 'project_import_sheet.dart';
 
 class ProjectsPage extends StatefulWidget {
@@ -39,6 +40,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   final Set<String> _manualFolders = {}; // created manually even if vacías
   final Map<String, bool> _folderHover = {}; // folder -> drag hover
   List<String> _folderNamesCache = [];
+  bool _updateChecked = false;
 
   void _showSnack(String msg) {
     if (!mounted) return;
@@ -66,6 +68,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (widget.autoSyncOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckAndroidUpdate());
   }
 
   Future<void> _loadManualFolders() async {
@@ -114,6 +117,39 @@ class _ProjectsPageState extends State<ProjectsPage> {
       }
     }
     if (mounted) setState(() => _syncingAll = false);
+  }
+
+  Future<void> _maybeCheckAndroidUpdate() async {
+    if (_updateChecked) return;
+    _updateChecked = true;
+
+    const checker = AppUpdateChecker(
+      packageName: 'com.kingdomm.voicex',
+      storeUrl: 'https://play.google.com/store/apps/details?id=com.kingdomm.voicex',
+    );
+    final result = await checker.checkForUpdate();
+    if (!mounted || result == null) return;
+
+    if (result.immediateAllowed) {
+      final started = await checker.startImmediateUpdate();
+      if (started) return;
+    }
+
+    if (!mounted) return;
+    final versionSuffix =
+        result.currentVersion.isEmpty ? '' : ' (tienes v${result.currentVersion})';
+    final playCode = result.availableVersionCode != null
+        ? ' (Play code ${result.availableVersionCode})'
+        : '';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Nueva version disponible$versionSuffix$playCode'),
+        action: SnackBarAction(
+          label: 'Google Play',
+          onPressed: checker.openPlayStore,
+        ),
+      ),
+    );
   }
 
   Future<void> _runWithProgress(

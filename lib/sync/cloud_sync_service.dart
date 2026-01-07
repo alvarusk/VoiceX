@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show InsertMode, Value, Variable;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -223,10 +224,10 @@ class CloudSyncService {
           // 1) Si hay URL, la reusamos (rebased).
           if (_looksLikeUrl(f.assPath)) {
             final rebased = _rebaseR2Url(f.assPath);
-            debugPrint(
-              '[cloud] reuse video url ${f.assPath} -> ${rebased ?? 'no change'}',
-            );
-            if (rebased != null) remotePaths[f.fileId] = rebased;
+            final url = rebased ?? f.assPath;
+            debugPrint('[cloud] reuse video url ${f.assPath} -> $url');
+            remotePaths[f.fileId] = url;
+            await _setLocalFilePath(f.fileId, url);
             continue;
           }
           // 2) Si hay fichero local y R2 disponible, lo subimos a R2.
@@ -243,6 +244,7 @@ class CloudSyncService {
             if (uploaded != null) {
               final rebased = _rebaseR2Url(uploaded) ?? uploaded;
               remotePaths[f.fileId] = rebased;
+              await _setLocalFilePath(f.fileId, rebased);
               debugPrint('[cloud] uploaded video to R2: $rebased');
             } else {
               debugPrint(
@@ -562,6 +564,20 @@ class CloudSyncService {
           ),
           mode: InsertMode.insertOrReplace,
         );
+  }
+
+  Future<void> _setLocalFilePath(String fileId, String path) async {
+    try {
+      await (db.update(db.projectFiles)..where(
+            (t) => t.fileId.equals(fileId),
+          )).write(
+        ProjectFilesCompanion(
+          assPath: Value(path),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[cloud] no se pudo actualizar ruta local para $fileId: $e');
+    }
   }
 
   Future<void> _upsertFileLocal(Map<String, dynamic> m) async {
@@ -1018,7 +1034,8 @@ class CloudSyncService {
       if (fromDefine.isNotEmpty) return fromDefine;
       final fromPlatform = Platform.environment[key];
       if (fromPlatform != null && fromPlatform.isNotEmpty) return fromPlatform;
-      // No cargamos dotenv aquí para evitar FileNotFound; asumimos que main lo cargó.
+      final fromDotenv = dotenv.env[key];
+      if (fromDotenv != null && fromDotenv.isNotEmpty) return fromDotenv;
       return '';
     }
 
