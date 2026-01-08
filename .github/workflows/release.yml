@@ -21,6 +21,21 @@ jobs:
       R2_PUBLIC_BASE: "${{ secrets.R2_PUBLIC_BASE }}"
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve app version (Windows)
+        shell: pwsh
+        run: |
+          $pubspec = Get-Content pubspec.yaml -Raw
+          if ($pubspec -notmatch '(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)(?:\+([0-9]+))?\s*$') {
+            throw "Missing or invalid version in pubspec.yaml"
+          }
+          $buildName = $matches[1]
+          $buildNumber = if ($matches[2]) { $matches[2] } else { "0" }
+          $msixVersion = "$buildName.$buildNumber"
+          $pubspec = [regex]::Replace($pubspec, '(?m)^\s*msix_version:\s*.*$', "  msix_version: $msixVersion")
+          Set-Content -Path pubspec.yaml -Value $pubspec -NoNewline
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_NAME=$buildName"
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_CODE=$buildNumber"
+          Add-Content -Path $env:GITHUB_ENV -Value "MSIX_VERSION=$msixVersion"
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -61,6 +76,8 @@ jobs:
         shell: pwsh
         run: |
           flutter build windows --release `
+            --build-name $env:APP_VERSION_NAME `
+            --build-number $env:APP_VERSION_CODE `
             --dart-define SUPABASE_URL=$env:SUPABASE_URL `
             --dart-define SUPABASE_ANON_KEY=$env:SUPABASE_ANON_KEY `
             --dart-define SUPABASE_USER_EMAIL=$env:SUPABASE_USER_EMAIL `
@@ -96,6 +113,23 @@ jobs:
       R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve app version (Linux)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_LINE="$(grep -E '^version:' pubspec.yaml | head -n1 | awk '{print $2}')"
+          if [ -z "$VERSION_LINE" ]; then
+            echo "Missing version in pubspec.yaml"
+            exit 1
+          fi
+          BUILD_NAME="${VERSION_LINE%%+*}"
+          if [[ "$VERSION_LINE" == *"+"* ]]; then
+            BUILD_NUMBER="${VERSION_LINE##*+}"
+          else
+            BUILD_NUMBER="0"
+          fi
+          echo "APP_VERSION_NAME=$BUILD_NAME" >> "$GITHUB_ENV"
+          echo "APP_VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -141,6 +175,8 @@ jobs:
       - name: Build APK release (deprecated; prefer AAB)
         run: >
           flutter build apk --release
+          --build-name $APP_VERSION_NAME
+          --build-number $APP_VERSION_CODE
           --target-platform android-arm64
           --dart-define SUPABASE_URL=$SUPABASE_URL
           --dart-define SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
@@ -154,6 +190,8 @@ jobs:
       - name: Build AAB release
         run: >
           flutter build appbundle --release
+          --build-name $APP_VERSION_NAME
+          --build-number $APP_VERSION_CODE
           --dart-define SUPABASE_URL=$SUPABASE_URL
           --dart-define SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           --dart-define SUPABASE_USER_EMAIL=$SUPABASE_USER_EMAIL
