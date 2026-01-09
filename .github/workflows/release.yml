@@ -120,7 +120,8 @@ jobs:
           PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
           STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
         run: |
-          Import-Module StoreBroker
+          $ErrorActionPreference = "Stop"
+          Import-Module StoreBroker -Force
           if (-not $env:AZURE_TENANT_ID) { throw "Missing AZURE_TENANT_ID secret" }
           if (-not $env:AZURE_CLIENT_ID) { throw "Missing AZURE_CLIENT_ID secret" }
           if (-not $env:AZURE_CLIENT_SECRET) { throw "Missing AZURE_CLIENT_SECRET secret" }
@@ -130,20 +131,18 @@ jobs:
           $msix = Get-ChildItem -Path build/msix -Recurse -Filter *.msix | Select-Object -First 1
           if (-not $msix) { throw "MSIX not found under build/msix" }
 
-          Set-PartnerCenterApplication `
-            -TenantId $env:AZURE_TENANT_ID `
-            -ApplicationId $env:AZURE_CLIENT_ID `
-            -ApplicationSecret $env:AZURE_CLIENT_SECRET
+          $secureSecret = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
+          $creds = New-Object System.Management.Automation.PSCredential(
+            $env:AZURE_CLIENT_ID,
+            $secureSecret
+          )
+          Set-StoreBrokerAuthentication -TenantId $env:AZURE_TENANT_ID -Credential $creds
 
-          $submission = New-Submission `
-            -SellerId $env:PARTNER_CENTER_SELLER_ID `
-            -ProductId $env:STORE_PRODUCT_ID
-
-          Add-SubmissionPackage `
-            -Submission $submission `
-            -PackagePath $msix.FullName
-
-          Complete-Submission -Submission $submission
+          Update-ApplicationSubmission `
+            -AppId $env:STORE_PRODUCT_ID `
+            -PackagePath $msix.FullName `
+            -ReplacePackages `
+            -AutoCommit
 
   build-android:
     runs-on: ubuntu-latest
