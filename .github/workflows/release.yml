@@ -32,7 +32,8 @@ jobs:
           $buildNumber = if ($matches[2]) { [int]$matches[2] } else { 0 }
           $runNumber = if ($env:GITHUB_RUN_NUMBER) { [int]$env:GITHUB_RUN_NUMBER } else { 0 }
           if ($runNumber -gt $buildNumber) { $buildNumber = $runNumber }
-          $msixVersion = "$buildName.$buildNumber"
+          # MS Store requires Appx/Package revision to be 0 (4th segment).
+          $msixVersion = "$buildName.0"
           $pubspec = [regex]::Replace($pubspec, '(?m)^\s*msix_version:\s*.*$', "  msix_version: $msixVersion")
           Set-Content -Path pubspec.yaml -Value $pubspec -NoNewline
           Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_NAME=$buildName"
@@ -105,6 +106,44 @@ jobs:
         with:
           name: msix
           path: build/msix/**/*.msix
+      - name: Install StoreBroker
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module StoreBroker -Force -Scope CurrentUser
+          Import-Module StoreBroker
+      - name: Upload MSIX to Microsoft Store
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
+        run: |
+          if (-not $env:AZURE_TENANT_ID) { throw "Missing AZURE_TENANT_ID secret" }
+          if (-not $env:AZURE_CLIENT_ID) { throw "Missing AZURE_CLIENT_ID secret" }
+          if (-not $env:AZURE_CLIENT_SECRET) { throw "Missing AZURE_CLIENT_SECRET secret" }
+          if (-not $env:PARTNER_CENTER_SELLER_ID) { throw "Missing PARTNER_CENTER_SELLER_ID secret" }
+          if (-not $env:STORE_PRODUCT_ID) { throw "Missing STORE_PRODUCT_ID secret" }
+
+          $msix = Get-ChildItem -Path build/msix -Recurse -Filter *.msix | Select-Object -First 1
+          if (-not $msix) { throw "MSIX not found under build/msix" }
+
+          Set-PartnerCenterApplication `
+            -TenantId $env:AZURE_TENANT_ID `
+            -ApplicationId $env:AZURE_CLIENT_ID `
+            -ApplicationSecret $env:AZURE_CLIENT_SECRET
+
+          $submission = New-Submission `
+            -SellerId $env:PARTNER_CENTER_SELLER_ID `
+            -ProductId $env:STORE_PRODUCT_ID
+
+          Add-SubmissionPackage `
+            -Submission $submission `
+            -PackagePath $msix.FullName
+
+          Complete-Submission -Submission $submission
 
   build-android:
     runs-on: ubuntu-latest
