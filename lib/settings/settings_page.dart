@@ -337,6 +337,37 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 16),
             const _VoiceCommandsBox(),
             const SizedBox(height: 16),
+            const Text(
+              'Sincronizacion de videos (R2)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _cloud.isR2Available
+                  ? 'R2 disponible: si'
+                  : 'R2 disponible: no (faltan R2_* en el entorno)',
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _cloud.hasR2PublicBase
+                  ? 'Base publica: ${_cloud.r2PublicBase}'
+                  : 'Base publica: no configurada (R2_PUBLIC_BASE)',
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _cloud.isR2Available
+                  ? 'Bucket: ${_cloud.r2Bucket ?? '-'}'
+                  : 'Bucket: -',
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Para ver videos en otros dispositivos, subelos con "Subir a cloud" '
+              'y asegurate de que R2_* este disponible en cada dispositivo.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
             if (Platform.isWindows) ...[
               const Text(
                 'Actualizaciones',

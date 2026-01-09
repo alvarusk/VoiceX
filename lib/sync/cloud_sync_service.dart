@@ -33,6 +33,11 @@ class CloudSyncService {
   static const _bucket = 'voicex';
 
   bool get isReady => _supabase.isReady;
+  bool get isR2Available => _r2Config != null;
+  bool get hasR2PublicBase =>
+      _r2Config?.publicBase?.trim().isNotEmpty == true;
+  String? get r2Bucket => _r2Config?.bucket;
+  String? get r2PublicBase => _r2Config?.publicBase;
   SupabaseClient get _client => Supabase.instance.client;
   String? get _ownerUserId => _supabase.userId;
 

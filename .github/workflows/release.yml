@@ -149,12 +149,20 @@ jobs:
             -OutName "submission" `
             -AppxPath $msix.FullName
           $submissionJson = Join-Path $outPath "submission.json"
+          $submission = Get-Content $submissionJson -Raw | ConvertFrom-Json
+          if ($null -eq $submission.appSubmission) {
+            throw "submission.json missing appSubmission"
+          }
+          $submission.appSubmission.targetPublishMode = "Immediate"
+          $submission.appSubmission.visibility = "Public"
+          $submission | ConvertTo-Json -Depth 200 | Set-Content -Path $submissionJson -Encoding UTF8
 
           Update-ApplicationSubmission `
             -AppId $env:STORE_PRODUCT_ID `
             -SubmissionDataPath $submissionJson `
             -PackagePath $msix.FullName `
             -ReplacePackages `
+            -UpdatePublishModeAndVisibility `
             -AutoCommit
 
   build-android:
