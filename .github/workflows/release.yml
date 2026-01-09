@@ -138,8 +138,21 @@ jobs:
           )
           Set-StoreBrokerAuthentication -TenantId $env:AZURE_TENANT_ID -Credential $creds
 
+          $sbRoot = Join-Path $env:RUNNER_TEMP "storebroker"
+          New-Item -ItemType Directory -Force -Path $sbRoot | Out-Null
+          $configPath = Join-Path $sbRoot "appconfig.json"
+          $outPath = Join-Path $sbRoot "out"
+          New-StoreBrokerConfigFile -Path $configPath -AppId $env:STORE_PRODUCT_ID
+          New-SubmissionPackage `
+            -ConfigPath $configPath `
+            -OutPath $outPath `
+            -OutName "submission" `
+            -AppxPath $msix.FullName
+          $submissionJson = Join-Path $outPath "submission.json"
+
           Update-ApplicationSubmission `
             -AppId $env:STORE_PRODUCT_ID `
+            -SubmissionDataPath $submissionJson `
             -PackagePath $msix.FullName `
             -ReplacePackages `
             -AutoCommit
