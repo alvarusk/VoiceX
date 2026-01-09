@@ -29,7 +29,9 @@ jobs:
             throw "Missing or invalid version in pubspec.yaml"
           }
           $buildName = $matches[1]
-          $buildNumber = if ($matches[2]) { $matches[2] } else { "0" }
+          $buildNumber = if ($matches[2]) { [int]$matches[2] } else { 0 }
+          $runNumber = if ($env:GITHUB_RUN_NUMBER) { [int]$env:GITHUB_RUN_NUMBER } else { 0 }
+          if ($runNumber -gt $buildNumber) { $buildNumber = $runNumber }
           $msixVersion = "$buildName.$buildNumber"
           $pubspec = [regex]::Replace($pubspec, '(?m)^\s*msix_version:\s*.*$', "  msix_version: $msixVersion")
           Set-Content -Path pubspec.yaml -Value $pubspec -NoNewline
@@ -98,6 +100,11 @@ jobs:
             --certificate-path windows/certs/code_sign.pfx `
             --certificate-password $env:WINDOWS_PFX_PASSWORD `
             --install-certificate false
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix
+          path: build/msix/**/*.msix
 
   build-android:
     runs-on: ubuntu-latest
@@ -127,6 +134,9 @@ jobs:
             BUILD_NUMBER="${VERSION_LINE##*+}"
           else
             BUILD_NUMBER="0"
+          fi
+          if [ -n "${GITHUB_RUN_NUMBER:-}" ] && [ "$GITHUB_RUN_NUMBER" -gt "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
           fi
           echo "APP_VERSION_NAME=$BUILD_NAME" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
@@ -201,6 +211,13 @@ jobs:
           --dart-define R2_SECRET_KEY=$R2_SECRET_KEY
           --dart-define R2_BUCKET=$R2_BUCKET
           --dart-define R2_PUBLIC_BASE=$R2_PUBLIC_BASE
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            build/app/outputs/bundle/release/*.aab
+            build/app/outputs/flutter-apk/*.apk
       - name: Install fastlane
         run: sudo gem install fastlane -N
       - name: Decode Play service account
