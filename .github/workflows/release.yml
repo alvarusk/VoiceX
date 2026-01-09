@@ -32,11 +32,18 @@ jobs:
           $buildNumber = if ($matches[2]) { [int]$matches[2] } else { 0 }
           $runNumber = if ($env:GITHUB_RUN_NUMBER) { [int]$env:GITHUB_RUN_NUMBER } else { 0 }
           if ($runNumber -gt $buildNumber) { $buildNumber = $runNumber }
+          $storeBuildName = $buildName
+          if ($runNumber -gt 0) {
+            $parts = $buildName.Split('.')
+            if ($parts.Length -eq 3) {
+              $storeBuildName = "$($parts[0]).$($parts[1]).$runNumber"
+            }
+          }
           # MS Store requires Appx/Package revision to be 0 (4th segment).
-          $msixVersion = "$buildName.0"
+          $msixVersion = "$storeBuildName.0"
           $pubspec = [regex]::Replace($pubspec, '(?m)^\s*msix_version:\s*.*$', "  msix_version: $msixVersion")
           Set-Content -Path pubspec.yaml -Value $pubspec -NoNewline
-          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_NAME=$buildName"
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_NAME=$storeBuildName"
           Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION_CODE=$buildNumber"
           Add-Content -Path $env:GITHUB_ENV -Value "MSIX_VERSION=$msixVersion"
       - name: Set up Flutter
