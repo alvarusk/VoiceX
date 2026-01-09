@@ -951,9 +951,8 @@ Si dudas, prioriza estas grafías tal cual.
                 return FutureBuilder<List<LineTiming>>(
                   future: timingsFuture,
                   builder: (context, linesSnap) {
-                    final timings =
-                        linesSnap.data ?? _lineTimings;
-                    return Column(
+                    final timings = linesSnap.data ?? _lineTimings;
+                    final content = Column(
                       children: [
                         _VideoPanel(
                           controller: _videoController,
@@ -1059,6 +1058,35 @@ Si dudas, prioriza estas grafías tal cual.
                             },
                           ),
                         ),
+                      ],
+                    );
+                    final isAndroid =
+                        defaultTargetPlatform == TargetPlatform.android;
+                    final currentLine = _currentLine;
+
+                    return Stack(
+                      children: [
+                        content,
+                        if (isAndroid)
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.center,
+                              child: Opacity(
+                                opacity: 0.5,
+                                child: FloatingActionButton(
+                                  heroTag: 'review-mic',
+                                  onPressed: currentLine == null || _recBusy
+                                      ? null
+                                      : () => _toggleVoiceInput(
+                                            project,
+                                            currentLine,
+                                            total,
+                                          ),
+                                  child: const Icon(Icons.mic),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     );
                   },
