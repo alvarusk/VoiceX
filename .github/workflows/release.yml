@@ -85,6 +85,9 @@ jobs:
           WINDOWS_PFX_PASSWORD: ${{ secrets.WINDOWS_PFX_PASSWORD }}
         shell: pwsh
         run: |
+          if (Test-Path build/msix) { Remove-Item -Recurse -Force build/msix }
+          Write-Host "MSIX_VERSION=$env:MSIX_VERSION"
+          Select-String -Path pubspec.yaml -Pattern '^\s*msix_version:\s*' | ForEach-Object { Write-Host $_.Line }
           flutter build windows --release `
             --build-name $env:APP_VERSION_NAME `
             --build-number $env:APP_VERSION_CODE `
@@ -108,6 +111,21 @@ jobs:
             --certificate-path windows/certs/code_sign.pfx `
             --certificate-password $env:WINDOWS_PFX_PASSWORD `
             --install-certificate false
+          $msix = Get-ChildItem -Path build/msix -Recurse -Filter *.msix | Select-Object -First 1
+          if (-not $msix) { throw "MSIX not found under build/msix" }
+          $tmp = Join-Path $env:RUNNER_TEMP "msix_manifest"
+          if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Expand-Archive -Path $msix.FullName -DestinationPath $tmp -Force
+          $manifestPath = Join-Path $tmp "AppxManifest.xml"
+          if (Test-Path $manifestPath) {
+            [xml]$manifest = Get-Content $manifestPath
+            $manifestVersion = $manifest.Package.Identity.Version
+            Write-Host "MSIX_MANIFEST_VERSION=$manifestVersion"
+            if ($manifestVersion -ne $env:MSIX_VERSION) {
+              throw "MSIX manifest version ($manifestVersion) does not match expected ($env:MSIX_VERSION)."
+            }
+          }
       - name: Upload MSIX artifact
         uses: actions/upload-artifact@v4
         with:

@@ -535,6 +535,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
   Future<String?> _promptEdit(String title, String initial) async {
     final controller = TextEditingController(text: initial);
+    final focusNode = FocusNode();
     return showDialog<String>(
       context: context,
       builder: (ctx) {
@@ -542,12 +543,14 @@ class _ReviewPageState extends State<ReviewPage> {
           title: Text(title),
           content: Shortcuts(
             shortcuts: {
-              const SingleActivator(LogicalKeyboardKey.enter, control: true):
+              const SingleActivator(LogicalKeyboardKey.enter):
                   const _SubmitEditIntent(),
+              const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                  const DoNothingAndStopPropagationIntent(),
               const SingleActivator(
                 LogicalKeyboardKey.numpadEnter,
                 control: true,
-              ): const _SubmitEditIntent(),
+              ): const DoNothingAndStopPropagationIntent(),
             },
             child: Actions(
               actions: {
@@ -557,17 +560,20 @@ class _ReviewPageState extends State<ReviewPage> {
                     return null;
                   },
                 ),
+                DoNothingAndStopPropagationIntent:
+                    CallbackAction<DoNothingAndStopPropagationIntent>(
+                  onInvoke: (_) => null,
+                ),
               },
-              child: Focus(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
                 autofocus: true,
-                child: TextField(
-                  controller: controller,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                  ),
+                maxLines: null,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
                 ),
               ),
             ),

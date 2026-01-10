@@ -1097,8 +1097,10 @@ class CloudSyncService {
       if (fromDefine.isNotEmpty) return fromDefine;
       final fromPlatform = Platform.environment[key];
       if (fromPlatform != null && fromPlatform.isNotEmpty) return fromPlatform;
-      final fromDotenv = dotenv.env[key];
-      if (fromDotenv != null && fromDotenv.isNotEmpty) return fromDotenv;
+      if (dotenv.isInitialized) {
+        final fromDotenv = dotenv.env[key];
+        if (fromDotenv != null && fromDotenv.isNotEmpty) return fromDotenv;
+      }
       return '';
     }
 
