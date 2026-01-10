@@ -131,12 +131,9 @@ jobs:
         with:
           name: msix
           path: build/msix/**/*.msix
-      - name: Install StoreBroker
-        shell: pwsh
-        run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module StoreBroker -Force -Scope CurrentUser
-      - name: Upload MSIX to Microsoft Store
+      - name: Configure Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+      - name: Publish MSIX to Microsoft Store
         shell: pwsh
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -146,7 +143,6 @@ jobs:
           STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
         run: |
           $ErrorActionPreference = "Stop"
-          Import-Module StoreBroker -Force
           if (-not $env:AZURE_TENANT_ID) { throw "Missing AZURE_TENANT_ID secret" }
           if (-not $env:AZURE_CLIENT_ID) { throw "Missing AZURE_CLIENT_ID secret" }
           if (-not $env:AZURE_CLIENT_SECRET) { throw "Missing AZURE_CLIENT_SECRET secret" }
@@ -156,81 +152,13 @@ jobs:
           $msix = Get-ChildItem -Path build/msix -Recurse -Filter *.msix | Select-Object -First 1
           if (-not $msix) { throw "MSIX not found under build/msix" }
 
-          $secureSecret = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
-          $creds = New-Object System.Management.Automation.PSCredential(
-            $env:AZURE_CLIENT_ID,
-            $secureSecret
-          )
-          Set-StoreBrokerAuthentication -TenantId $env:AZURE_TENANT_ID -Credential $creds
+          msstore reconfigure `
+            --tenantId $env:AZURE_TENANT_ID `
+            --sellerId $env:PARTNER_CENTER_SELLER_ID `
+            --clientId $env:AZURE_CLIENT_ID `
+            --clientSecret $env:AZURE_CLIENT_SECRET
 
-          $sbRoot = Join-Path $env:RUNNER_TEMP "storebroker"
-          New-Item -ItemType Directory -Force -Path $sbRoot | Out-Null
-          $configPath = Join-Path $sbRoot "appconfig.json"
-          $outPath = Join-Path $sbRoot "out"
-          New-StoreBrokerConfigFile -Path $configPath -AppId $env:STORE_PRODUCT_ID
-          New-SubmissionPackage `
-            -ConfigPath $configPath `
-            -OutPath $outPath `
-            -OutName "submission" `
-            -AppxPath $msix.FullName
-          $submissionJson = Join-Path $outPath "submission.json"
-
-          $updateResult = Update-ApplicationSubmission `
-            -AppId $env:STORE_PRODUCT_ID `
-            -SubmissionDataPath $submissionJson `
-            -PackagePath $msix.FullName `
-            -ReplacePackages `
-            -TargetPublishMode Immediate `
-            -Visibility Public `
-            -UpdatePublishModeAndVisibility `
-            -AutoCommit
-
-          $submissionId = $null
-          if ($updateResult -is [System.Array] -and $updateResult.Length -gt 0) {
-            $submissionId = $updateResult[0]
-          } elseif ($updateResult -is [string]) {
-            $submissionId = $updateResult
-          }
-          if (-not $submissionId) {
-            throw "Unable to determine submission id from Update-ApplicationSubmission output."
-          }
-
-          $checkDir = Join-Path $env:RUNNER_TEMP "msix_check"
-          if (Test-Path $checkDir) {
-            Remove-Item -Recurse -Force $checkDir
-          }
-          New-Item -ItemType Directory -Force -Path $checkDir | Out-Null
-          Expand-Archive -Path $msix.FullName -DestinationPath $checkDir -Force
-          $manifestPath = Join-Path $checkDir "AppxManifest.xml"
-          if (-not (Test-Path $manifestPath)) {
-            throw "AppxManifest.xml not found inside MSIX."
-          }
-          [xml]$manifest = Get-Content $manifestPath
-          $msixVersion = $manifest.Package.Identity.Version
-          if (-not $msixVersion) {
-            throw "Unable to read MSIX version from AppxManifest.xml."
-          }
-
-          $app = Get-Application -AppId $env:STORE_PRODUCT_ID -NoStatus
-          $publishedId = $app.lastPublishedApplicationSubmission.id
-          if ($publishedId) {
-            $published = Get-ApplicationSubmission -AppId $env:STORE_PRODUCT_ID -SubmissionId $publishedId -NoStatus
-            $publishedVersions = @()
-            if ($published.applicationPackages) {
-              foreach ($pkg in $published.applicationPackages) {
-                if ($pkg.version) { $publishedVersions += $pkg.version }
-              }
-            }
-            if ($publishedVersions -contains $msixVersion) {
-              throw "MSIX version $msixVersion matches last published submission."
-            }
-          }
-
-          $submitted = Get-ApplicationSubmission -AppId $env:STORE_PRODUCT_ID -SubmissionId $submissionId -NoStatus
-          $status = $submitted.status
-          if ($status -and @("PendingCommit", "Draft", "InDraft") -contains $status) {
-            throw "Submission still in draft (status=$status)."
-          }
+          msstore publish "$($msix.FullName)" -id $env:STORE_PRODUCT_ID
 
   build-android:
     runs-on: ubuntu-latest
