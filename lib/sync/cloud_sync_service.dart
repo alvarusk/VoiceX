@@ -29,6 +29,9 @@ class CloudSyncService {
   bool _supportsOwnerColumnFiles = true;
   bool _supportsOwnerColumnLines = true;
   final Map<String, _DirtyCacheEntry> _dirtyCache = {};
+  Map<String, String> _fileEnv = const {};
+  bool _fileEnvLoaded = false;
+  Future<void>? _fileEnvLoading;
 
   static const _bucket = 'voicex';
 
@@ -43,6 +46,7 @@ class CloudSyncService {
 
   Future<void> ensureInit() async {
     await _supabase.init();
+    await _ensureR2EnvLoaded();
   }
 
   Future<void> syncSettingsOnly() async {
@@ -213,6 +217,7 @@ class CloudSyncService {
     void Function(double value, String stage)? onProgress,
   }) async {
     if (!isReady) return false;
+    await _ensureR2EnvLoaded();
     try {
       final project = await (db.select(
         db.projects,
@@ -239,31 +244,15 @@ class CloudSyncService {
             await _setLocalFilePath(f.fileId, url);
             continue;
           }
-          // 2) Si hay fichero local y R2 disponible, lo subimos a R2.
-          final file = File(f.assPath);
-          if (await file.exists() && _r2Available) {
-            final ext = p.extension(f.assPath);
-            final storagePath =
-                '${f.projectId}/${f.engine}${ext.isNotEmpty ? ext : _defaultExt(f.engine)}';
-            final uploaded = await _uploadVideoToR2(
-              file,
-              storagePath,
-              _guessContentType(ext, f.engine),
-            );
-            if (uploaded != null) {
-              final rebased = _rebaseR2Url(uploaded) ?? uploaded;
-              remotePaths[f.fileId] = rebased;
-              await _setLocalFilePath(f.fileId, rebased);
-              debugPrint('[cloud] uploaded video to R2: $rebased');
-            } else {
-              debugPrint(
-                '[cloud] video upload failed/skipped for ${f.assPath}',
-              );
-            }
-            continue;
+          final uploaded = await _uploadFileToCloud(f);
+          if (uploaded != null) {
+            final rebased = _rebaseR2Url(uploaded) ?? uploaded;
+            remotePaths[f.fileId] = rebased;
+            await _setLocalFilePath(f.fileId, rebased);
+            debugPrint('[cloud] uploaded video: $rebased');
+          } else {
+            debugPrint('[cloud] video upload failed/skipped for ${f.assPath}');
           }
-          // 3) Si no hay R2 y es local, no lo subimos ni lo escribimos en cloud.
-          debugPrint('[cloud] skip video (no R2 / solo local): ${f.assPath}');
           continue;
         }
 
@@ -381,16 +370,57 @@ class CloudSyncService {
       final local = settings.exportSyncPayload();
       final remote = await _downloadSettingsPayload();
 
-      final remoteUpdated = remote?['updated_at_ms'] as int? ?? 0;
-      final localUpdated = local['updated_at_ms'] as int? ?? 0;
+      if (remote == null) {
+        await _uploadSettingsPayload(local);
+        onProgress?.call(0.05, 'Ajustes subidos');
+        return;
+      }
 
-      if (remote != null && remoteUpdated > localUpdated) {
-        final applied = await settings.importSyncPayload(remote);
+      final remoteUpdated = remote['updated_at_ms'] as int? ?? 0;
+      final localUpdated = local['updated_at_ms'] as int? ?? 0;
+      final remoteFoldersUpdated =
+          remote['manual_folders_updated_at_ms'] as int? ?? remoteUpdated;
+      final localFoldersUpdated =
+          local['manual_folders_updated_at_ms'] as int? ?? localUpdated;
+      final remoteFolders =
+          (remote['manual_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+      final localFolders =
+          (local['manual_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+
+      final useRemoteGeneral = remoteUpdated > localUpdated;
+      final useRemoteFolders = remoteFoldersUpdated > localFoldersUpdated;
+
+      if (useRemoteGeneral) {
+        final applied = await settings.importSyncPayload(
+          remote,
+          includeManualFolders: useRemoteFolders,
+        );
         if (applied) {
           onProgress?.call(0.05, 'Ajustes sincronizados');
         }
-      } else {
-        await _uploadSettingsPayload(local);
+      } else if (useRemoteFolders) {
+        await settings.setManualFoldersFromSync(
+          remoteFolders,
+          remoteFoldersUpdated,
+        );
+        onProgress?.call(0.05, 'Carpetas sincronizadas');
+      }
+
+      final shouldUpload =
+          remoteUpdated < localUpdated ||
+          remoteFoldersUpdated < localFoldersUpdated;
+      if (shouldUpload) {
+        final merged = settings.exportSyncPayload();
+        if (useRemoteFolders) {
+          merged['manual_folders'] = remoteFolders;
+          merged['manual_folders_updated_at_ms'] = remoteFoldersUpdated;
+        } else {
+          merged['manual_folders'] = localFolders;
+          merged['manual_folders_updated_at_ms'] = localFoldersUpdated;
+        }
+        await _uploadSettingsPayload(merged);
         onProgress?.call(0.05, 'Ajustes subidos');
       }
     } catch (e) {
@@ -403,6 +433,7 @@ class CloudSyncService {
     void Function(double value, String stage)? onProgress,
   }) async {
     if (!isReady) return;
+    await _ensureR2EnvLoaded();
     try {
       final existingFiles = await (db.select(
         db.projectFiles,
@@ -700,20 +731,20 @@ class CloudSyncService {
     if (!await file.exists()) return null;
 
     try {
-      final size = await file.length();
+      await _ensureR2EnvLoaded();
       final ext = p.extension(path);
       final storagePath =
           '${f.projectId}/${f.engine}${ext.isNotEmpty ? ext : _defaultExt(f.engine)}';
       final contentType = _guessContentType(ext, f.engine);
 
-      if (f.engine == 'video' && _r2Available) {
+      if (f.engine == 'video') {
+        if (!_r2Available) {
+          debugPrint('[cloud] R2 required for video; missing R2_*');
+          return null;
+        }
+        final size = await file.length();
+        debugPrint('[cloud] uploading video (${size ~/ (1024 * 1024)} MB) to R2.');
         return await _uploadVideoToR2(file, storagePath, contentType);
-      }
-      if (f.engine == 'video' && size > 50 * 1024 * 1024 && !_r2Available) {
-        debugPrint(
-          'upload skip (video): tamaño ${size ~/ (1024 * 1024)} MB sin R2.',
-        );
-        return null;
       }
 
       final client = Supabase.instance.client;
@@ -1091,6 +1122,60 @@ class CloudSyncService {
     return '$base/$key';
   }
 
+  Future<void> _ensureR2EnvLoaded() async {
+    if (_fileEnvLoaded) return;
+    if (_fileEnvLoading != null) {
+      await _fileEnvLoading;
+      return;
+    }
+    _fileEnvLoading = () async {
+      final candidates = <String>{'.env'};
+      try {
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        candidates.add(p.join(exeDir, '.env'));
+      } catch (_) {}
+      try {
+        final supportDir = await getApplicationSupportDirectory();
+        candidates.add(p.join(supportDir.path, '.env'));
+      } catch (_) {}
+
+      for (final path in candidates) {
+        try {
+          final file = File(path);
+          final exists = await file.exists();
+          if (exists) {
+            final lines = await file.readAsLines();
+            _fileEnv = _parseEnv(lines);
+            break;
+          }
+        } catch (_) {}
+      }
+      _fileEnvLoaded = true;
+    }();
+
+    try {
+      await _fileEnvLoading;
+    } finally {
+      _fileEnvLoading = null;
+    }
+  }
+
+  Map<String, String> _parseEnv(List<String> lines) {
+    final map = <String, String>{};
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty || line.startsWith('#')) continue;
+      final idx = line.indexOf('=');
+      if (idx <= 0) continue;
+      final key = line.substring(0, idx).trim();
+      final value = line.substring(idx + 1).trim();
+      if (key.isNotEmpty) {
+        map[key] = value;
+      }
+    }
+    return map;
+  }
+
   _R2Config? get _r2Config {
     String readEnv(String key) {
       final fromDefine = String.fromEnvironment(key);
@@ -1101,6 +1186,8 @@ class CloudSyncService {
         final fromDotenv = dotenv.env[key];
         if (fromDotenv != null && fromDotenv.isNotEmpty) return fromDotenv;
       }
+      final fromFile = _fileEnv[key];
+      if (fromFile != null && fromFile.isNotEmpty) return fromFile;
       return '';
     }
 

@@ -69,3 +69,9 @@ create table if not exists selection_events (
   at_ms bigint not null,
   method text not null
 );
+
+-- Storage bucket (settings/meta/files)
+-- prefs/settings.json guarda manual_folders + manual_folders_updated_at_ms
+insert into storage.buckets (id, name, public)
+values ('voicex', 'voicex', false)
+on conflict (id) do nothing;

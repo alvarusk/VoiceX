@@ -24,6 +24,63 @@ param(
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location (Join-Path $root "..")
 
+function Load-DotEnv([string]$path) {
+  $map = @{}
+  if (-not (Test-Path $path)) { return $map }
+  foreach ($raw in Get-Content $path) {
+    $line = $raw.Trim()
+    if (-not $line) { continue }
+    if ($line.StartsWith('#')) { continue }
+    $idx = $line.IndexOf('=')
+    if ($idx -le 0) { continue }
+    $key = $line.Substring(0, $idx).Trim()
+    $value = $line.Substring($idx + 1).Trim()
+    if ($value.Length -ge 2) {
+      $first = $value.Substring(0, 1)
+      $last = $value.Substring($value.Length - 1, 1)
+      if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+        $value = $value.Substring(1, $value.Length - 2)
+      }
+    }
+    if ($key) { $map[$key] = $value }
+  }
+  return $map
+}
+
+function Resolve-EnvValue([string]$explicit, [string]$key, [hashtable]$dotEnv) {
+  if ($explicit) { return $explicit }
+  $fromEnv = [Environment]::GetEnvironmentVariable($key)
+  if ($fromEnv) { return $fromEnv }
+  if ($dotEnv.ContainsKey($key)) { return $dotEnv[$key] }
+  return ""
+}
+
+$dotEnv = Load-DotEnv (Join-Path $PWD ".env")
+
+$SupabaseUrl = Resolve-EnvValue $SupabaseUrl "SUPABASE_URL" $dotEnv
+$SupabaseAnonKey = Resolve-EnvValue $SupabaseAnonKey "SUPABASE_ANON_KEY" $dotEnv
+$SupabaseUserEmail = Resolve-EnvValue $SupabaseUserEmail "SUPABASE_USER_EMAIL" $dotEnv
+$SupabaseUserPassword = Resolve-EnvValue $SupabaseUserPassword "SUPABASE_USER_PASSWORD" $dotEnv
+$R2AccountId = Resolve-EnvValue $R2AccountId "R2_ACCOUNT_ID" $dotEnv
+$R2AccessKey = Resolve-EnvValue $R2AccessKey "R2_ACCESS_KEY" $dotEnv
+$R2SecretKey = Resolve-EnvValue $R2SecretKey "R2_SECRET_KEY" $dotEnv
+$R2Bucket = Resolve-EnvValue $R2Bucket "R2_BUCKET" $dotEnv
+$R2PublicBase = Resolve-EnvValue $R2PublicBase "R2_PUBLIC_BASE" $dotEnv
+
+$missing = @()
+if (-not $R2AccountId) { $missing += "R2_ACCOUNT_ID" }
+if (-not $R2AccessKey) { $missing += "R2_ACCESS_KEY" }
+if (-not $R2SecretKey) { $missing += "R2_SECRET_KEY" }
+if (-not $R2Bucket) { $missing += "R2_BUCKET" }
+if ($missing.Count -gt 0) {
+  Write-Error "Faltan variables R2 obligatorias: $($missing -join ', '). Completa .env o pasa parametros."
+  exit 1
+}
+
+if (-not $SupabaseUrl -or -not $SupabaseAnonKey) {
+  Write-Warning "SUPABASE_URL o SUPABASE_ANON_KEY no definidos. La sync en cloud puede fallar."
+}
+
 if (-not $SkipPubGet) {
   flutter pub get
 }

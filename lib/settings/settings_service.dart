@@ -13,6 +13,7 @@ class SettingsService {
   String? _deviceId;
   Map<String, String> _glossaryByFolder = {};
   List<String> _manualFolders = [];
+  int _manualFoldersUpdatedAtMs = 0;
   int _updatedAtMs = 0;
 
   Future<void> init() async {
@@ -38,10 +39,20 @@ class SettingsService {
     }
 
     _manualFolders = _prefs?.getStringList('manual_folders') ?? [];
-
-    if (_updatedAtMs == 0) {
-      await _touchUpdatedAt();
+    _manualFoldersUpdatedAtMs =
+        _prefs?.getInt('manual_folders_updated_at_ms') ?? 0;
+    if (_manualFoldersUpdatedAtMs == 0 && _manualFolders.isNotEmpty) {
+      _manualFoldersUpdatedAtMs = _updatedAtMs;
+      if (_manualFoldersUpdatedAtMs == 0) {
+        _manualFoldersUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
+      }
+      await _prefs?.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
     }
+
+    // Deja updated_at_ms en 0 hasta que haya un cambio real de ajustes.
   }
 
   String get openAiKey => _prefs?.getString('openai_key') ?? '';
@@ -110,6 +121,7 @@ class SettingsService {
   }
 
   List<String> get manualFolders => List.unmodifiable(_manualFolders);
+  int get manualFoldersUpdatedAtMs => _manualFoldersUpdatedAtMs;
 
   Future<void> setManualFolders(Iterable<String> folders) async {
     await init();
@@ -118,7 +130,11 @@ class SettingsService {
     _manualFolders = deduped.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     await _prefs?.setStringList('manual_folders', _manualFolders);
-    await _touchUpdatedAt();
+    _manualFoldersUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
+    await _prefs?.setInt(
+      'manual_folders_updated_at_ms',
+      _manualFoldersUpdatedAtMs,
+    );
   }
 
   int get settingsUpdatedAtMs => _updatedAtMs;
@@ -140,10 +156,14 @@ class SettingsService {
           : 'local',
       'glossary_by_folder': _glossaryByFolder,
       'manual_folders': _manualFolders,
+      'manual_folders_updated_at_ms': _manualFoldersUpdatedAtMs,
     };
   }
 
-  Future<bool> importSyncPayload(Map<String, dynamic> payload) async {
+  Future<bool> importSyncPayload(
+    Map<String, dynamic> payload, {
+    bool includeManualFolders = true,
+  }) async {
     await init();
     final remoteUpdated = payload['updated_at_ms'] as int? ?? 0;
     if (remoteUpdated <= _updatedAtMs) return false;
@@ -178,16 +198,41 @@ class SettingsService {
       jsonEncode(_glossaryByFolder),
     );
 
-    final manual =
-        (payload['manual_folders'] as List?)?.cast<String>() ??
-        const <String>[];
-    _manualFolders = ({for (final f in manual) f.trim()}
-      ..removeWhere((e) => e.isEmpty)).toList();
-    _manualFolders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    await prefs.setStringList('manual_folders', _manualFolders);
+    if (includeManualFolders) {
+      final manual =
+          (payload['manual_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+      _manualFolders = ({for (final f in manual) f.trim()}
+        ..removeWhere((e) => e.isEmpty)).toList();
+      _manualFolders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      await prefs.setStringList('manual_folders', _manualFolders);
+      _manualFoldersUpdatedAtMs =
+          payload['manual_folders_updated_at_ms'] as int? ?? remoteUpdated;
+      await prefs.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
+    }
 
     _updatedAtMs = remoteUpdated;
     await prefs.setInt('settings_updated_at_ms', _updatedAtMs);
     return true;
+  }
+
+  Future<void> setManualFoldersFromSync(
+    Iterable<String> folders,
+    int updatedAtMs,
+  ) async {
+    await init();
+    final deduped = {for (final f in folders) f.trim()}
+      ..removeWhere((e) => e.isEmpty);
+    _manualFolders = deduped.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _manualFoldersUpdatedAtMs = updatedAtMs;
+    await _prefs?.setStringList('manual_folders', _manualFolders);
+    await _prefs?.setInt(
+      'manual_folders_updated_at_ms',
+      _manualFoldersUpdatedAtMs,
+    );
   }
 }
