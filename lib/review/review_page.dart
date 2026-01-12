@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1148,16 +1149,30 @@ Si dudas, prioriza estas grafías tal cual.
 
     bool ok = false;
     try {
-      ok = await _cloud.pushProject(
-        project.projectId,
-        onProgress: (v, stage) {
-          final pct = (v * 100).toInt();
-          notifier.value = '$stage ($pct %)';
-        },
-      );
+      ok = await _cloud
+          .pushProject(
+            project.projectId,
+            onProgress: (v, stage) {
+              final pct = (v * 100).toInt();
+              notifier.value = '$stage ($pct %)';
+            },
+          )
+          .timeout(
+            const Duration(minutes: 5),
+            onTimeout: () =>
+                throw TimeoutException('cloud save timeout'),
+          );
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Error al guardar en cloud.')),
+        );
+      }
+    } on TimeoutException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Subida cancelada por tardar demasiado.'),
+          ),
         );
       }
     } catch (e) {
@@ -1392,13 +1407,13 @@ class _VideoPanel extends StatelessWidget {
                   IconButton(
                     tooltip: 'Línea anterior',
                     icon: const Icon(Icons.skip_previous),
-                    onPressed: controller == null ? null : onPrevLine,
+                    onPressed: onPrevLine,
                   ),
                   const SizedBox(width: 12),
                   IconButton(
                     tooltip: 'Línea siguiente',
                     icon: const Icon(Icons.skip_next),
-                    onPressed: controller == null ? null : onNextLine,
+                    onPressed: onNextLine,
                   ),
                 ],
               ),

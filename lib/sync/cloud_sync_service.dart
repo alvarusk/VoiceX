@@ -233,29 +233,30 @@ class CloudSyncService {
       onProgress?.call(0.1, 'Preparando subida');
 
       final remotePaths = <String, String>{}; // fileId -> remote url
-      for (final f in files) {
-        if (f.engine == 'video') {
-          // 1) Si hay URL, la reusamos (rebased).
-          if (_looksLikeUrl(f.assPath)) {
-            final rebased = _rebaseR2Url(f.assPath);
-            final url = rebased ?? f.assPath;
-            debugPrint('[cloud] reuse video url ${f.assPath} -> $url');
-            remotePaths[f.fileId] = url;
-            await _setLocalFilePath(f.fileId, url);
-            continue;
-          }
-          final uploaded = await _uploadFileToCloud(f);
-          if (uploaded != null) {
-            final rebased = _rebaseR2Url(uploaded) ?? uploaded;
-            remotePaths[f.fileId] = rebased;
-            await _setLocalFilePath(f.fileId, rebased);
-            debugPrint('[cloud] uploaded video: $rebased');
-          } else {
-            debugPrint('[cloud] video upload failed/skipped for ${f.assPath}');
-          }
+      for (final f in files.where((f) => f.engine == 'video')) {
+        // 1) Si hay URL, la reusamos (rebased).
+        if (_looksLikeUrl(f.assPath)) {
+          final rebased = _rebaseR2Url(f.assPath);
+          final url = rebased ?? f.assPath;
+          debugPrint('[cloud] reuse video url ${f.assPath} -> $url');
+          remotePaths[f.fileId] = url;
+          await _setLocalFilePath(f.fileId, url);
           continue;
         }
+        onProgress?.call(0.2, 'Subiendo video');
+        final uploaded = await _uploadFileToCloud(f);
+        if (uploaded != null) {
+          final rebased = _rebaseR2Url(uploaded) ?? uploaded;
+          remotePaths[f.fileId] = rebased;
+          await _setLocalFilePath(f.fileId, rebased);
+          debugPrint('[cloud] uploaded video: $rebased');
+        } else {
+          debugPrint('[cloud] video upload failed for ${f.assPath}');
+          return false;
+        }
+      }
 
+      for (final f in files.where((f) => f.engine != 'video')) {
         final uploaded = await _uploadFileToCloud(f);
         if (uploaded != null) {
           final rebased = _rebaseR2Url(uploaded);
@@ -824,17 +825,29 @@ class CloudSyncService {
         })
         ..contentLength = await file.length();
 
-      await for (final chunk in file.openRead()) {
-        request.sink.add(chunk);
+      const uploadTimeout = Duration(minutes: 5);
+      final respFuture = request.send();
+      try {
+        await request.sink.addStream(file.openRead()).timeout(
+          uploadTimeout,
+          onTimeout: () {
+            debugPrint('R2 upload stream timeout: $storagePath');
+            throw TimeoutException('R2 upload stream timeout');
+          },
+        );
+      } on TimeoutException {
+        await request.sink.close();
+        return null;
       }
       await request.sink.close();
 
-      final resp = await request
-          .send()
-          .timeout(const Duration(minutes: 3), onTimeout: () {
-        debugPrint('R2 upload timeout: $storagePath');
-        throw TimeoutException('R2 upload timeout');
-      });
+      final resp = await respFuture.timeout(
+        uploadTimeout,
+        onTimeout: () {
+          debugPrint('R2 upload timeout: $storagePath');
+          throw TimeoutException('R2 upload timeout');
+        },
+      );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final base = cfg.publicBase?.isNotEmpty == true
             ? cfg.publicBase!
