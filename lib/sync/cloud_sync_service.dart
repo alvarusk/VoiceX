@@ -175,10 +175,30 @@ class CloudSyncService {
         for (final m in remote) (m['project_id'] as String): m,
       };
       final remoteIds = remoteById.keys.toSet();
-      final localRows = await db.select(db.projects).get();
-      final localIds = localRows.map((p) => p.projectId).toSet();
+      var localRows = await db.select(db.projects).get();
+      var localIds = localRows.map((p) => p.projectId).toSet();
 
-      final totalOps = remoteIds.union(localIds).length;
+      final settings = SettingsService.instance;
+      final deleted = settings.deletedProjects;
+      if (deleted.isNotEmpty) {
+        final deletedIds = deleted.keys.toSet();
+        for (final id in deletedIds.intersection(localIds)) {
+          await _deleteLocalProject(id);
+        }
+        for (final id in deletedIds.intersection(remoteIds)) {
+          await deleteRemoteProject(id);
+        }
+        if (deletedIds.isNotEmpty) {
+          localRows = localRows.where((p) => !deletedIds.contains(p.projectId)).toList();
+          localIds = localRows.map((p) => p.projectId).toSet();
+          for (final id in deletedIds) {
+            remoteById.remove(id);
+          }
+        }
+      }
+      final remoteIdsFiltered = remoteById.keys.toSet();
+
+      final totalOps = remoteIdsFiltered.union(localIds).length;
       double done = 0;
       void bump(String stage) {
         done += 1;
@@ -203,7 +223,7 @@ class CloudSyncService {
         }
       }
 
-      for (final id in remoteIds.difference(localIds)) {
+      for (final id in remoteIdsFiltered.difference(localIds)) {
         await pullProject(id, onProgress: onProgress);
         bump('Descargando $id');
       }
@@ -383,12 +403,28 @@ class CloudSyncService {
           remote['manual_folders_updated_at_ms'] as int? ?? remoteUpdated;
       final localFoldersUpdated =
           local['manual_folders_updated_at_ms'] as int? ?? localUpdated;
+      final remoteDeletedUpdated =
+          remote['deleted_projects_updated_at_ms'] as int? ?? remoteUpdated;
+      final localDeletedUpdated =
+          local['deleted_projects_updated_at_ms'] as int? ?? localUpdated;
       final remoteFolders =
           (remote['manual_folders'] as List?)?.cast<String>() ??
           const <String>[];
       final localFolders =
           (local['manual_folders'] as List?)?.cast<String>() ??
           const <String>[];
+      final remoteDeletedRaw =
+          (remote['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{};
+      final localDeletedRaw =
+          (local['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{};
+      final remoteDeleted = remoteDeletedRaw.map(
+        (k, v) => MapEntry(k, (v as int?) ?? 0),
+      );
+      final localDeleted = localDeletedRaw.map(
+        (k, v) => MapEntry(k, (v as int?) ?? 0),
+      );
 
       final useRemoteGeneral = remoteUpdated > localUpdated;
       final useRemoteFolders = remoteFoldersUpdated > localFoldersUpdated;
@@ -397,6 +433,7 @@ class CloudSyncService {
         final applied = await settings.importSyncPayload(
           remote,
           includeManualFolders: useRemoteFolders,
+          includeDeletedProjects: false,
         );
         if (applied) {
           onProgress?.call(0.05, 'Ajustes sincronizados');
@@ -409,9 +446,33 @@ class CloudSyncService {
         onProgress?.call(0.05, 'Carpetas sincronizadas');
       }
 
+      final mergedDeleted = <String, int>{};
+      for (final entry in remoteDeleted.entries) {
+        mergedDeleted[entry.key] = entry.value;
+      }
+      for (final entry in localDeleted.entries) {
+        final existing = mergedDeleted[entry.key] ?? 0;
+        if (entry.value >= existing) {
+          mergedDeleted[entry.key] = entry.value;
+        }
+      }
+      final mergedDeletedUpdated = [
+        localDeletedUpdated,
+        remoteDeletedUpdated,
+      ].reduce((a, b) => a > b ? a : b);
+      final deletedChangedLocal = !_sameDeletedMap(mergedDeleted, localDeleted);
+      if (deletedChangedLocal) {
+        await settings.setDeletedProjectsFromSync(
+          mergedDeleted,
+          mergedDeletedUpdated,
+        );
+        onProgress?.call(0.05, 'Borrados sincronizados');
+      }
+
       final shouldUpload =
           remoteUpdated < localUpdated ||
-          remoteFoldersUpdated < localFoldersUpdated;
+          remoteFoldersUpdated < localFoldersUpdated ||
+          !_sameDeletedMap(mergedDeleted, remoteDeleted);
       if (shouldUpload) {
         final merged = settings.exportSyncPayload();
         if (useRemoteFolders) {
@@ -421,12 +482,37 @@ class CloudSyncService {
           merged['manual_folders'] = localFolders;
           merged['manual_folders_updated_at_ms'] = localFoldersUpdated;
         }
+        merged['deleted_projects'] = mergedDeleted;
+        merged['deleted_projects_updated_at_ms'] = mergedDeletedUpdated;
         await _uploadSettingsPayload(merged);
         onProgress?.call(0.05, 'Ajustes subidos');
       }
     } catch (e) {
       debugPrint('sync settings error: $e');
     }
+  }
+
+  bool _sameDeletedMap(Map<String, int> a, Map<String, int> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
+  Future<void> _deleteLocalProject(String projectId) async {
+    await (db.delete(db.selectionEvents)
+          ..where((t) => t.projectId.equals(projectId)))
+        .go();
+    await (db.delete(db.subtitleLines)
+          ..where((t) => t.projectId.equals(projectId)))
+        .go();
+    await (db.delete(db.projectFiles)
+          ..where((t) => t.projectId.equals(projectId)))
+        .go();
+    await (db.delete(db.projects)
+          ..where((t) => t.projectId.equals(projectId)))
+        .go();
   }
 
   Future<void> pullProject(
@@ -1103,6 +1189,18 @@ class CloudSyncService {
       path: '/${cfg.bucket}/$key',
       query: fullQuery,
     );
+  }
+
+  Future<String> resolveVideoUrl(String url) async {
+    if (url.isEmpty) return url;
+    if (!_looksLikeUrl(url)) return url;
+    await _ensureR2EnvLoaded();
+    try {
+      final signed = _maybeSignR2Get(Uri.parse(url));
+      return signed.toString();
+    } catch (_) {
+      return url;
+    }
   }
 
   String? _rebaseR2Url(String url) {

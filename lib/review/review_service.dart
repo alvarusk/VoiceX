@@ -133,6 +133,7 @@ class ReviewService {
     await (db.delete(
       db.projects,
     )..where((t) => t.projectId.equals(projectId))).go();
+    await SettingsService.instance.markProjectDeleted(projectId);
   }
 
   Future<void> archiveProject(String projectId) async {

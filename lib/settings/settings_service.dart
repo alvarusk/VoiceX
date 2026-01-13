@@ -14,6 +14,8 @@ class SettingsService {
   Map<String, String> _glossaryByFolder = {};
   List<String> _manualFolders = [];
   int _manualFoldersUpdatedAtMs = 0;
+  Map<String, int> _deletedProjects = {};
+  int _deletedProjectsUpdatedAtMs = 0;
   int _updatedAtMs = 0;
 
   Future<void> init() async {
@@ -49,6 +51,30 @@ class SettingsService {
       await _prefs?.setInt(
         'manual_folders_updated_at_ms',
         _manualFoldersUpdatedAtMs,
+      );
+    }
+
+    final rawDeleted = _prefs?.getString('deleted_projects') ?? '';
+    if (rawDeleted.isNotEmpty) {
+      try {
+        final map = (jsonDecode(rawDeleted) as Map<String, dynamic>);
+        _deletedProjects = map.map(
+          (k, v) => MapEntry(k, (v as int?) ?? 0),
+        );
+      } catch (_) {
+        _deletedProjects = {};
+      }
+    }
+    _deletedProjectsUpdatedAtMs =
+        _prefs?.getInt('deleted_projects_updated_at_ms') ?? 0;
+    if (_deletedProjectsUpdatedAtMs == 0 && _deletedProjects.isNotEmpty) {
+      _deletedProjectsUpdatedAtMs = _updatedAtMs;
+      if (_deletedProjectsUpdatedAtMs == 0) {
+        _deletedProjectsUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
+      }
+      await _prefs?.setInt(
+        'deleted_projects_updated_at_ms',
+        _deletedProjectsUpdatedAtMs,
       );
     }
 
@@ -122,6 +148,8 @@ class SettingsService {
 
   List<String> get manualFolders => List.unmodifiable(_manualFolders);
   int get manualFoldersUpdatedAtMs => _manualFoldersUpdatedAtMs;
+  Map<String, int> get deletedProjects => Map.unmodifiable(_deletedProjects);
+  int get deletedProjectsUpdatedAtMs => _deletedProjectsUpdatedAtMs;
 
   Future<void> setManualFolders(Iterable<String> folders) async {
     await init();
@@ -157,12 +185,15 @@ class SettingsService {
       'glossary_by_folder': _glossaryByFolder,
       'manual_folders': _manualFolders,
       'manual_folders_updated_at_ms': _manualFoldersUpdatedAtMs,
+      'deleted_projects': _deletedProjects,
+      'deleted_projects_updated_at_ms': _deletedProjectsUpdatedAtMs,
     };
   }
 
   Future<bool> importSyncPayload(
     Map<String, dynamic> payload, {
     bool includeManualFolders = true,
+    bool includeDeletedProjects = true,
   }) async {
     await init();
     final remoteUpdated = payload['updated_at_ms'] as int? ?? 0;
@@ -214,6 +245,23 @@ class SettingsService {
       );
     }
 
+    if (includeDeletedProjects) {
+      final raw =
+          (payload['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{};
+      _deletedProjects = raw.map((k, v) => MapEntry(k, (v as int?) ?? 0));
+      await prefs.setString(
+        'deleted_projects',
+        jsonEncode(_deletedProjects),
+      );
+      _deletedProjectsUpdatedAtMs =
+          payload['deleted_projects_updated_at_ms'] as int? ?? remoteUpdated;
+      await prefs.setInt(
+        'deleted_projects_updated_at_ms',
+        _deletedProjectsUpdatedAtMs,
+      );
+    }
+
     _updatedAtMs = remoteUpdated;
     await prefs.setInt('settings_updated_at_ms', _updatedAtMs);
     return true;
@@ -233,6 +281,38 @@ class SettingsService {
     await _prefs?.setInt(
       'manual_folders_updated_at_ms',
       _manualFoldersUpdatedAtMs,
+    );
+  }
+
+  Future<void> setDeletedProjectsFromSync(
+    Map<String, int> deleted,
+    int updatedAtMs,
+  ) async {
+    await init();
+    _deletedProjects = Map<String, int>.from(deleted);
+    _deletedProjectsUpdatedAtMs = updatedAtMs;
+    await _prefs?.setString(
+      'deleted_projects',
+      jsonEncode(_deletedProjects),
+    );
+    await _prefs?.setInt(
+      'deleted_projects_updated_at_ms',
+      _deletedProjectsUpdatedAtMs,
+    );
+  }
+
+  Future<void> markProjectDeleted(String projectId, {int? deletedAtMs}) async {
+    await init();
+    final ts = deletedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+    _deletedProjects[projectId] = ts;
+    _deletedProjectsUpdatedAtMs = ts;
+    await _prefs?.setString(
+      'deleted_projects',
+      jsonEncode(_deletedProjects),
+    );
+    await _prefs?.setInt(
+      'deleted_projects_updated_at_ms',
+      _deletedProjectsUpdatedAtMs,
     );
   }
 }

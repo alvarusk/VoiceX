@@ -210,15 +210,16 @@ class _ReviewPageState extends State<ReviewPage> {
       });
       return;
     }
+    final resolved = await _cloud.resolveVideoUrl(path);
     debugPrint('Intentando cargar video: $path');
 
-    final isRemote = path.startsWith('http://') || path.startsWith('https://');
+    final isRemote = resolved.startsWith('http://') || resolved.startsWith('https://');
     try {
       VideoPlayerController ctrl;
       if (isRemote) {
-        ctrl = VideoPlayerController.networkUrl(Uri.parse(path));
+        ctrl = VideoPlayerController.networkUrl(Uri.parse(resolved));
       } else {
-        final file = File(path);
+        final file = File(resolved);
         if (!await file.exists()) {
           debugPrint('Video no encontrado en ruta: $path');
           setState(() {
@@ -230,7 +231,7 @@ class _ReviewPageState extends State<ReviewPage> {
         ctrl = VideoPlayerController.file(file as dynamic);
       }
       _videoController = ctrl;
-      _videoPath = path;
+      _videoPath = resolved;
       _videoInit = ctrl
           .initialize()
           .then((_) async {
