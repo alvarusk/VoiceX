@@ -599,11 +599,7 @@ class CloudSyncService {
         await _upsertProjectLocal(map);
       }
 
-      final linesRes = await _client
-          .from('subtitle_lines')
-          .select()
-          .eq('project_id', projectId);
-      final linesList = (linesRes as List).cast<Map<String, dynamic>>();
+      final linesList = await _fetchAllSubtitleLines(projectId);
       for (final m in linesList) {
         await _upsertLineLocal(m);
       }
@@ -806,6 +802,28 @@ class CloudSyncService {
           ),
           mode: InsertMode.insertOrReplace,
         );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAllSubtitleLines(
+    String projectId,
+  ) async {
+    const pageSize = 1000;
+    final all = <Map<String, dynamic>>[];
+    var from = 0;
+    while (true) {
+      final res = await _client
+          .from('subtitle_lines')
+          .select()
+          .eq('project_id', projectId)
+          .order('dialogue_index')
+          .range(from, from + pageSize - 1);
+      final chunk = (res as List).cast<Map<String, dynamic>>();
+      if (chunk.isEmpty) break;
+      all.addAll(chunk);
+      if (chunk.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
   }
 
   Future<String?> _uploadFileToCloud(ProjectFile f) async {

@@ -70,8 +70,9 @@ class ExportService {
       final raw = baseLines[row];
       if (!raw.startsWith('Dialogue:') && !raw.startsWith('Comment:')) continue;
 
-      final eventRowIndex = row - firstDialogue;
-      final match = byEventRow[eventRowIndex];
+      final absoluteIndex = row;
+      final relativeIndex = row - firstDialogue;
+      final match = byEventRow[absoluteIndex] ?? byEventRow[relativeIndex];
       if (match == null) continue;
 
       final selected = (match.selectedText ?? '').trim();
