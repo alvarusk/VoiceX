@@ -343,7 +343,9 @@ class CloudSyncService {
         }
         if (mapped.isNotEmpty) {
           try {
-            await _client.from('project_files').upsert(mapped);
+            await _client
+                .from('project_files')
+                .upsert(mapped, onConflict: 'project_id,engine');
           } on PostgrestException catch (e) {
             if (_supportsOwnerColumnFiles &&
                 _isMissingColumn(e, 'owner_user_id')) {
@@ -351,7 +353,9 @@ class CloudSyncService {
               for (final m in mapped) {
                 m.remove('owner_user_id');
               }
-              await _client.from('project_files').upsert(mapped);
+              await _client
+                  .from('project_files')
+                  .upsert(mapped, onConflict: 'project_id,engine');
             } else {
               rethrow;
             }

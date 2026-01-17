@@ -65,14 +65,27 @@ class ExportService {
     }
 
     final byEventRow = {for (final l in lines) l.eventsRowIndex: l};
+    final useDialogueIndexFallback =
+        _countDialogueLines(baseLines) == lines.length;
 
+    int dialogueCursor = 0;
     for (int row = firstDialogue; row < baseLines.length; row++) {
       final raw = baseLines[row];
-      if (!raw.startsWith('Dialogue:') && !raw.startsWith('Comment:')) continue;
+      final isDialogue = raw.startsWith('Dialogue:');
+      if (!isDialogue && !raw.startsWith('Comment:')) continue;
 
       final absoluteIndex = row;
       final relativeIndex = row - firstDialogue;
-      final match = byEventRow[absoluteIndex] ?? byEventRow[relativeIndex];
+      SubtitleLine? match =
+          byEventRow[absoluteIndex] ?? byEventRow[relativeIndex];
+      if (match == null && useDialogueIndexFallback && isDialogue) {
+        if (dialogueCursor < lines.length) {
+          match = lines[dialogueCursor];
+        }
+      }
+      if (isDialogue) {
+        dialogueCursor++;
+      }
       if (match == null) continue;
 
       final selected = (match.selectedText ?? '').trim();
@@ -126,6 +139,26 @@ class ExportService {
       candidate = '$candidate.ass';
     }
     return candidate;
+  }
+
+  int _countDialogueLines(List<String> baseLines) {
+    bool inEvents = false;
+    int count = 0;
+    for (final raw in baseLines) {
+      final line = raw.trimRight();
+      if (line.trim().toLowerCase() == '[events]') {
+        inEvents = true;
+        continue;
+      }
+      if (!inEvents) continue;
+      if (line.startsWith('[') && !line.toLowerCase().startsWith('[events]')) {
+        break;
+      }
+      if (line.startsWith('Dialogue:')) {
+        count++;
+      }
+    }
+    return count;
   }
 
   String _replaceTextPreservingTags(

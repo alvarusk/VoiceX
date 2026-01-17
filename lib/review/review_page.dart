@@ -536,62 +536,9 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<String?> _promptEdit(String title, String initial) async {
-    final controller = TextEditingController(text: initial);
-    final focusNode = FocusNode();
     return showDialog<String>(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: Text(title),
-          content: Shortcuts(
-            shortcuts: {
-              const SingleActivator(LogicalKeyboardKey.enter):
-                  const _SubmitEditIntent(),
-              const SingleActivator(LogicalKeyboardKey.enter, control: true):
-                  const DoNothingAndStopPropagationIntent(),
-              const SingleActivator(
-                LogicalKeyboardKey.numpadEnter,
-                control: true,
-              ): const DoNothingAndStopPropagationIntent(),
-            },
-            child: Actions(
-              actions: {
-                _SubmitEditIntent: CallbackAction<_SubmitEditIntent>(
-                  onInvoke: (_) {
-                    Navigator.of(ctx).pop(controller.text);
-                    return null;
-                  },
-                ),
-                DoNothingAndStopPropagationIntent:
-                    CallbackAction<DoNothingAndStopPropagationIntent>(
-                  onInvoke: (_) => null,
-                ),
-              },
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                autofocus: true,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text),
-              child: const Text('Guardar'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => _EditDialog(title: title, initial: initial),
     );
   }
 
@@ -1805,6 +1752,103 @@ class _CandidateTile extends StatelessWidget {
 
 class _SubmitEditIntent extends Intent {
   const _SubmitEditIntent();
+}
+
+class _InsertNewlineIntent extends Intent {
+  const _InsertNewlineIntent();
+}
+
+class _EditDialog extends StatefulWidget {
+  const _EditDialog({required this.title, required this.initial});
+  final String title;
+  final String initial;
+
+  @override
+  State<_EditDialog> createState() => _EditDialogState();
+}
+
+class _EditDialogState extends State<_EditDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial);
+
+  void _insertNewline() {
+    final value = _controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.start >= 0 ? selection.start : text.length;
+    final end = selection.end >= 0 ? selection.end : text.length;
+    final updated = text.replaceRange(start, end, '\n');
+    _controller.value = value.copyWith(
+      text: updated,
+      selection: TextSelection.collapsed(offset: start + 1),
+      composing: TextRange.empty,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Shortcuts(
+        shortcuts: {
+          const SingleActivator(LogicalKeyboardKey.enter):
+              const _SubmitEditIntent(),
+          const SingleActivator(LogicalKeyboardKey.numpadEnter):
+              const _SubmitEditIntent(),
+          const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+              const _InsertNewlineIntent(),
+          const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+              const _InsertNewlineIntent(),
+          const SingleActivator(LogicalKeyboardKey.enter, control: true):
+              const _InsertNewlineIntent(),
+          const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
+              const _InsertNewlineIntent(),
+        },
+        child: Actions(
+          actions: {
+            _SubmitEditIntent: CallbackAction<_SubmitEditIntent>(
+              onInvoke: (_) {
+                Navigator.of(context).pop(_controller.text);
+                return null;
+              },
+            ),
+            _InsertNewlineIntent: CallbackAction<_InsertNewlineIntent>(
+              onInvoke: (_) {
+                _insertNewline();
+                return null;
+              },
+            ),
+          },
+          child: TextField(
+            controller: _controller,
+            autofocus: true,
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
 }
 
 class _VoiceTile extends StatelessWidget {
