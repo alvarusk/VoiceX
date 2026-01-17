@@ -133,6 +133,39 @@ jobs:
           path: build/msix/**/*.msix
       - name: Configure Microsoft Store CLI
         uses: microsoft/microsoft-store-apppublisher@v1.1
+      - name: Cancel pending Microsoft Store submission (if any)
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          PARTNER_CENTER_SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          STORE_PRODUCT_ID: ${{ secrets.STORE_PRODUCT_ID }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not $env:AZURE_TENANT_ID) { throw "Missing AZURE_TENANT_ID secret" }
+          if (-not $env:AZURE_CLIENT_ID) { throw "Missing AZURE_CLIENT_ID secret" }
+          if (-not $env:AZURE_CLIENT_SECRET) { throw "Missing AZURE_CLIENT_SECRET secret" }
+          if (-not $env:PARTNER_CENTER_SELLER_ID) { throw "Missing PARTNER_CENTER_SELLER_ID secret" }
+          if (-not $env:STORE_PRODUCT_ID) { throw "Missing STORE_PRODUCT_ID secret" }
+
+          msstore reconfigure `
+            --tenantId $env:AZURE_TENANT_ID `
+            --sellerId $env:PARTNER_CENTER_SELLER_ID `
+            --clientId $env:AZURE_CLIENT_ID `
+            --clientSecret $env:AZURE_CLIENT_SECRET
+
+          $output = & msstore submission delete $env:STORE_PRODUCT_ID --no-confirm 2>&1
+          $exitCode = $LASTEXITCODE
+          if ($output) { $output | ForEach-Object { Write-Host $_ } }
+          if ($exitCode -ne 0) {
+            $joined = $output -join "`n"
+            if ($joined -match "No pending submission found") {
+              Write-Host "No pending submission; continuing."
+            } else {
+              throw "msstore submission delete failed (exit $exitCode)."
+            }
+          }
       - name: Publish MSIX to Microsoft Store
         shell: pwsh
         env:

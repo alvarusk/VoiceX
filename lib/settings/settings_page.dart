@@ -40,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
   VoiceInputMode _mode = VoiceInputMode.local;
   bool _saved = false;
   bool _dirty = false;
+  bool _suspendDirty = false;
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _sttModelCtrl.addListener(_markDirty);
     _mode = _svc.voiceInputMode;
     _loadFolders();
+    _syncFromCloud();
   }
 
   @override
@@ -156,11 +158,25 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _markDirty() {
-    if (_dirty) return;
+    if (_dirty || _suspendDirty) return;
     setState(() {
       _dirty = true;
       _saved = false;
     });
+  }
+
+  Future<void> _syncFromCloud() async {
+    await _cloud.ensureInit();
+    if (!_cloud.isReady) return;
+    await _cloud.syncSettingsOnly();
+    if (!mounted || _dirty) return;
+    _suspendDirty = true;
+    _keyCtrl.text = _svc.openAiKey;
+    _textModelCtrl.text = _svc.openAiTextModel;
+    _sttModelCtrl.text = _svc.openAiSttModel;
+    _mode = _svc.voiceInputMode;
+    _suspendDirty = false;
+    setState(() {});
   }
 
   Future<bool> _confirmExit() async {

@@ -7,6 +7,7 @@ import 'db/app_db.dart';
 import 'projects/projects_page.dart';
 import 'settings/settings_page.dart';
 import 'settings/settings_service.dart';
+import 'sync/cloud_sync_service.dart';
 import 'sync/supabase_manager.dart';
 import 'utils/app_version.dart';
 
@@ -38,13 +39,18 @@ class VoiceXApp extends StatefulWidget {
 
 class _VoiceXAppState extends State<VoiceXApp> {
   late final AppDatabase _db = AppDatabase();
+  late final CloudSyncService _cloud = CloudSyncService(_db);
   int _tab = 0;
   late bool _showSplash = widget.showSplash;
   ThemeMode _themeMode = ThemeMode.dark;
+  bool _settingsSyncStarted = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.autoSyncOnStart) {
+      _syncSettingsOnStart();
+    }
     if (widget.showSplash) {
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
@@ -58,6 +64,16 @@ class _VoiceXAppState extends State<VoiceXApp> {
   void dispose() {
     _db.close();
     super.dispose();
+  }
+
+  void _syncSettingsOnStart() {
+    if (_settingsSyncStarted) return;
+    _settingsSyncStarted = true;
+    Future(() async {
+      await _cloud.ensureInit();
+      if (!_cloud.isReady) return;
+      await _cloud.syncSettingsOnly();
+    });
   }
 
   @override
