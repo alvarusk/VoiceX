@@ -1758,6 +1758,46 @@ class _InsertNewlineIntent extends Intent {
   const _InsertNewlineIntent();
 }
 
+class _LineLimitHighlightController extends TextEditingController {
+  _LineLimitHighlightController({
+    required super.text,
+    required this.maxCharsPerLine,
+  });
+
+  final int maxCharsPerLine;
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final baseStyle = style ?? const TextStyle();
+    final overflowStyle = baseStyle.copyWith(color: Colors.red);
+    final spans = <InlineSpan>[];
+    final lines = text.split('\n');
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      if (line.length <= maxCharsPerLine) {
+        spans.add(TextSpan(text: line, style: baseStyle));
+      } else {
+        spans.add(
+          TextSpan(text: line.substring(0, maxCharsPerLine), style: baseStyle),
+        );
+        spans.add(
+          TextSpan(text: line.substring(maxCharsPerLine), style: overflowStyle),
+        );
+      }
+      if (i < lines.length - 1) {
+        spans.add(TextSpan(text: '\n', style: baseStyle));
+      }
+    }
+
+    return TextSpan(style: baseStyle, children: spans);
+  }
+}
+
 class _EditDialog extends StatefulWidget {
   const _EditDialog({required this.title, required this.initial});
   final String title;
@@ -1768,8 +1808,20 @@ class _EditDialog extends StatefulWidget {
 }
 
 class _EditDialogState extends State<_EditDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initial);
+  static const int _lineLimit = 40;
+  static const TextStyle _editorTextStyle = TextStyle(height: 1.35);
+
+  late final _LineLimitHighlightController _controller =
+      _LineLimitHighlightController(
+          text: widget.initial, maxCharsPerLine: _lineLimit)
+        ..addListener(_onTextChanged);
+
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  List<int> get _lineCharacterCounts =>
+      _controller.text.split('\n').map((line) => line.length).toList();
 
   void _insertNewline() {
     final value = _controller.value;
@@ -1787,6 +1839,7 @@ class _EditDialogState extends State<_EditDialog> {
 
   @override
   void dispose() {
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -1794,45 +1847,84 @@ class _EditDialogState extends State<_EditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      constraints: const BoxConstraints(maxWidth: 620),
       title: Text(widget.title),
-      content: Shortcuts(
-        shortcuts: {
-          const SingleActivator(LogicalKeyboardKey.enter):
-              const _SubmitEditIntent(),
-          const SingleActivator(LogicalKeyboardKey.numpadEnter):
-              const _SubmitEditIntent(),
-          const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-              const _InsertNewlineIntent(),
-          const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
-              const _InsertNewlineIntent(),
-          const SingleActivator(LogicalKeyboardKey.enter, control: true):
-              const _InsertNewlineIntent(),
-          const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
-              const _InsertNewlineIntent(),
-        },
-        child: Actions(
-          actions: {
-            _SubmitEditIntent: CallbackAction<_SubmitEditIntent>(
-              onInvoke: (_) {
-                Navigator.of(context).pop(_controller.text);
-                return null;
+      content: SizedBox(
+        width: 560,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 220),
+          child: Shortcuts(
+            shortcuts: {
+              const SingleActivator(LogicalKeyboardKey.enter):
+                  const _SubmitEditIntent(),
+              const SingleActivator(LogicalKeyboardKey.numpadEnter):
+                  const _SubmitEditIntent(),
+              const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+                  const _InsertNewlineIntent(),
+              const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+                  const _InsertNewlineIntent(),
+              const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                  const _InsertNewlineIntent(),
+              const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
+                  const _InsertNewlineIntent(),
+            },
+            child: Actions(
+              actions: {
+                _SubmitEditIntent: CallbackAction<_SubmitEditIntent>(
+                  onInvoke: (_) {
+                    Navigator.of(context).pop(_controller.text);
+                    return null;
+                  },
+                ),
+                _InsertNewlineIntent: CallbackAction<_InsertNewlineIntent>(
+                  onInvoke: (_) {
+                    _insertNewline();
+                    return null;
+                  },
+                ),
               },
-            ),
-            _InsertNewlineIntent: CallbackAction<_InsertNewlineIntent>(
-              onInvoke: (_) {
-                _insertNewline();
-                return null;
-              },
-            ),
-          },
-          child: TextField(
-            controller: _controller,
-            autofocus: true,
-            maxLines: null,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: SizedBox(
+                      width: 36,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (final count in _lineCharacterCounts)
+                            Text(
+                              '$count',
+                              style: _editorTextStyle.copyWith(
+                                color: count <= _lineLimit
+                                    ? Colors.green
+                                    : Colors.red,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      autofocus: true,
+                      minLines: 2,
+                      maxLines: 6,
+                      keyboardType: TextInputType.multiline,
+                      textInputAction: TextInputAction.newline,
+                      style: _editorTextStyle,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
