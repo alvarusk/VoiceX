@@ -110,6 +110,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
         await _loadManualFolders();
         _showSnack('Sincronizacion inicial completa.');
       }
+    } on CloudSyncException catch (e) {
+      debugPrint('autoSync cloud error [${e.code}]: ${e.debugMessage ?? e}');
+      if (mounted) _showSnack(e.userMessage);
+    } on TimeoutException {
+      // El mensaje ya se muestra en _runWithProgress.
     } catch (e) {
       debugPrint('autoSync error: $e');
       if (mounted) {
@@ -185,22 +190,21 @@ class _ProjectsPageState extends State<ProjectsPage> {
       ),
     );
 
-    bool timedOut = false;
     try {
       await action(
         (m) => notifier.value = m,
-      ).timeout(const Duration(minutes: 5));
+      ).timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw TimeoutException('operation timeout'),
+      );
     } on TimeoutException {
-      timedOut = true;
       messenger.showSnackBar(
         const SnackBar(
           content: Text('Operación cancelada por tardar demasiado.'),
         ),
       );
+      rethrow;
     } finally {
-      if (!timedOut) {
-        // no-op; kept variable to silence analyzer warning about control flow
-      }
       navigator.pop();
     }
   }
@@ -432,28 +436,44 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 return;
               }
               if (!context.mounted) return;
-              await _runWithProgress(
-                context,
-                initial: 'Sincronizando proyectos...',
-                action: (update) async {
-                  update('Sincronizando proyectos...');
-                  await _cloud.syncAllProjects(
-                    onProgress: (v, stage) {
-                      final pct = (v * 100).toStringAsFixed(0);
-                      final pctInt = double.tryParse(pct)?.toInt() ?? 0;
-                      update('$stage ($pctInt %)');
-                    },
-                  );
-                },
-              );
-              if (!context.mounted) return;
-              await _loadManualFolders();
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sincronizacion cloud completa.'),
-                ),
-              );
+              try {
+                await _runWithProgress(
+                  context,
+                  initial: 'Sincronizando proyectos...',
+                  action: (update) async {
+                    update('Sincronizando proyectos...');
+                    await _cloud.syncAllProjects(
+                      onProgress: (v, stage) {
+                        final pct = (v * 100).toStringAsFixed(0);
+                        final pctInt = double.tryParse(pct)?.toInt() ?? 0;
+                        update('$stage ($pctInt %)');
+                      },
+                    );
+                  },
+                );
+                if (!context.mounted) return;
+                await _loadManualFolders();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sincronizacion cloud completa.'),
+                  ),
+                );
+              } on TimeoutException {
+                // El mensaje se muestra en _runWithProgress.
+              } on CloudSyncException catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.userMessage)),
+                );
+                debugPrint('sync button cloud error [${e.code}]: ${e.debugMessage ?? e}');
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Error al sincronizar con cloud.')),
+                );
+                debugPrint('sync button error: $e');
+              }
             },
           ),
           IconButton(
@@ -766,28 +786,37 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 return;
               }
               if (!mounted) return;
-              bool ok = false;
-              await _runWithProgress(
-                context,
-                initial: 'Subiendo proyecto...',
-                action: (update) async {
-                  update('Subiendo proyecto...');
-                  ok = await _cloud.pushProject(
-                    p.projectId,
-                    onProgress: (v, stage) {
-                      final pct = (v * 100).toInt();
-                      update('$stage ($pct %)');
-                    },
-                  );
-                },
-              );
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(
-                    ok ? 'Proyecto subido.' : 'Error al subir proyecto.',
-                  ),
-                ),
-              );
+              try {
+                await _runWithProgress(
+                  context,
+                  initial: 'Subiendo proyecto...',
+                  action: (update) async {
+                    update('Subiendo proyecto...');
+                    await _cloud.pushProject(
+                      p.projectId,
+                      onProgress: (v, stage) {
+                        final pct = (v * 100).toInt();
+                        update('$stage ($pct %)');
+                      },
+                    );
+                  },
+                );
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Proyecto subido.')),
+                );
+              } on TimeoutException {
+                // El mensaje ya se muestra en _runWithProgress.
+              } on CloudSyncException catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(e.userMessage)),
+                );
+                debugPrint('sync_up cloud error [${e.code}]: ${e.debugMessage ?? e}');
+              } catch (e) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Error al subir proyecto.')),
+                );
+                debugPrint('sync_up error: $e');
+              }
             } else if (v == 'sync_down') {
               await _cloud.ensureInit();
               if (!_cloud.isReady) {
@@ -799,41 +828,37 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 return;
               }
               if (!mounted) return;
-              bool timeout = false;
-              await _runWithProgress(
-                context,
-                initial: 'Descargando proyecto...',
-                action: (update) async {
-                  update('Descargando proyecto...');
-                  try {
-                    await _cloud
-                        .pullProject(
-                          p.projectId,
-                          onProgress: (v, stage) {
-                            final pct = (v * 100).toInt();
-                            update('$stage ($pct %)');
-                          },
-                        )
-                        .timeout(
-                          const Duration(minutes: 5),
-                          onTimeout: () =>
-                              throw TimeoutException('download timeout'),
-                        );
-                  } on TimeoutException {
-                    timeout = true;
-                    rethrow;
-                  }
-                },
-              );
-              messenger.showSnackBar(
-                SnackBar(
-                  content: Text(
-                    timeout
-                        ? 'Descarga cancelada por tardar demasiado.'
-                        : 'Proyecto descargado.',
-                  ),
-                ),
-              );
+              try {
+                await _runWithProgress(
+                  context,
+                  initial: 'Descargando proyecto...',
+                  action: (update) async {
+                    update('Descargando proyecto...');
+                    await _cloud.pullProject(
+                      p.projectId,
+                      onProgress: (v, stage) {
+                        final pct = (v * 100).toInt();
+                        update('$stage ($pct %)');
+                      },
+                    );
+                  },
+                );
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Proyecto descargado.')),
+                );
+              } on TimeoutException {
+                // El mensaje ya se muestra en _runWithProgress.
+              } on CloudSyncException catch (e) {
+                messenger.showSnackBar(
+                  SnackBar(content: Text(e.userMessage)),
+                );
+                debugPrint('sync_down cloud error [${e.code}]: ${e.debugMessage ?? e}');
+              } catch (e) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('Error al descargar proyecto.')),
+                );
+                debugPrint('sync_down error: $e');
+              }
             } else if (v == 'delete') {
               final ok = await showDialog<bool>(
                 context: context,
@@ -884,8 +909,17 @@ class _ProjectsPageState extends State<ProjectsPage> {
               if (ok == true) {
                 await svc.archiveProject(p.projectId);
                 await _cloud.ensureInit();
-                if (_cloud.isReady) {
-                  await _cloud.pushProject(p.projectId);
+                if (_cloud.isReady && mounted) {
+                  try {
+                    await _cloud.pushProject(p.projectId);
+                  } on CloudSyncException catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(e.userMessage)),
+                    );
+                    debugPrint('archive cloud error [${e.code}]: ${e.debugMessage ?? e}');
+                  } catch (e) {
+                    debugPrint('archive sync error: $e');
+                  }
                 }
                 messenger.showSnackBar(
                   const SnackBar(content: Text('Proyecto archivado.')),

@@ -16,6 +16,35 @@ import 'supabase_manager.dart';
 import 'sync_prefs.dart';
 import '../settings/settings_service.dart';
 
+class CloudSyncException implements Exception {
+  CloudSyncException({
+    required this.code,
+    required this.userMessage,
+    this.debugMessage,
+    this.cause,
+  });
+
+  final String code;
+  final String userMessage;
+  final String? debugMessage;
+  final Object? cause;
+
+  CloudSyncException withContext(String context) {
+    final prefix = context.trim();
+    if (prefix.isEmpty) return this;
+    return CloudSyncException(
+      code: code,
+      userMessage: '$prefix: $userMessage',
+      debugMessage: debugMessage,
+      cause: cause,
+    );
+  }
+
+  @override
+  String toString() =>
+      'CloudSyncException(code: $code, userMessage: $userMessage, debug: ${debugMessage ?? '-'})';
+}
+
 /// Sincroniza proyectos con Supabase (BD) y R2/Supabase Storage (ficheros).
 class CloudSyncService {
   CloudSyncService(this.db);
@@ -167,7 +196,12 @@ class CloudSyncService {
   Future<void> syncAllProjects({
     void Function(double value, String stage)? onProgress,
   }) async {
-    if (!isReady) return;
+    if (!isReady) {
+      throw CloudSyncException(
+        code: 'supabase_not_ready',
+        userMessage: 'Supabase no está disponible (configuración o sesión).',
+      );
+    }
     try {
       await _syncSettings(onProgress: onProgress);
       final remote = await listRemoteProjects();
@@ -209,26 +243,42 @@ class CloudSyncService {
       for (final local in localRows) {
         final remoteEntry = remoteById[local.projectId];
         final remoteUpdated = remoteEntry?['updated_at_ms'] as int? ?? 0;
-        if (remoteEntry == null) {
-          await pushProject(local.projectId, onProgress: onProgress);
-          bump('Subiendo (solo local) ${local.projectId}');
-        } else if (local.updatedAtMs > remoteUpdated) {
-          await pushProject(local.projectId, onProgress: onProgress);
-          bump('Subiendo ${local.projectId}');
-        } else if (remoteUpdated > local.updatedAtMs) {
-          await pullProject(local.projectId, onProgress: onProgress);
-          bump('Descargando ${local.projectId}');
-        } else {
-          bump('Sin cambios ${local.projectId}');
+        try {
+          if (remoteEntry == null) {
+            await pushProject(local.projectId, onProgress: onProgress);
+            bump('Subiendo (solo local) ${local.projectId}');
+          } else if (local.updatedAtMs > remoteUpdated) {
+            await pushProject(local.projectId, onProgress: onProgress);
+            bump('Subiendo ${local.projectId}');
+          } else if (remoteUpdated > local.updatedAtMs) {
+            await pullProject(local.projectId, onProgress: onProgress);
+            bump('Descargando ${local.projectId}');
+          } else {
+            bump('Sin cambios ${local.projectId}');
+          }
+        } on CloudSyncException catch (e) {
+          throw e.withContext(
+            'Proyecto "${local.title}" (${local.projectId})',
+          );
         }
       }
 
       for (final id in remoteIdsFiltered.difference(localIds)) {
-        await pullProject(id, onProgress: onProgress);
-        bump('Descargando $id');
+        try {
+          await pullProject(id, onProgress: onProgress);
+          bump('Descargando $id');
+        } on CloudSyncException catch (e) {
+          throw e.withContext('Proyecto remoto ($id)');
+        }
       }
+    } on CloudSyncException {
+      rethrow;
     } catch (e) {
-      debugPrint('syncAllProjects error: $e');
+      throw _mapCloudError(
+        e,
+        action: 'sincronizar con cloud',
+        debugContext: 'syncAllProjects',
+      );
     }
   }
 
@@ -236,7 +286,12 @@ class CloudSyncService {
     String projectId, {
     void Function(double value, String stage)? onProgress,
   }) async {
-    if (!isReady) return false;
+    if (!isReady) {
+      throw CloudSyncException(
+        code: 'supabase_not_ready',
+        userMessage: 'Supabase no está disponible (configuración o sesión).',
+      );
+    }
     await _ensureR2EnvLoaded();
     try {
       final project = await (db.select(
@@ -265,35 +320,22 @@ class CloudSyncService {
         }
         onProgress?.call(0.2, 'Subiendo video');
         final uploaded = await _uploadFileToCloud(f);
-        if (uploaded != null) {
-          final rebased = _rebaseR2Url(uploaded) ?? uploaded;
-          remotePaths[f.fileId] = rebased;
-          await _setLocalFilePath(f.fileId, rebased);
-          debugPrint('[cloud] uploaded video: $rebased');
-        } else {
-          debugPrint('[cloud] video upload failed for ${f.assPath}');
-          return false;
-        }
+        final rebased = _rebaseR2Url(uploaded) ?? uploaded;
+        remotePaths[f.fileId] = rebased;
+        await _setLocalFilePath(f.fileId, rebased);
+        debugPrint('[cloud] uploaded video: $rebased');
       }
 
       for (final f in files.where((f) => f.engine != 'video')) {
         final uploaded = await _uploadFileToCloud(f);
-        if (uploaded != null) {
-          final rebased = _rebaseR2Url(uploaded);
-          if (rebased != null) {
-            debugPrint(
-              '[cloud] rebase uploaded ${f.engine}: $uploaded -> $rebased',
-            );
-            remotePaths[f.fileId] = rebased;
-          } else {
-            remotePaths[f.fileId] = uploaded;
-          }
-        } else if (_looksLikeUrl(f.assPath)) {
-          final rebased = _rebaseR2Url(f.assPath);
+        final rebased = _rebaseR2Url(uploaded);
+        if (rebased != null) {
           debugPrint(
-            '[cloud] reuse url ${f.engine}: ${f.assPath} -> ${rebased ?? 'no change'}',
+            '[cloud] rebase uploaded ${f.engine}: $uploaded -> $rebased',
           );
-          if (rebased != null) remotePaths[f.fileId] = rebased;
+          remotePaths[f.fileId] = rebased;
+        } else {
+          remotePaths[f.fileId] = uploaded;
         }
       }
 
@@ -380,9 +422,14 @@ class CloudSyncService {
         isDirty: false,
       );
       return true;
+    } on CloudSyncException {
+      rethrow;
     } catch (e) {
-      debugPrint('pushProject error: $e');
-      return false;
+      throw _mapCloudError(
+        e,
+        action: 'subir el proyecto a cloud',
+        debugContext: 'pushProject($projectId)',
+      );
     }
   }
 
@@ -491,8 +538,14 @@ class CloudSyncService {
         await _uploadSettingsPayload(merged);
         onProgress?.call(0.05, 'Ajustes subidos');
       }
+    } on CloudSyncException {
+      rethrow;
     } catch (e) {
-      debugPrint('sync settings error: $e');
+      throw _mapCloudError(
+        e,
+        action: 'sincronizar ajustes de cloud',
+        debugContext: '_syncSettings',
+      );
     }
   }
 
@@ -523,7 +576,12 @@ class CloudSyncService {
     String projectId, {
     void Function(double value, String stage)? onProgress,
   }) async {
-    if (!isReady) return;
+    if (!isReady) {
+      throw CloudSyncException(
+        code: 'supabase_not_ready',
+        userMessage: 'Supabase no está disponible (configuración o sesión).',
+      );
+    }
     await _ensureR2EnvLoaded();
     try {
       final existingFiles = await (db.select(
@@ -615,8 +673,14 @@ class CloudSyncService {
         checkedAtMs: nowMs,
         isDirty: false,
       );
+    } on CloudSyncException {
+      rethrow;
     } catch (e) {
-      debugPrint('pullProject error: $e');
+      throw _mapCloudError(
+        e,
+        action: 'descargar el proyecto desde cloud',
+        debugContext: 'pullProject($projectId)',
+      );
     }
   }
 
@@ -830,14 +894,21 @@ class CloudSyncService {
     return all;
   }
 
-  Future<String?> _uploadFileToCloud(ProjectFile f) async {
+  Future<String> _uploadFileToCloud(ProjectFile f) async {
     final path = f.assPath;
     if (_looksLikeUrl(path)) {
       final rebased = _rebaseR2Url(path);
       return rebased ?? path;
     }
     final file = File(path);
-    if (!await file.exists()) return null;
+    if (!await file.exists()) {
+      throw CloudSyncException(
+        code: 'local_file_missing',
+        userMessage:
+            'No se encontró el archivo local para "${f.engine}" y no se pudo subir.',
+        debugMessage: 'missing local file: ${f.assPath}',
+      );
+    }
 
     try {
       await _ensureR2EnvLoaded();
@@ -848,8 +919,12 @@ class CloudSyncService {
 
       if (f.engine == 'video') {
         if (!_r2Available) {
-          debugPrint('[cloud] R2 required for video; missing R2_*');
-          return null;
+          throw CloudSyncException(
+            code: 'r2_missing_config',
+            userMessage:
+                'Este proyecto tiene video local y falta configuración R2 para subirlo (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
+            debugMessage: 'R2 required for video upload: $storagePath',
+          );
         }
         final size = await file.length();
         debugPrint('[cloud] uploading video (${size ~/ (1024 * 1024)} MB) to R2.');
@@ -864,27 +939,39 @@ class CloudSyncService {
             file,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
           )
-          .timeout(const Duration(minutes: 3), onTimeout: () {
-        debugPrint('upload timeout (${f.engine}): $storagePath');
-        throw TimeoutException('upload ${f.engine} timed out');
-      });
-      final publicUrl = client.storage
+          .timeout(
+            const Duration(minutes: 3),
+            onTimeout: () =>
+                throw TimeoutException('upload ${f.engine} timed out'),
+          );
+      final publicUrl = await client.storage
           .from(_bucket)
           .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
       return publicUrl;
+    } on CloudSyncException {
+      rethrow;
     } catch (e) {
-      debugPrint('upload error (${f.engine}): $e');
-      return null;
+      throw _mapCloudError(
+        e,
+        action: 'subir el archivo "${f.engine}"',
+        debugContext: '_uploadFileToCloud(${f.engine})',
+      );
     }
   }
 
-  Future<String?> _uploadVideoToR2(
+  Future<String> _uploadVideoToR2(
     File file,
     String storagePath,
     String contentType,
   ) async {
     final cfg = _r2Config;
-    if (cfg == null) return null;
+    if (cfg == null) {
+      throw CloudSyncException(
+        code: 'r2_missing_config',
+        userMessage:
+            'Falta configuración R2 para subir el video (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
+      );
+    }
 
     try {
       final payloadHash = await _sha256OfFile(file);
@@ -936,25 +1023,21 @@ class CloudSyncService {
       const uploadTimeout = Duration(minutes: 5);
       final respFuture = request.send();
       try {
-        await request.sink.addStream(file.openRead()).timeout(
-          uploadTimeout,
-          onTimeout: () {
-            debugPrint('R2 upload stream timeout: $storagePath');
-            throw TimeoutException('R2 upload stream timeout');
-          },
-        );
+        await request.sink.addStream(file.openRead()).timeout(uploadTimeout);
       } on TimeoutException {
         await request.sink.close();
-        return null;
+        throw CloudSyncException(
+          code: 'video_upload_timeout',
+          userMessage:
+              'La subida del video tardó demasiado (timeout de 5 minutos).',
+          debugMessage: 'R2 upload stream timeout: $storagePath',
+        );
       }
       await request.sink.close();
 
       final resp = await respFuture.timeout(
         uploadTimeout,
-        onTimeout: () {
-          debugPrint('R2 upload timeout: $storagePath');
-          throw TimeoutException('R2 upload timeout');
-        },
+        onTimeout: () => throw TimeoutException('R2 upload timeout'),
       );
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final base = cfg.publicBase?.isNotEmpty == true
@@ -962,12 +1045,29 @@ class CloudSyncService {
             : 'https://${cfg.bucket}.$host';
         return '$base/$storagePath';
       } else {
-        debugPrint('R2 upload failed: ${resp.statusCode} ${resp.reasonPhrase}');
-        return null;
+        throw CloudSyncException(
+          code: 'video_upload_rejected',
+          userMessage:
+              'R2 rechazó la subida del video (HTTP ${resp.statusCode}). Revisa credenciales y permisos del bucket.',
+          debugMessage:
+              'R2 upload failed: ${resp.statusCode} ${resp.reasonPhrase} ($storagePath)',
+        );
       }
+    } on CloudSyncException {
+      rethrow;
+    } on TimeoutException {
+      throw CloudSyncException(
+        code: 'video_upload_timeout',
+        userMessage:
+            'La subida del video tardó demasiado (timeout de 5 minutos).',
+        debugMessage: 'R2 upload timeout: $storagePath',
+      );
     } catch (e) {
-      debugPrint('R2 upload error: $e');
-      return null;
+      throw _mapCloudError(
+        e,
+        action: 'subir video a R2',
+        debugContext: '_uploadVideoToR2($storagePath)',
+      );
     }
   }
 
@@ -1044,9 +1144,22 @@ class CloudSyncService {
           .download('prefs/settings.json');
       final txt = utf8.decode(bytes);
       return jsonDecode(txt) as Map<String, dynamic>;
+    } on StorageException catch (e) {
+      if (e.statusCode == '404' || e.statusCode == '400') {
+        // Primer uso: el payload puede no existir todavía.
+        return null;
+      }
+      throw _mapCloudError(
+        e,
+        action: 'descargar ajustes de cloud',
+        debugContext: '_downloadSettingsPayload',
+      );
     } catch (e) {
-      debugPrint('download settings error: $e');
-      return null;
+      throw _mapCloudError(
+        e,
+        action: 'descargar ajustes de cloud',
+        debugContext: '_downloadSettingsPayload',
+      );
     }
   }
 
@@ -1064,7 +1177,11 @@ class CloudSyncService {
             ),
           );
     } catch (e) {
-      debugPrint('upload settings error: $e');
+      throw _mapCloudError(
+        e,
+        action: 'subir ajustes de cloud',
+        debugContext: '_uploadSettingsPayload',
+      );
     }
   }
 
@@ -1119,6 +1236,126 @@ class CloudSyncService {
     final msg = e.message.toLowerCase();
     final col = column.toLowerCase();
     return e.code == 'PGRST204' || e.code == '42703' || msg.contains(col);
+  }
+
+  CloudSyncException _mapCloudError(
+    Object error, {
+    required String action,
+    String? debugContext,
+  }) {
+    if (error is CloudSyncException) return error;
+
+    final prefix = debugContext == null ? '' : '[$debugContext] ';
+    if (error is TimeoutException) {
+      return CloudSyncException(
+        code: 'timeout',
+        userMessage: 'La operación tardó demasiado al $action.',
+        debugMessage: '$prefix${error.message ?? error.toString()}',
+        cause: error,
+      );
+    }
+    if (error is SocketException) {
+      return CloudSyncException(
+        code: 'network_error',
+        userMessage:
+            'No hay conexión de red estable para $action. Revisa internet y vuelve a intentarlo.',
+        debugMessage: '$prefix${_compactError(error)}',
+        cause: error,
+      );
+    }
+    if (error is AuthException) {
+      return CloudSyncException(
+        code: 'auth_error',
+        userMessage:
+            'La sesión de Supabase no es válida para $action. Revisa credenciales o vuelve a iniciar sesión.',
+        debugMessage: '$prefix${_compactError(error)}',
+        cause: error,
+      );
+    }
+    if (error is StorageException) {
+      final status = error.statusCode?.toString() ?? '';
+      final msg = (error.message).toLowerCase();
+      if (status == '401' || status == '403' || msg.contains('jwt')) {
+        return CloudSyncException(
+          code: 'storage_auth_error',
+          userMessage:
+              'Cloud rechazó la autenticación al $action. Revisa credenciales de Supabase/R2.',
+          debugMessage: '$prefix storage status=$status message=${error.message}',
+          cause: error,
+        );
+      }
+      if (status == '413') {
+        return CloudSyncException(
+          code: 'storage_file_too_large',
+          userMessage:
+              'El archivo es demasiado grande para subir a cloud (HTTP 413).',
+          debugMessage: '$prefix storage status=$status message=${error.message}',
+          cause: error,
+        );
+      }
+      return CloudSyncException(
+        code: 'storage_error',
+        userMessage:
+            'No se pudo $action por un error de almacenamiento en cloud (HTTP ${status.isEmpty ? '?' : status}).',
+        debugMessage: '$prefix storage status=$status message=${error.message}',
+        cause: error,
+      );
+    }
+    if (error is PostgrestException) {
+      final code = error.code;
+      final msg = error.message.toLowerCase();
+      if (_looksAuthError(code, msg)) {
+        return CloudSyncException(
+          code: 'supabase_auth_error',
+          userMessage:
+              'Supabase rechazó la autenticación al $action. Revisa la sesión y las claves.',
+          debugMessage: '$prefix postgrest code=$code message=${error.message}',
+          cause: error,
+        );
+      }
+      if (_looksPermissionError(code, msg)) {
+        return CloudSyncException(
+          code: 'supabase_permission_error',
+          userMessage:
+              'No tienes permisos en Supabase para $action (RLS/policies).',
+          debugMessage: '$prefix postgrest code=$code message=${error.message}',
+          cause: error,
+        );
+      }
+      return CloudSyncException(
+        code: 'supabase_postgrest_error',
+        userMessage: 'Supabase devolvió un error al $action (${code ?? 'sin código'}).',
+        debugMessage: '$prefix postgrest code=$code message=${error.message}',
+        cause: error,
+      );
+    }
+
+    return CloudSyncException(
+      code: 'unknown_cloud_error',
+      userMessage: 'No se pudo $action. Error inesperado.',
+      debugMessage: '$prefix${_compactError(error)}',
+      cause: error,
+    );
+  }
+
+  bool _looksAuthError(String? code, String msg) {
+    return code == 'PGRST301' ||
+        code == '401' ||
+        msg.contains('jwt') ||
+        msg.contains('invalid login') ||
+        msg.contains('auth');
+  }
+
+  bool _looksPermissionError(String? code, String msg) {
+    return code == '42501' ||
+        code == '403' ||
+        msg.contains('permission denied') ||
+        msg.contains('row-level security') ||
+        msg.contains('rls');
+  }
+
+  String _compactError(Object error) {
+    return error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   String _guessContentType(String ext, String engine) {

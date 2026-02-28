@@ -1097,7 +1097,7 @@ Si dudas, prioriza estas grafías tal cual.
 
     bool ok = false;
     try {
-      ok = await _cloud
+      await _cloud
           .pushProject(
             project.projectId,
             onProgress: (v, stage) {
@@ -1110,17 +1110,20 @@ Si dudas, prioriza estas grafías tal cual.
             onTimeout: () =>
                 throw TimeoutException('cloud save timeout'),
           );
-      if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al guardar en cloud.')),
-        );
-      }
+      ok = true;
     } on TimeoutException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Subida cancelada por tardar demasiado.'),
           ),
+        );
+      }
+    } on CloudSyncException catch (e) {
+      debugPrint('save cloud error [${e.code}]: ${e.debugMessage ?? e}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.userMessage)),
         );
       }
     } catch (e) {
