@@ -66,8 +66,7 @@ class CloudSyncService {
 
   bool get isReady => _supabase.isReady;
   bool get isR2Available => _r2Config != null;
-  bool get hasR2PublicBase =>
-      _r2Config?.publicBase?.trim().isNotEmpty == true;
+  bool get hasR2PublicBase => _r2Config?.publicBase?.trim().isNotEmpty == true;
   String? get r2Bucket => _r2Config?.bucket;
   String? get r2PublicBase => _r2Config?.publicBase;
   SupabaseClient get _client => Supabase.instance.client;
@@ -223,7 +222,9 @@ class CloudSyncService {
           await deleteRemoteProject(id);
         }
         if (deletedIds.isNotEmpty) {
-          localRows = localRows.where((p) => !deletedIds.contains(p.projectId)).toList();
+          localRows = localRows
+              .where((p) => !deletedIds.contains(p.projectId))
+              .toList();
           localIds = localRows.map((p) => p.projectId).toSet();
           for (final id in deletedIds) {
             remoteById.remove(id);
@@ -257,9 +258,7 @@ class CloudSyncService {
             bump('Sin cambios ${local.projectId}');
           }
         } on CloudSyncException catch (e) {
-          throw e.withContext(
-            'Proyecto "${local.title}" (${local.projectId})',
-          );
+          throw e.withContext('Proyecto "${local.title}" (${local.projectId})');
         }
       }
 
@@ -316,6 +315,13 @@ class CloudSyncService {
           debugPrint('[cloud] reuse video url ${f.assPath} -> $url');
           remotePaths[f.fileId] = url;
           await _setLocalFilePath(f.fileId, url);
+          continue;
+        }
+        if (!_r2Available) {
+          // Mantiene la sync funcional sin bloquear por video local si no hay R2.
+          debugPrint(
+            '[cloud] skip local video upload (R2 missing config) for ${f.fileId}',
+          );
           continue;
         }
         onProgress?.call(0.2, 'Subiendo video');
@@ -558,18 +564,18 @@ class CloudSyncService {
   }
 
   Future<void> _deleteLocalProject(String projectId) async {
-    await (db.delete(db.selectionEvents)
-          ..where((t) => t.projectId.equals(projectId)))
-        .go();
-    await (db.delete(db.subtitleLines)
-          ..where((t) => t.projectId.equals(projectId)))
-        .go();
-    await (db.delete(db.projectFiles)
-          ..where((t) => t.projectId.equals(projectId)))
-        .go();
-    await (db.delete(db.projects)
-          ..where((t) => t.projectId.equals(projectId)))
-        .go();
+    await (db.delete(
+      db.selectionEvents,
+    )..where((t) => t.projectId.equals(projectId))).go();
+    await (db.delete(
+      db.subtitleLines,
+    )..where((t) => t.projectId.equals(projectId))).go();
+    await (db.delete(
+      db.projectFiles,
+    )..where((t) => t.projectId.equals(projectId))).go();
+    await (db.delete(
+      db.projects,
+    )..where((t) => t.projectId.equals(projectId))).go();
   }
 
   Future<void> pullProject(
@@ -684,10 +690,7 @@ class CloudSyncService {
     }
   }
 
-  Map<String, dynamic> _mapProject(
-    Project p, {
-    String? assPathOverride,
-  }) {
+  Map<String, dynamic> _mapProject(Project p, {String? assPathOverride}) {
     final map = <String, dynamic>{
       'project_id': p.projectId,
       'title': p.title,
@@ -807,13 +810,8 @@ class CloudSyncService {
 
   Future<void> _setLocalFilePath(String fileId, String path) async {
     try {
-      await (db.update(db.projectFiles)..where(
-            (t) => t.fileId.equals(fileId),
-          )).write(
-        ProjectFilesCompanion(
-          assPath: Value(path),
-        ),
-      );
+      await (db.update(db.projectFiles)..where((t) => t.fileId.equals(fileId)))
+          .write(ProjectFilesCompanion(assPath: Value(path)));
     } catch (e) {
       debugPrint('[cloud] no se pudo actualizar ruta local para $fileId: $e');
     }
@@ -927,7 +925,9 @@ class CloudSyncService {
           );
         }
         final size = await file.length();
-        debugPrint('[cloud] uploading video (${size ~/ (1024 * 1024)} MB) to R2.');
+        debugPrint(
+          '[cloud] uploading video (${size ~/ (1024 * 1024)} MB) to R2.',
+        );
         return await _uploadVideoToR2(file, storagePath, contentType);
       }
 
@@ -1280,7 +1280,8 @@ class CloudSyncService {
           code: 'storage_auth_error',
           userMessage:
               'Cloud rechazó la autenticación al $action. Revisa credenciales de Supabase/R2.',
-          debugMessage: '$prefix storage status=$status message=${error.message}',
+          debugMessage:
+              '$prefix storage status=$status message=${error.message}',
           cause: error,
         );
       }
@@ -1289,7 +1290,8 @@ class CloudSyncService {
           code: 'storage_file_too_large',
           userMessage:
               'El archivo es demasiado grande para subir a cloud (HTTP 413).',
-          debugMessage: '$prefix storage status=$status message=${error.message}',
+          debugMessage:
+              '$prefix storage status=$status message=${error.message}',
           cause: error,
         );
       }
@@ -1324,7 +1326,8 @@ class CloudSyncService {
       }
       return CloudSyncException(
         code: 'supabase_postgrest_error',
-        userMessage: 'Supabase devolvió un error al $action (${code ?? 'sin código'}).',
+        userMessage:
+            'Supabase devolvió un error al $action (${code ?? 'sin código'}).',
         debugMessage: '$prefix postgrest code=$code message=${error.message}',
         cause: error,
       );
@@ -1627,10 +1630,7 @@ class _R2Config {
 }
 
 class _DirtyCacheEntry {
-  _DirtyCacheEntry({
-    required this.checkedAtMs,
-    required this.isDirty,
-  });
+  _DirtyCacheEntry({required this.checkedAtMs, required this.isDirty});
   final int checkedAtMs;
   final bool isDirty;
 }
