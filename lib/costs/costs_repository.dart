@@ -67,14 +67,14 @@ class CostEpisodeSummary {
 }
 
 class CostsRepository {
-  static const _table = 'voicex_api_costs';
+  static const tableName = 'voicex_api_costs';
 
   Future<List<CostEpisodeSummary>> fetchSummaries({int limit = 400}) async {
     if (!SupabaseManager.instance.isReady) return [];
     final client = SupabaseManager.instance.client;
 
     final rows = await client
-        .from(_table)
+        .from(tableName)
         .select()
         .order('created_at', ascending: false)
         .limit(limit);
@@ -83,6 +83,33 @@ class CostsRepository {
         .map((e) => CostRecord.fromMap(e as Map<String, dynamic>))
         .toList();
 
+    return _buildSummaries(records);
+  }
+
+  Future<CostEpisodeSummary?> fetchEpisodeSummary({
+    required String series,
+    required String episode,
+    int limit = 200,
+  }) async {
+    if (!SupabaseManager.instance.isReady) return null;
+    final client = SupabaseManager.instance.client;
+
+    final rows = await client
+        .from(tableName)
+        .select()
+        .eq('series', series)
+        .eq('episode', episode)
+        .order('created_at', ascending: false)
+        .limit(limit);
+
+    final records = (rows as List<dynamic>)
+        .map((e) => CostRecord.fromMap(e as Map<String, dynamic>))
+        .toList();
+    final summaries = _buildSummaries(records);
+    return summaries.isEmpty ? null : summaries.first;
+  }
+
+  List<CostEpisodeSummary> _buildSummaries(List<CostRecord> records) {
     final Map<String, List<CostRecord>> grouped = {};
     for (final rec in records) {
       final key = '${rec.series}|||${rec.episode}';

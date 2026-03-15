@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 
 import '../commands/command_router.dart';
+import '../costs/api_cost_logger.dart';
 import '../db/app_db.dart';
 import '../openai/openai_service.dart';
 import '../settings/settings_service.dart';
@@ -31,9 +32,11 @@ class ReviewPage extends StatefulWidget {
 class _ReviewPageState extends State<ReviewPage> {
   late final ReviewService _svc = ReviewService(widget.db);
   late final CloudSyncService _cloud = CloudSyncService(widget.db);
+  final ApiCostLogger _costLogger = ApiCostLogger();
   final _speech = SpeechService.instance;
   String? _localeId;
-  double _videoHeight = 200;
+  double _videoHeight = 260;
+  double _topPaneRatio = 0.6;
   bool _sessionStarted = false;
   String _currentSubtitleText(SubtitleLine? line) {
     if (line == null) return '';
@@ -48,6 +51,23 @@ class _ReviewPageState extends State<ReviewPage> {
     // Remove ASS-style tags like {italic} or romaji annotations from overlay.
     final noTags = text.replaceAll(RegExp(r'\{[^}]*\}'), '');
     return noTags.trim();
+  }
+
+  String _currentPromptText(SubtitleLine? line) {
+    if (line == null) return '';
+    final fromSource = _braceGroupAt(line.sourceText ?? '', 1);
+    if (fromSource.isNotEmpty) return fromSource;
+    return _braceGroupAt(line.originalText, 1);
+  }
+
+  String _braceGroupAt(String text, int index) {
+    final matches = RegExp(r'\{([^}]*)\}')
+        .allMatches(text)
+        .map((m) => (m.group(1) ?? '').trim())
+        .where((m) => m.isNotEmpty)
+        .toList();
+    if (index < 0 || index >= matches.length) return '';
+    return matches[index];
   }
 
   void _cacheLineText(SubtitleLine line) {
@@ -734,19 +754,25 @@ $glossary
 Si dudas, prioriza estas grafías tal cual.
 ''';
       }
-      final text = await client.transcribeAudioFile(
+      final result = await client.transcribeAudioFile(
         filePath: path,
         model: settings.openAiSttModel,
         language: 'es',
         prompt: prompt,
       );
+      await _costLogger.logOpenAiUsage(
+        project: project,
+        model: result.model,
+        usage: result.usage,
+      );
+      final text = result.text;
       await _setVoiceText(line, text);
     } finally {
       if (mounted) setState(() => _recBusy = false);
     }
   }
 
-  Future<void> _refineVoiceWithOpenAi(SubtitleLine line) async {
+  Future<void> _refineVoiceWithOpenAi(Project project, SubtitleLine line) async {
     final settings = SettingsService.instance;
     if (!settings.hasOpenAiKey) {
       if (!mounted) return;
@@ -763,8 +789,13 @@ Si dudas, prioriza estas grafías tal cual.
       text: raw,
       model: settings.openAiTextModel,
     );
+    await _costLogger.logOpenAiUsage(
+      project: project,
+      model: refined.model,
+      usage: refined.usage,
+    );
 
-    await _setVoiceText(line, refined);
+    await _setVoiceText(line, refined.text);
 
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -871,6 +902,8 @@ Si dudas, prioriza estas grafías tal cual.
                         builder: (_) => MetricsPage(
                           db: widget.db,
                           projectId: project.projectId,
+                          projectTitle: project.title,
+                          projectFolder: project.folder,
                         ),
                       ),
                     );
@@ -909,39 +942,125 @@ Si dudas, prioriza estas grafías tal cual.
                     final timings = linesSnap.data ?? _lineTimings;
                     final content = Column(
                       children: [
-                        _VideoPanel(
-                          controller: _videoController,
-                          initFuture: _videoInit,
-                          error: _videoError,
-                          videoPath: _videoPath,
-                          subtitle: _currentSubtitleText(_currentLine),
-                          lineTimings: timings,
-                          getLineText: _textFromTiming,
-                          subtitleStartMs: _currentLine?.startMs,
-                          subtitleEndMs: _currentLine?.endMs,
-                          height: _videoHeight,
-                          onDragResize: (delta) {
-                            final next = (_videoHeight + delta * 0.8).clamp(
-                              120,
-                              400,
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            const splitterWidth = 14.0;
+                            final availableWidth = math.max(
+                              0.0,
+                              constraints.maxWidth - splitterWidth,
                             );
-                            setState(() => _videoHeight = next.toDouble());
+                            final minPaneWidth = availableWidth < 520
+                                ? math.max(120.0, availableWidth * 0.28)
+                                : 220.0;
+                            final leftWidth =
+                                (availableWidth * _topPaneRatio).clamp(
+                                      minPaneWidth,
+                                      math.max(
+                                        minPaneWidth,
+                                        availableWidth - minPaneWidth,
+                                      ),
+                                    ).toDouble();
+                            final rightWidth = math.max(
+                              minPaneWidth,
+                              availableWidth - leftWidth,
+                            );
+
+                            return IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  SizedBox(
+                                    width: leftWidth,
+                                    child: _VideoPanel(
+                                      controller: _videoController,
+                                      initFuture: _videoInit,
+                                      error: _videoError,
+                                      videoPath: _videoPath,
+                                      subtitle: _currentSubtitleText(_currentLine),
+                                      lineTimings: timings,
+                                      getLineText: _textFromTiming,
+                                      subtitleStartMs: _currentLine?.startMs,
+                                      subtitleEndMs: _currentLine?.endMs,
+                                      height: _videoHeight,
+                                      onDragResize: (delta) {
+                                        final next = (_videoHeight + delta * 0.8)
+                                            .clamp(140, 520);
+                                        setState(() => _videoHeight = next.toDouble());
+                                      },
+                                      onBack: () => _nudgeVideo(
+                                        const Duration(seconds: -5),
+                                      ),
+                                      onPlayPause: _togglePlayPause,
+                                      onPlaySegment: () {
+                                        final line = _currentLine;
+                                        if (line != null) {
+                                          _playSegment(line);
+                                        }
+                                      },
+                                      onForward: () => _nudgeVideo(
+                                        const Duration(seconds: 5),
+                                      ),
+                                      onPrevLine: () => _gotoPrevious(project),
+                                      onNextLine: () => _gotoNext(project, total),
+                                      onHeightChanged: (h) =>
+                                          setState(() => _videoHeight = h),
+                                    ),
+                                  ),
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.resizeLeftRight,
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.translucent,
+                                      onHorizontalDragUpdate: (details) {
+                                        if (availableWidth <= 0) return;
+                                        final next = ((leftWidth + details.delta.dx) /
+                                                availableWidth)
+                                            .clamp(
+                                              minPaneWidth / availableWidth,
+                                              (availableWidth - minPaneWidth) /
+                                                  availableWidth,
+                                            );
+                                        setState(() {
+                                          _topPaneRatio = next.toDouble();
+                                        });
+                                      },
+                                      child: SizedBox(
+                                        width: splitterWidth,
+                                        child: Center(
+                                          child: Container(
+                                            width: 6,
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .outlineVariant,
+                                              borderRadius: BorderRadius.circular(
+                                                999,
+                                              ),
+                                            ),
+                                            child: const Center(
+                                              child: RotatedBox(
+                                                quarterTurns: 1,
+                                                child: Icon(
+                                                  Icons.drag_handle,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: rightWidth,
+                                    child: _TranscriberPromptPanel(
+                                      promptText:
+                                          _currentPromptText(_currentLine),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
                           },
-                          onBack: () =>
-                              _nudgeVideo(const Duration(seconds: -5)),
-                          onPlayPause: _togglePlayPause,
-                          onPlaySegment: () {
-                            final line = _currentLine;
-                            if (line != null) {
-                              _playSegment(line);
-                            }
-                          },
-                          onForward: () =>
-                              _nudgeVideo(const Duration(seconds: 5)),
-                          onPrevLine: () => _gotoPrevious(project),
-                          onNextLine: () => _gotoNext(project, total),
-                          onHeightChanged: (h) =>
-                              setState(() => _videoHeight = h),
                         ),
                         Expanded(
                           child: PageView.builder(
@@ -1006,7 +1125,7 @@ Si dudas, prioriza estas grafías tal cual.
                                     onMic: () =>
                                         _toggleVoiceInput(project, line, total),
                                     onRefine: () =>
-                                        _refineVoiceWithOpenAi(line),
+                                        _refineVoiceWithOpenAi(project, line),
                                   );
                                 },
                               );
@@ -1291,7 +1410,7 @@ class _VideoPanel extends StatelessWidget {
       return Card(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1299,15 +1418,15 @@ class _VideoPanel extends StatelessWidget {
                 height: height,
                 child: Center(child: player),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               GestureDetector(
                 onPanUpdate: (details) => onDragResize(details.delta.dy),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [Icon(Icons.drag_handle, size: 18)],
+                  children: const [Icon(Icons.drag_handle, size: 16)],
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
@@ -1317,7 +1436,7 @@ class _VideoPanel extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -1325,6 +1444,9 @@ class _VideoPanel extends StatelessWidget {
                     tooltip: 'Rebobinar 5s',
                     icon: const Icon(Icons.replay_5),
                     onPressed: controller == null ? null : onBack,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
                   IconButton(
                     tooltip: controller?.value.isPlaying == true
@@ -1336,22 +1458,29 @@ class _VideoPanel extends StatelessWidget {
                           : Icons.play_circle,
                     ),
                     onPressed: controller == null ? null : onPlayPause,
-                    iconSize: 32,
+                    iconSize: 28,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
                   IconButton(
                     tooltip: 'Reproducir solo la línea actual',
                     icon: const Icon(Icons.playlist_play),
                     onPressed: controller == null ? null : onPlaySegment,
-                    iconSize: 28,
+                    iconSize: 22,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
                   IconButton(
                     tooltip: 'Avanzar 5s',
                     icon: const Icon(Icons.forward_5),
                     onPressed: controller == null ? null : onForward,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 2),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1359,12 +1488,18 @@ class _VideoPanel extends StatelessWidget {
                     tooltip: 'Línea anterior',
                     icon: const Icon(Icons.skip_previous),
                     onPressed: onPrevLine,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   IconButton(
                     tooltip: 'Línea siguiente',
                     icon: const Icon(Icons.skip_next),
                     onPressed: onNextLine,
+                    iconSize: 20,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.all(6),
                   ),
                 ],
               ),
@@ -1440,6 +1575,64 @@ class _VideoPanel extends StatelessWidget {
       }
     }
     return buffer.toString();
+  }
+}
+
+class _TranscriberPromptPanel extends StatelessWidget {
+  const _TranscriberPromptPanel({required this.promptText});
+
+  final String promptText;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.notes, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Prompt Transcriber',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withAlpha(
+                    (0.45 * 255).round(),
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withAlpha(
+                      (0.7 * 255).round(),
+                    ),
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    promptText.isEmpty
+                        ? 'Sin explicacion disponible en el segundo bloque {...}.'
+                        : promptText,
+                    style: const TextStyle(height: 1.4),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -1741,7 +1934,7 @@ class _CandidateTile extends StatelessWidget {
               ),
           ],
         ),
-        subtitle: Text(text),
+        subtitle: _LineLimitPreviewText(text: text),
         onTap: onTap,
         trailing: IconButton(
           tooltip: 'Editar',
@@ -1776,28 +1969,66 @@ class _LineLimitHighlightController extends TextEditingController {
     required bool withComposing,
   }) {
     final baseStyle = style ?? const TextStyle();
-    final overflowStyle = baseStyle.copyWith(color: Colors.red);
-    final spans = <InlineSpan>[];
-    final lines = text.split('\n');
+    return TextSpan(
+      style: baseStyle,
+      children: _buildLineLimitSpans(
+        text,
+        baseStyle: baseStyle,
+        maxCharsPerLine: maxCharsPerLine,
+      ),
+    );
+  }
+}
 
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (line.length <= maxCharsPerLine) {
-        spans.add(TextSpan(text: line, style: baseStyle));
-      } else {
-        spans.add(
-          TextSpan(text: line.substring(0, maxCharsPerLine), style: baseStyle),
-        );
-        spans.add(
-          TextSpan(text: line.substring(maxCharsPerLine), style: overflowStyle),
-        );
-      }
-      if (i < lines.length - 1) {
-        spans.add(TextSpan(text: '\n', style: baseStyle));
-      }
+List<InlineSpan> _buildLineLimitSpans(
+  String text, {
+  required TextStyle baseStyle,
+  required int maxCharsPerLine,
+}) {
+  final overflowStyle = baseStyle.copyWith(color: Colors.red);
+  final spans = <InlineSpan>[];
+  final lines = text.split('\n');
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (line.length <= maxCharsPerLine) {
+      spans.add(TextSpan(text: line, style: baseStyle));
+    } else {
+      spans.add(
+        TextSpan(text: line.substring(0, maxCharsPerLine), style: baseStyle),
+      );
+      spans.add(
+        TextSpan(text: line.substring(maxCharsPerLine), style: overflowStyle),
+      );
     }
+    if (i < lines.length - 1) {
+      spans.add(TextSpan(text: '\n', style: baseStyle));
+    }
+  }
 
-    return TextSpan(style: baseStyle, children: spans);
+  return spans;
+}
+
+class _LineLimitPreviewText extends StatelessWidget {
+  const _LineLimitPreviewText({
+    required this.text,
+  });
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = DefaultTextStyle.of(context).style;
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
+        children: _buildLineLimitSpans(
+          text,
+          baseStyle: baseStyle,
+          maxCharsPerLine: 40,
+        ),
+      ),
+    );
   }
 }
 
@@ -2030,7 +2261,9 @@ class _VoiceTile extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(hasText ? text : 'Pulsa el micrófono y dicta tu traducción.'),
+            hasText
+                ? _LineLimitPreviewText(text: text)
+                : const Text('Pulsa el micrófono y dicta tu traducción.'),
             const SizedBox(height: 6),
             if (cps > 0 && cpsColor != null)
               Container(

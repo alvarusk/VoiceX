@@ -1,43 +1,72 @@
 import 'package:flutter/material.dart';
 
+import '../costs/costs_repository.dart';
 import '../db/app_db.dart';
 import '../review/review_service.dart';
 
-class MetricsPage extends StatelessWidget {
-  const MetricsPage({super.key, required this.db, required this.projectId});
+class MetricsPage extends StatefulWidget {
+  const MetricsPage({
+    super.key,
+    required this.db,
+    required this.projectId,
+    required this.projectTitle,
+    required this.projectFolder,
+  });
+
   final AppDatabase db;
   final String projectId;
+  final String projectTitle;
+  final String projectFolder;
+
+  @override
+  State<MetricsPage> createState() => _MetricsPageState();
+}
+
+class _MetricsPageState extends State<MetricsPage> {
+  late final ReviewService _svc = ReviewService(widget.db);
+  late final Future<CostEpisodeSummary?> _costFuture = _loadCostSummary();
+
+  Future<CostEpisodeSummary?> _loadCostSummary() async {
+    return CostsRepository().fetchEpisodeSummary(
+      series: _normalizedSeries(widget.projectFolder),
+      episode: widget.projectTitle.trim(),
+    );
+  }
+
+  String _normalizedSeries(String folder) {
+    final trimmed = folder.trim();
+    return trimmed.isEmpty ? 'Sin carpeta' : trimmed;
+  }
+
+  String _fmtDuration(int ms) {
+    if (ms <= 0) return '0s';
+    final d = Duration(milliseconds: ms);
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
+    if (m > 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
+    return '${s}s';
+  }
+
+  Widget _sourceRow(String label, int count, int total) {
+    final pct = total == 0 ? 0 : (count * 100 ~/ total);
+    return ListTile(
+      title: Text(label),
+      trailing: Text('$count  ($pct %)'),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final svc = ReviewService(db);
-    String fmt(int ms) {
-      if (ms <= 0) return '0s';
-      final d = Duration(milliseconds: ms);
-      final h = d.inHours;
-      final m = d.inMinutes % 60;
-      final s = d.inSeconds % 60;
-      if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
-      if (m > 0) return '${m}m ${s.toString().padLeft(2, '0')}s';
-      return '${s}s';
-    }
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Métricas')),
+      appBar: AppBar(title: const Text('Metricas')),
       body: StreamBuilder<MetricsSnapshot>(
-        stream: svc.watchMetrics(projectId),
+        stream: _svc.watchMetrics(widget.projectId),
         builder: (context, snap) {
           final m = snap.data;
           if (m == null) {
             return const Center(child: CircularProgressIndicator());
-          }
-
-          Widget row(String label, int count, int total) {
-            final pct = total == 0 ? 0 : (count * 100 ~/ total);
-            return ListTile(
-              title: Text(label),
-              trailing: Text('$count  ($pct %)'),
-            );
           }
 
           return ListView(
@@ -46,8 +75,45 @@ class MetricsPage extends StatelessWidget {
                 title: const Text('Revisadas'),
                 subtitle: Text('${m.reviewed}/${m.total}'),
               ),
+              FutureBuilder<CostEpisodeSummary?>(
+                future: _costFuture,
+                builder: (context, costSnap) {
+                  if (costSnap.connectionState == ConnectionState.waiting) {
+                    return const ListTile(
+                      title: Text('Coste IA'),
+                      subtitle: Text('Cargando costes del episodio...'),
+                    );
+                  }
+
+                  final summary = costSnap.data;
+                  if (summary == null) {
+                    return const ListTile(
+                      title: Text('Coste IA'),
+                      subtitle: Text('Sin costes registrados para este episodio.'),
+                    );
+                  }
+
+                  final breakdown = summary.engines
+                      .map((e) =>
+                          '${e.engine}: \$${e.costUsd.toStringAsFixed(4)} (${e.tokens} tok)')
+                      .join(' | ');
+
+                  return ListTile(
+                    title: const Text('Coste IA'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Total: \$${summary.totalCostUsd.toStringAsFixed(4)} | ${summary.totalTokens} tok',
+                        ),
+                        if (breakdown.isNotEmpty) Text(breakdown),
+                      ],
+                    ),
+                  );
+                },
+              ),
               StreamBuilder<SessionDurationSummary>(
-                stream: svc.watchSessionDurations(projectId),
+                stream: _svc.watchSessionDurations(widget.projectId),
                 builder: (context, sessionSnap) {
                   final s = sessionSnap.data;
                   int pcMs = 0;
@@ -70,7 +136,9 @@ class MetricsPage extends StatelessWidget {
                       }
                     });
                   }
-                  final totalMs = s?.totalMs ?? (pcMs + phoneMs + extras.values.fold(0, (a, b) => a + b));
+                  final totalMs =
+                      s?.totalMs ??
+                      (pcMs + phoneMs + extras.values.fold(0, (a, b) => a + b));
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -80,11 +148,13 @@ class MetricsPage extends StatelessWidget {
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('PC: ${fmt(pcMs)}'),
-                            Text('Teléfono: ${fmt(phoneMs)}'),
+                            Text('PC: ${_fmtDuration(pcMs)}'),
+                            Text('Telefono: ${_fmtDuration(phoneMs)}'),
                             if (extras.isNotEmpty)
-                              ...extras.entries.map((e) => Text('${e.key}: ${fmt(e.value)}')),
-                            Text('Total: ${fmt(totalMs)}'),
+                              ...extras.entries.map(
+                                (e) => Text('${e.key}: ${_fmtDuration(e.value)}'),
+                              ),
+                            Text('Total: ${_fmtDuration(totalMs)}'),
                           ],
                         ),
                       ),
@@ -93,19 +163,48 @@ class MetricsPage extends StatelessWidget {
                 },
               ),
               const Divider(),
-              ListTile(
-                title: const Text('Coste IA (estimación)'),
-                subtitle: const Text(
-                  'No disponible: necesitamos instrumentar llamadas STT/refine para calcular coste por episodio.',
-                ),
-              ),
+              const ListTile(title: Text('Motores en este episodio')),
+              _sourceRow('GPT', m.bySource['gpt'] ?? 0, m.reviewed),
+              _sourceRow('Claude', m.bySource['claude'] ?? 0, m.reviewed),
+              _sourceRow('Gemini', m.bySource['gemini'] ?? 0, m.reviewed),
+              _sourceRow('DeepSeek', m.bySource['deepseek'] ?? 0, m.reviewed),
+              _sourceRow('Mi voz', m.bySource['voice'] ?? 0, m.reviewed),
+              _sourceRow('Otro', m.bySource['other'] ?? 0, m.reviewed),
               const Divider(),
-              row('GPT', m.bySource['gpt'] ?? 0, m.reviewed),
-              row('Claude', m.bySource['claude'] ?? 0, m.reviewed),
-              row('Gemini', m.bySource['gemini'] ?? 0, m.reviewed),
-              row('DeepSeek', m.bySource['deepseek'] ?? 0, m.reviewed),
-              row('Mi voz', m.bySource['voice'] ?? 0, m.reviewed),
-              row('Otro', m.bySource['other'] ?? 0, m.reviewed),
+              ListTile(
+                title: const Text('Motores historicos'),
+                subtitle: Text('${m.historicalReviewed} lineas revisadas en total'),
+              ),
+              _sourceRow(
+                'GPT',
+                m.historicalBySource['gpt'] ?? 0,
+                m.historicalReviewed,
+              ),
+              _sourceRow(
+                'Claude',
+                m.historicalBySource['claude'] ?? 0,
+                m.historicalReviewed,
+              ),
+              _sourceRow(
+                'Gemini',
+                m.historicalBySource['gemini'] ?? 0,
+                m.historicalReviewed,
+              ),
+              _sourceRow(
+                'DeepSeek',
+                m.historicalBySource['deepseek'] ?? 0,
+                m.historicalReviewed,
+              ),
+              _sourceRow(
+                'Mi voz',
+                m.historicalBySource['voice'] ?? 0,
+                m.historicalReviewed,
+              ),
+              _sourceRow(
+                'Otro',
+                m.historicalBySource['other'] ?? 0,
+                m.historicalReviewed,
+              ),
               const Divider(),
               ListTile(
                 title: const Text('Marcadas como duda'),

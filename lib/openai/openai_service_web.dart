@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'openai_usage.dart';
+
 class OpenAiService {
   OpenAiService({required this.apiKey});
 
@@ -14,7 +16,7 @@ class OpenAiService {
         'Content-Type': 'application/json',
       };
 
-  Future<String> refineSpanishPunctuation({
+  Future<OpenAiTextResult> refineSpanishPunctuation({
     required String text,
     String model = 'gpt-4o-mini',
   }) async {
@@ -45,10 +47,14 @@ $text
     }
 
     final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return _extractOutputText(data).trim();
+    return OpenAiTextResult(
+      text: _extractOutputText(data).trim(),
+      model: (data['model'] as String?) ?? model,
+      usage: _extractUsage(data),
+    );
   }
 
-  Future<String> transcribeAudioFile({
+  Future<OpenAiTranscriptionResult> transcribeAudioFile({
     required String filePath,
     String model = 'gpt-4o-mini-transcribe',
     String? language,
@@ -75,5 +81,47 @@ $text
       }
     }
     return '';
+  }
+
+  static OpenAiUsage _extractUsage(Map<String, dynamic> responseJson) {
+    final usage = responseJson['usage'];
+    if (usage is! Map<String, dynamic>) {
+      return const OpenAiUsage();
+    }
+
+    final inputTokens =
+        _readInt(usage['input_tokens']) ??
+        _readInt(usage['input_audio_tokens']) ??
+        0;
+    final outputTokens =
+        _readInt(usage['output_tokens']) ??
+        _readInt(usage['output_text_tokens']) ??
+        0;
+    final totalTokens =
+        _readInt(usage['total_tokens']) ?? (inputTokens + outputTokens);
+
+    return OpenAiUsage(
+      inputTokens: inputTokens,
+      outputTokens: outputTokens,
+      totalTokens: totalTokens,
+      durationSeconds:
+          _readDouble(usage['seconds']) ??
+          _readDouble(usage['duration_seconds']) ??
+          0,
+    );
+  }
+
+  static int? _readInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  static double? _readDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }

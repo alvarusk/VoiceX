@@ -39,12 +39,16 @@ class MetricsSnapshot {
     required this.total,
     required this.reviewed,
     required this.bySource,
+    required this.historicalReviewed,
+    required this.historicalBySource,
     required this.doubtCount,
   });
 
   final int total;
   final int reviewed;
   final Map<String, int> bySource;
+  final int historicalReviewed;
+  final Map<String, int> historicalBySource;
   final int doubtCount;
 }
 
@@ -477,6 +481,8 @@ class ReviewService {
     int reviewed = 0;
     int doubtCount = 0;
     Map<String, int> bySource = {};
+    int historicalReviewed = 0;
+    Map<String, int> historicalBySource = {};
 
     void emit() {
       controller.add(
@@ -484,6 +490,8 @@ class ReviewService {
           total: total,
           reviewed: reviewed,
           bySource: bySource,
+          historicalReviewed: historicalReviewed,
+          historicalBySource: historicalBySource,
           doubtCount: doubtCount,
         ),
       );
@@ -543,9 +551,43 @@ class ReviewService {
           emit();
         });
 
+    final subHistorical = db
+        .customSelect(
+          '''
+          SELECT selected_source as src, COUNT(*) as c
+          FROM subtitle_lines
+          WHERE reviewed = 1 AND selected_source IS NOT NULL
+          GROUP BY selected_source
+          ''',
+          readsFrom: {db.subtitleLines},
+        )
+        .watch()
+        .listen((rows) {
+          final map = <String, int>{};
+          var totalCount = 0;
+          for (final r in rows) {
+            final src = (r.read<String?>('src') ?? 'other').toLowerCase();
+            final c = r.read<int>('c');
+            totalCount += c;
+            if (src == 'gpt' ||
+                src == 'claude' ||
+                src == 'gemini' ||
+                src == 'deepseek' ||
+                src == 'voice') {
+              map[src] = c;
+            } else {
+              map['other'] = (map['other'] ?? 0) + c;
+            }
+          }
+          historicalReviewed = totalCount;
+          historicalBySource = map;
+          emit();
+        });
+
     controller.onCancel = () async {
       await subBase.cancel();
       await subBySource.cancel();
+      await subHistorical.cancel();
     };
 
     return controller.stream;
