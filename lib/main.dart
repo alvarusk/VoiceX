@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -19,7 +21,7 @@ Future<void> main() async {
     // Si no existe .env en assets, seguimos con dart-define/Platform.
   }
   await SettingsService.instance.init();
-  await SupabaseManager.instance.init();
+  unawaited(SupabaseManager.instance.init());
   runApp(const VoiceXApp());
 }
 
@@ -115,8 +117,14 @@ class _VoiceXAppState extends State<VoiceXApp> {
               bottomNavigationBar: NavigationBar(
                 selectedIndex: _tab,
                 destinations: const [
-                  NavigationDestination(icon: Icon(Icons.folder), label: 'Proyectos'),
-                  NavigationDestination(icon: Icon(Icons.settings), label: 'Ajustes'),
+                  NavigationDestination(
+                    icon: Icon(Icons.folder),
+                    label: 'Proyectos',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.settings),
+                    label: 'Ajustes',
+                  ),
                 ],
                 onDestinationSelected: (i) => setState(() => _tab = i),
               ),
@@ -126,8 +134,9 @@ class _VoiceXAppState extends State<VoiceXApp> {
 
   void _toggleTheme() {
     setState(() {
-      _themeMode =
-          _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+      _themeMode = _themeMode == ThemeMode.light
+          ? ThemeMode.dark
+          : ThemeMode.light;
     });
   }
 }
@@ -142,10 +151,7 @@ class _SplashScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            asset,
-            fit: BoxFit.cover,
-          ),
+          Image.asset(asset, fit: BoxFit.cover),
           Positioned(
             right: 12,
             bottom: 8,
@@ -158,10 +164,7 @@ class _SplashScreen extends StatelessWidget {
                 }
                 return Text(
                   'v$version',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 );
               },
             ),

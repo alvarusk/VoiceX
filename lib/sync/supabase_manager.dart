@@ -16,6 +16,9 @@ class SupabaseManager {
   bool _ready = false;
   bool _authed = false;
   bool _initAttempted = false;
+  Future<void>? _coreInitInFlight;
+  Future<Map<String, String>>? _envLoadInFlight;
+  Map<String, String>? _cachedFileEnv;
   Future<void>? _authInFlight;
   String _authEmail = '';
   String _authPassword = '';
@@ -28,13 +31,13 @@ class SupabaseManager {
   Future<void> init() async {
     if (_ready && _authed) return;
 
-    final fileEnv = await _readEnvFromCandidates();
+    final fileEnv = await _loadFileEnv();
     final platformEnv = Platform.environment;
 
     String readEnv(String key) {
-      return _readDefine(key)
-          .ifEmpty(() => platformEnv[key] ?? '')
-          .ifEmpty(() => fileEnv[key] ?? '');
+      return _readDefine(
+        key,
+      ).ifEmpty(() => platformEnv[key] ?? '').ifEmpty(() => fileEnv[key] ?? '');
     }
 
     final envUrl = fileEnv['SUPABASE_URL'] ?? '';
@@ -45,7 +48,33 @@ class SupabaseManager {
     _authEmail = readEnv('SUPABASE_USER_EMAIL');
     _authPassword = readEnv('SUPABASE_USER_PASSWORD');
 
-    if (!_ready) {
+    await _ensureCoreInitialized(
+      url: url,
+      key: key,
+      envUrlPresent: envUrl.isNotEmpty,
+      envKeyPresent: envKey.isNotEmpty,
+      platformUrlPresent: (platformEnv['SUPABASE_URL'] ?? '').isNotEmpty,
+      platformKeyPresent: (platformEnv['SUPABASE_ANON_KEY'] ?? '').isNotEmpty,
+    );
+
+    await _ensureAuth();
+  }
+
+  Future<void> _ensureCoreInitialized({
+    required String url,
+    required String key,
+    required bool envUrlPresent,
+    required bool envKeyPresent,
+    required bool platformUrlPresent,
+    required bool platformKeyPresent,
+  }) async {
+    if (_ready) return;
+    if (_coreInitInFlight != null) {
+      await _coreInitInFlight;
+      return;
+    }
+
+    _coreInitInFlight = () async {
       // Permit reintentos si la primera inicializacion fallo.
       if (_initAttempted && !_ready) {
         if (kDebugMode) {
@@ -58,9 +87,9 @@ class SupabaseManager {
         if (kDebugMode) {
           debugPrint(
             '[supabase] Faltan SUPABASE_URL o SUPABASE_ANON_KEY. Candidatos: '
-            'envUrl=${envUrl.isNotEmpty}, envKey=${envKey.isNotEmpty}, '
-            'platformUrl=${(platformEnv['SUPABASE_URL'] ?? '').isNotEmpty}, '
-            'platformKey=${(platformEnv['SUPABASE_ANON_KEY'] ?? '').isNotEmpty}',
+            'envUrl=$envUrlPresent, envKey=$envKeyPresent, '
+            'platformUrl=$platformUrlPresent, '
+            'platformKey=$platformKeyPresent',
           );
         }
         _ready = false;
@@ -81,9 +110,13 @@ class SupabaseManager {
         }
         _ready = false;
       }
-    }
+    }();
 
-    await _ensureAuth();
+    try {
+      await _coreInitInFlight;
+    } finally {
+      _coreInitInFlight = null;
+    }
   }
 
   Future<void> _ensureAuth() async {
@@ -158,16 +191,46 @@ class SupabaseManager {
   }
 }
 
+Future<Map<String, String>> _loadFileEnv() async {
+  final manager = SupabaseManager.instance;
+  final cached = manager._cachedFileEnv;
+  if (cached != null) return cached;
+  if (manager._envLoadInFlight != null) {
+    return manager._envLoadInFlight!;
+  }
+
+  manager._envLoadInFlight = () async {
+    final env = await _readEnvFromCandidates();
+    manager._cachedFileEnv = env;
+    return env;
+  }();
+
+  try {
+    return await manager._envLoadInFlight!;
+  } finally {
+    manager._envLoadInFlight = null;
+  }
+}
+
 String _readDefine(String key) {
   switch (key) {
     case 'SUPABASE_URL':
       return const String.fromEnvironment('SUPABASE_URL', defaultValue: '');
     case 'SUPABASE_ANON_KEY':
-      return const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+      return const String.fromEnvironment(
+        'SUPABASE_ANON_KEY',
+        defaultValue: '',
+      );
     case 'SUPABASE_USER_EMAIL':
-      return const String.fromEnvironment('SUPABASE_USER_EMAIL', defaultValue: '');
+      return const String.fromEnvironment(
+        'SUPABASE_USER_EMAIL',
+        defaultValue: '',
+      );
     case 'SUPABASE_USER_PASSWORD':
-      return const String.fromEnvironment('SUPABASE_USER_PASSWORD', defaultValue: '');
+      return const String.fromEnvironment(
+        'SUPABASE_USER_PASSWORD',
+        defaultValue: '',
+      );
     case 'R2_ACCOUNT_ID':
       return const String.fromEnvironment('R2_ACCOUNT_ID', defaultValue: '');
     case 'R2_ACCESS_KEY':

@@ -233,7 +233,8 @@ class _ReviewPageState extends State<ReviewPage> {
     final resolved = await _cloud.resolveVideoUrl(path);
     debugPrint('Intentando cargar video: $path');
 
-    final isRemote = resolved.startsWith('http://') || resolved.startsWith('https://');
+    final isRemote =
+        resolved.startsWith('http://') || resolved.startsWith('https://');
     try {
       VideoPlayerController ctrl;
       if (isRemote) {
@@ -459,7 +460,7 @@ class _ReviewPageState extends State<ReviewPage> {
     }
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp4', 'mkv', 'mov'],
+      allowedExtensions: _allowedVideoExtensions,
       withData: false,
     );
     if (res == null || res.files.isEmpty) return;
@@ -484,6 +485,11 @@ class _ReviewPageState extends State<ReviewPage> {
       _showSnack('No se pudo actualizar el video.');
     }
   }
+
+  List<String> get _allowedVideoExtensions =>
+      defaultTargetPlatform == TargetPlatform.android
+      ? const ['mp4']
+      : const ['mp4', 'mkv', 'mov'];
 
   void _showSnack(String message) {
     if (!mounted) return;
@@ -555,10 +561,14 @@ class _ReviewPageState extends State<ReviewPage> {
     } catch (_) {}
   }
 
-  Future<String?> _promptEdit(String title, String initial) async {
+  Future<String?> _promptEdit(
+    SubtitleLine line,
+    String title,
+    String initial,
+  ) async {
     return showDialog<String>(
       context: context,
-      builder: (_) => _EditDialog(title: title, initial: initial),
+      builder: (_) => _EditDialog(title: title, initial: initial, line: line),
     );
   }
 
@@ -567,7 +577,7 @@ class _ReviewPageState extends State<ReviewPage> {
     String source,
     String current,
   ) async {
-    final edited = await _promptEdit('Editar $source', current);
+    final edited = await _promptEdit(line, 'Editar $source', current);
     if (edited == null) return;
     await _svc.setCandidateText(
       lineId: line.lineId,
@@ -772,7 +782,10 @@ Si dudas, prioriza estas grafías tal cual.
     }
   }
 
-  Future<void> _refineVoiceWithOpenAi(Project project, SubtitleLine line) async {
+  Future<void> _refineVoiceWithOpenAi(
+    Project project,
+    SubtitleLine line,
+  ) async {
     final settings = SettingsService.instance;
     if (!settings.hasOpenAiKey) {
       if (!mounted) return;
@@ -952,14 +965,15 @@ Si dudas, prioriza estas grafías tal cual.
                             final minPaneWidth = availableWidth < 520
                                 ? math.max(120.0, availableWidth * 0.28)
                                 : 220.0;
-                            final leftWidth =
-                                (availableWidth * _topPaneRatio).clamp(
-                                      minPaneWidth,
-                                      math.max(
-                                        minPaneWidth,
-                                        availableWidth - minPaneWidth,
-                                      ),
-                                    ).toDouble();
+                            final leftWidth = (availableWidth * _topPaneRatio)
+                                .clamp(
+                                  minPaneWidth,
+                                  math.max(
+                                    minPaneWidth,
+                                    availableWidth - minPaneWidth,
+                                  ),
+                                )
+                                .toDouble();
                             final rightWidth = math.max(
                               minPaneWidth,
                               availableWidth - leftWidth,
@@ -976,16 +990,23 @@ Si dudas, prioriza estas grafías tal cual.
                                       initFuture: _videoInit,
                                       error: _videoError,
                                       videoPath: _videoPath,
-                                      subtitle: _currentSubtitleText(_currentLine),
+                                      subtitle: _currentSubtitleText(
+                                        _currentLine,
+                                      ),
                                       lineTimings: timings,
                                       getLineText: _textFromTiming,
                                       subtitleStartMs: _currentLine?.startMs,
                                       subtitleEndMs: _currentLine?.endMs,
                                       height: _videoHeight,
                                       onDragResize: (delta) {
-                                        final next = (_videoHeight + delta * 0.8)
-                                            .clamp(140, 520);
-                                        setState(() => _videoHeight = next.toDouble());
+                                        final next =
+                                            (_videoHeight + delta * 0.8).clamp(
+                                              140,
+                                              520,
+                                            );
+                                        setState(
+                                          () => _videoHeight = next.toDouble(),
+                                        );
                                       },
                                       onBack: () => _nudgeVideo(
                                         const Duration(seconds: -5),
@@ -1001,7 +1022,8 @@ Si dudas, prioriza estas grafías tal cual.
                                         const Duration(seconds: 5),
                                       ),
                                       onPrevLine: () => _gotoPrevious(project),
-                                      onNextLine: () => _gotoNext(project, total),
+                                      onNextLine: () =>
+                                          _gotoNext(project, total),
                                       onHeightChanged: (h) =>
                                           setState(() => _videoHeight = h),
                                     ),
@@ -1012,13 +1034,15 @@ Si dudas, prioriza estas grafías tal cual.
                                       behavior: HitTestBehavior.translucent,
                                       onHorizontalDragUpdate: (details) {
                                         if (availableWidth <= 0) return;
-                                        final next = ((leftWidth + details.delta.dx) /
-                                                availableWidth)
-                                            .clamp(
-                                              minPaneWidth / availableWidth,
-                                              (availableWidth - minPaneWidth) /
-                                                  availableWidth,
-                                            );
+                                        final next =
+                                            ((leftWidth + details.delta.dx) /
+                                                    availableWidth)
+                                                .clamp(
+                                                  minPaneWidth / availableWidth,
+                                                  (availableWidth -
+                                                          minPaneWidth) /
+                                                      availableWidth,
+                                                );
                                         setState(() {
                                           _topPaneRatio = next.toDouble();
                                         });
@@ -1029,12 +1053,11 @@ Si dudas, prioriza estas grafías tal cual.
                                           child: Container(
                                             width: 6,
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .outlineVariant,
-                                              borderRadius: BorderRadius.circular(
-                                                999,
-                                              ),
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.outlineVariant,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
                                             ),
                                             child: const Center(
                                               child: RotatedBox(
@@ -1053,8 +1076,9 @@ Si dudas, prioriza estas grafías tal cual.
                                   SizedBox(
                                     width: rightWidth,
                                     child: _TranscriberPromptPanel(
-                                      promptText:
-                                          _currentPromptText(_currentLine),
+                                      promptText: _currentPromptText(
+                                        _currentLine,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1088,14 +1112,14 @@ Si dudas, prioriza estas grafías tal cual.
                                   final sttAvailable = _speech.available.value;
                                   final statusText =
                                       voiceMode == VoiceInputMode.openai
-                                          ? (_recBusy
-                                              ? 'Procesando grabacion...'
-                                              : (_isRecording
+                                      ? (_recBusy
+                                            ? 'Procesando grabacion...'
+                                            : (_isRecording
                                                   ? 'Grabando para OpenAI...'
                                                   : 'Listo para grabar.'))
-                                          : (!sttAvailable
-                                              ? 'STT local no disponible (Windows beta).'
-                                              : (_speech.isListening
+                                      : (!sttAvailable
+                                            ? 'STT local no disponible (Windows beta).'
+                                            : (_speech.isListening
                                                   ? 'Escuchando...'
                                                   : 'Listo para dictar.'));
 
@@ -1152,10 +1176,10 @@ Si dudas, prioriza estas grafías tal cual.
                                   onPressed: currentLine == null || _recBusy
                                       ? null
                                       : () => _toggleVoiceInput(
-                                            project,
-                                            currentLine,
-                                            total,
-                                          ),
+                                          project,
+                                          currentLine,
+                                          total,
+                                        ),
                                   child: const Icon(Icons.mic),
                                 ),
                               ),
@@ -1178,7 +1202,9 @@ Si dudas, prioriza estas grafías tal cual.
     if (!_cloud.isReady) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Supabase no disponible (config/auth).')),
+          const SnackBar(
+            content: Text('Supabase no disponible (config/auth).'),
+          ),
         );
       }
       return;
@@ -1226,8 +1252,7 @@ Si dudas, prioriza estas grafías tal cual.
           )
           .timeout(
             const Duration(minutes: 5),
-            onTimeout: () =>
-                throw TimeoutException('cloud save timeout'),
+            onTimeout: () => throw TimeoutException('cloud save timeout'),
           );
       ok = true;
     } on TimeoutException {
@@ -1241,9 +1266,9 @@ Si dudas, prioriza estas grafías tal cual.
     } on CloudSyncException catch (e) {
       debugPrint('save cloud error [${e.code}]: ${e.debugMessage ?? e}');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.userMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.userMessage)));
       }
     } catch (e) {
       debugPrint('save cloud error: $e');
@@ -2010,9 +2035,7 @@ List<InlineSpan> _buildLineLimitSpans(
 }
 
 class _LineLimitPreviewText extends StatelessWidget {
-  const _LineLimitPreviewText({
-    required this.text,
-  });
+  const _LineLimitPreviewText({required this.text});
 
   final String text;
 
@@ -2033,9 +2056,14 @@ class _LineLimitPreviewText extends StatelessWidget {
 }
 
 class _EditDialog extends StatefulWidget {
-  const _EditDialog({required this.title, required this.initial});
+  const _EditDialog({
+    required this.title,
+    required this.initial,
+    required this.line,
+  });
   final String title;
   final String initial;
+  final SubtitleLine line;
 
   @override
   State<_EditDialog> createState() => _EditDialogState();
@@ -2047,8 +2075,9 @@ class _EditDialogState extends State<_EditDialog> {
 
   late final _LineLimitHighlightController _controller =
       _LineLimitHighlightController(
-          text: widget.initial, maxCharsPerLine: _lineLimit)
-        ..addListener(_onTextChanged);
+        text: widget.initial,
+        maxCharsPerLine: _lineLimit,
+      )..addListener(_onTextChanged);
 
   void _onTextChanged() {
     if (mounted) setState(() {});
@@ -2056,6 +2085,44 @@ class _EditDialogState extends State<_EditDialog> {
 
   List<int> get _lineCharacterCounts =>
       _controller.text.split('\n').map((line) => line.length).toList();
+
+  double get _cps => _LineCard._calcCps(widget.line, _controller.text);
+
+  Color? get _cpsColor => _LineCard._cpsColor(_cps);
+
+  Map<ShortcutActivator, Intent> get _editorShortcuts {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return {
+        const SingleActivator(LogicalKeyboardKey.enter):
+            const _InsertNewlineIntent(),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter):
+            const _InsertNewlineIntent(),
+        const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+            const _InsertNewlineIntent(),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+            const _InsertNewlineIntent(),
+        const SingleActivator(LogicalKeyboardKey.enter, control: true):
+            const _InsertNewlineIntent(),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
+            const _InsertNewlineIntent(),
+      };
+    }
+
+    return {
+      const SingleActivator(LogicalKeyboardKey.enter):
+          const _SubmitEditIntent(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter):
+          const _SubmitEditIntent(),
+      const SingleActivator(LogicalKeyboardKey.enter, shift: true):
+          const _InsertNewlineIntent(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
+          const _InsertNewlineIntent(),
+      const SingleActivator(LogicalKeyboardKey.enter, control: true):
+          const _InsertNewlineIntent(),
+      const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
+          const _InsertNewlineIntent(),
+    };
+  }
 
   void _insertNewline() {
     final value = _controller.value;
@@ -2089,20 +2156,7 @@ class _EditDialogState extends State<_EditDialog> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 220),
           child: Shortcuts(
-            shortcuts: {
-              const SingleActivator(LogicalKeyboardKey.enter):
-                  const _SubmitEditIntent(),
-              const SingleActivator(LogicalKeyboardKey.numpadEnter):
-                  const _SubmitEditIntent(),
-              const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-                  const _InsertNewlineIntent(),
-              const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
-                  const _InsertNewlineIntent(),
-              const SingleActivator(LogicalKeyboardKey.enter, control: true):
-                  const _InsertNewlineIntent(),
-              const SingleActivator(LogicalKeyboardKey.numpadEnter, control: true):
-                  const _InsertNewlineIntent(),
-            },
+            shortcuts: _editorShortcuts,
             child: Actions(
               actions: {
                 _SubmitEditIntent: CallbackAction<_SubmitEditIntent>(
@@ -2118,44 +2172,79 @@ class _EditDialogState extends State<_EditDialog> {
                   },
                 ),
               },
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: SizedBox(
-                      width: 36,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
-                          for (final count in _lineCharacterCounts)
-                            Text(
-                              '$count',
-                              style: _editorTextStyle.copyWith(
-                                color: count <= _lineLimit
-                                    ? Colors.green
-                                    : Colors.red,
+                          if (_cps > 0 && _cpsColor != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
                               ),
+                              decoration: BoxDecoration(
+                                color: _cpsColor!.withAlpha(
+                                  (0.15 * 255).round(),
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text('CPS ${_cps.toStringAsFixed(1)}'),
                             ),
+                          Text(
+                            'Limite por linea: $_lineLimit',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      autofocus: true,
-                      minLines: 2,
-                      maxLines: 6,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      style: _editorTextStyle,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: SizedBox(
+                          width: 36,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              for (final count in _lineCharacterCounts)
+                                Text(
+                                  '$count',
+                                  style: _editorTextStyle.copyWith(
+                                    color: count <= _lineLimit
+                                        ? Colors.green
+                                        : Colors.red,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          autofocus: true,
+                          minLines: 2,
+                          maxLines: 6,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: _editorTextStyle,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

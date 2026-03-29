@@ -25,8 +25,9 @@ class ProjectImportSheet extends StatefulWidget {
 class _ProjectImportSheetState extends State<ProjectImportSheet> {
   String _log = '';
   bool _busy = false;
-  late final TextEditingController _folderCtrl =
-      TextEditingController(text: widget.initialFolder ?? '');
+  late final TextEditingController _folderCtrl = TextEditingController(
+    text: widget.initialFolder ?? '',
+  );
   final TextEditingController _episodeCtrl = TextEditingController();
 
   PlatformFile? _baseFile;
@@ -101,12 +102,17 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
   Future<void> _pickVideo() async {
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp4', 'mkv', 'mov'],
+      allowedExtensions: _allowedVideoExtensions,
       withData: false,
     );
     if (res == null || res.files.isEmpty) return;
     setState(() => _videoFile = res.files.single);
   }
+
+  List<String> get _allowedVideoExtensions =>
+      defaultTargetPlatform == TargetPlatform.android
+      ? const ['mp4']
+      : const ['mp4', 'mkv', 'mov'];
 
   Future<void> _pickScriptEs() async {
     final res = await FilePicker.platform.pickFiles(
@@ -179,21 +185,23 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Nuevo proyecto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            const Text(
+              'Nuevo proyecto',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 12),
             if (widget.folderOptions.isNotEmpty)
               DropdownButtonFormField<String>(
-                initialValue: (widget.initialFolder ?? '').isNotEmpty &&
+                initialValue:
+                    (widget.initialFolder ?? '').isNotEmpty &&
                         widget.folderOptions.contains(widget.initialFolder)
                     ? widget.initialFolder
                     : null,
                 items: [
-                  const DropdownMenuItem(
-                    value: '',
-                    child: Text('Sin carpeta'),
+                  const DropdownMenuItem(value: '', child: Text('Sin carpeta')),
+                  ...widget.folderOptions.map(
+                    (f) => DropdownMenuItem(value: f, child: Text(f)),
                   ),
-                  ...widget.folderOptions
-                      .map((f) => DropdownMenuItem(value: f, child: Text(f))),
                 ],
                 decoration: const InputDecoration(
                   labelText: 'Seleccionar carpeta',
@@ -222,7 +230,8 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
                                 hintText: 'Nombre de carpeta',
                               ),
                               autofocus: true,
-                              onSubmitted: (v) => Navigator.pop(context, v.trim()),
+                              onSubmitted: (v) =>
+                                  Navigator.pop(context, v.trim()),
                             ),
                             actions: [
                               TextButton(
@@ -230,7 +239,8 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
                                 child: const Text('Cancelar'),
                               ),
                               FilledButton(
-                                onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+                                onPressed: () =>
+                                    Navigator.pop(context, ctrl.text.trim()),
                                 child: const Text('Crear'),
                               ),
                             ],
@@ -266,7 +276,9 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
             if (_engineFiles.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('Motores: ${_engineFiles.map((f) => f.name).join(', ')}'),
+                child: Text(
+                  'Motores: ${_engineFiles.map((f) => f.name).join(', ')}',
+                ),
               ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -299,7 +311,9 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
             const SizedBox(height: 8),
             Text(
               _log,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

@@ -54,10 +54,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
   }
 
   Future<bool> _canOpenProject(ProjectSummary p) async {
-    if (_syncingAll) {
-      _showSnack('Proyecto aún no sincronizado.');
-      return false;
-    }
     return true;
   }
 
@@ -68,7 +64,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (widget.autoSyncOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeCheckAndroidUpdate());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeCheckAndroidUpdate(),
+    );
   }
 
   Future<void> _loadManualFolders() async {
@@ -91,20 +89,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
     _autoSyncStarted = true;
     await _cloud.ensureInit();
     if (!_cloud.isReady || !mounted) return;
-    _syncingAll = true;
+    setState(() => _syncingAll = true);
     try {
-      await _runWithProgress(
-        context,
-        initial: 'Sincronizando proyectos...',
-        action: (update) async {
-          await _cloud.syncAllProjects(
-            onProgress: (v, stage) {
-              final pct = (v * 100).toInt();
-              update('$stage ($pct %)');
-            },
-          );
-        },
-      );
+      await _cloud.syncAllProjects();
       if (mounted) {
         setState(() {});
         await _loadManualFolders();
@@ -130,7 +117,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
     const checker = AppUpdateChecker(
       packageName: 'com.kingdomm.voicex',
-      storeUrl: 'https://play.google.com/store/apps/details?id=com.kingdomm.voicex',
+      storeUrl:
+          'https://play.google.com/store/apps/details?id=com.kingdomm.voicex',
     );
     final result = await checker.checkForUpdate();
     if (!mounted || result == null) return;
@@ -141,8 +129,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
     }
 
     if (!mounted) return;
-    final versionSuffix =
-        result.currentVersion.isEmpty ? '' : ' (tienes v${result.currentVersion})';
+    final versionSuffix = result.currentVersion.isEmpty
+        ? ''
+        : ' (tienes v${result.currentVersion})';
     final playCode = result.availableVersionCode != null
         ? ' (Play code ${result.availableVersionCode})'
         : '';
@@ -191,9 +180,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     );
 
     try {
-      await action(
-        (m) => notifier.value = m,
-      ).timeout(
+      await action((m) => notifier.value = m).timeout(
         const Duration(minutes: 5),
         onTimeout: () => throw TimeoutException('operation timeout'),
       );
@@ -424,6 +411,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
             tooltip: 'Sincronizar con cloud',
             icon: const Icon(Icons.sync),
             onPressed: () async {
+              if (_syncingAll) {
+                _showSnack('Ya hay una sincronizacion en curso.');
+                return;
+              }
+              if (mounted) {
+                setState(() => _syncingAll = true);
+              }
               await _cloud.ensureInit();
               if (!_cloud.isReady) {
                 if (context.mounted) {
@@ -432,6 +426,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       content: Text('Supabase no disponible (config/auth).'),
                     ),
                   );
+                }
+                if (mounted) {
+                  setState(() => _syncingAll = false);
                 }
                 return;
               }
@@ -463,16 +460,24 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 // El mensaje se muestra en _runWithProgress.
               } on CloudSyncException catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.userMessage)),
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(e.userMessage)));
+                debugPrint(
+                  'sync button cloud error [${e.code}]: ${e.debugMessage ?? e}',
                 );
-                debugPrint('sync button cloud error [${e.code}]: ${e.debugMessage ?? e}');
               } catch (e) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Error al sincronizar con cloud.')),
+                  const SnackBar(
+                    content: Text('Error al sincronizar con cloud.'),
+                  ),
                 );
                 debugPrint('sync button error: $e');
+              } finally {
+                if (mounted) {
+                  setState(() => _syncingAll = false);
+                }
               }
             },
           ),
@@ -807,10 +812,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
               } on TimeoutException {
                 // El mensaje ya se muestra en _runWithProgress.
               } on CloudSyncException catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(e.userMessage)),
+                messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
+                debugPrint(
+                  'sync_up cloud error [${e.code}]: ${e.debugMessage ?? e}',
                 );
-                debugPrint('sync_up cloud error [${e.code}]: ${e.debugMessage ?? e}');
               } catch (e) {
                 messenger.showSnackBar(
                   const SnackBar(content: Text('Error al subir proyecto.')),
@@ -849,10 +854,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
               } on TimeoutException {
                 // El mensaje ya se muestra en _runWithProgress.
               } on CloudSyncException catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(e.userMessage)),
+                messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
+                debugPrint(
+                  'sync_down cloud error [${e.code}]: ${e.debugMessage ?? e}',
                 );
-                debugPrint('sync_down cloud error [${e.code}]: ${e.debugMessage ?? e}');
               } catch (e) {
                 messenger.showSnackBar(
                   const SnackBar(content: Text('Error al descargar proyecto.')),
@@ -916,7 +921,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
                     messenger.showSnackBar(
                       SnackBar(content: Text(e.userMessage)),
                     );
-                    debugPrint('archive cloud error [${e.code}]: ${e.debugMessage ?? e}');
+                    debugPrint(
+                      'archive cloud error [${e.code}]: ${e.debugMessage ?? e}',
+                    );
                   } catch (e) {
                     debugPrint('archive sync error: $e');
                   }

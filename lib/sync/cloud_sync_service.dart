@@ -1457,6 +1457,7 @@ class CloudSyncService {
     if (url.isEmpty) return url;
     if (!_looksLikeUrl(url)) return url;
     await _ensureR2EnvLoaded();
+    if (_isPublicR2Url(url)) return url;
     try {
       final signed = _maybeSignR2Get(Uri.parse(url));
       return signed.toString();
@@ -1493,6 +1494,19 @@ class CloudSyncService {
     if (key == null) return null;
     final base = publicBase.trimRight().replaceAll(RegExp(r'/+$'), '');
     return '$base/$key';
+  }
+
+  bool _isPublicR2Url(String url) {
+    final cfg = _r2Config;
+    final publicBase = cfg?.publicBase;
+    if (publicBase == null || publicBase.isEmpty) return false;
+    try {
+      final target = Uri.parse(url);
+      final publicUri = Uri.parse(publicBase);
+      return target.host == publicUri.host;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _ensureR2EnvLoaded() async {
