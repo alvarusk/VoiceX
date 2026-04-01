@@ -4,6 +4,7 @@ import 'package:cross_file/cross_file.dart';
 import 'package:drift/drift.dart';
 
 import '../db/app_db.dart';
+import '../settings/settings_service.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -14,8 +15,12 @@ class ExportService {
       db.projects,
     )..where((t) => t.projectId.equals(projectId))).getSingle();
 
+    await SettingsService.instance.init();
+    final preferredName =
+        SettingsService.instance.getProjectExportName(projectId) ??
+        project.baseAssPath;
     final outName = _buildOutputName(
-      basePath: project.baseAssPath,
+      basePath: preferredName,
       fallbackTitle: project.title,
     );
     final lines =

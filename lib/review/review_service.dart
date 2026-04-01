@@ -138,11 +138,16 @@ class ReviewService {
       db.projects,
     )..where((t) => t.projectId.equals(projectId))).go();
     await SettingsService.instance.markProjectDeleted(projectId);
+    await SettingsService.instance.clearProjectExportMetadata(projectId);
   }
 
   Future<void> archiveProject(String projectId) async {
-    final project = await (db.select(db.projects)..where((t) => t.projectId.equals(projectId))).getSingleOrNull();
-    final files = await (db.select(db.projectFiles)..where((t) => t.projectId.equals(projectId))).get();
+    final project = await (db.select(
+      db.projects,
+    )..where((t) => t.projectId.equals(projectId))).getSingleOrNull();
+    final files = await (db.select(
+      db.projectFiles,
+    )..where((t) => t.projectId.equals(projectId))).get();
 
     // Borra ficheros locales grandes.
     Future<void> deleteIfLocal(String path) async {
@@ -163,9 +168,13 @@ class ReviewService {
       await deleteIfLocal(project.baseAssPath);
     }
 
-    await (db.delete(db.projectFiles)..where((t) => t.projectId.equals(projectId))).go();
+    await (db.delete(
+      db.projectFiles,
+    )..where((t) => t.projectId.equals(projectId))).go();
     final now = DateTime.now().millisecondsSinceEpoch;
-    await (db.update(db.projects)..where((t) => t.projectId.equals(projectId))).write(
+    await (db.update(
+      db.projects,
+    )..where((t) => t.projectId.equals(projectId))).write(
       ProjectsCompanion(
         archived: const Value(true),
         baseAssPath: const Value(''),
@@ -390,10 +399,7 @@ class ReviewService {
     await projDir.create(recursive: true);
 
     final ext = p.extension(sourcePath);
-    final dst = p.join(
-      projDir.path,
-      'video${ext.isNotEmpty ? ext : '.mp4'}',
-    );
+    final dst = p.join(projDir.path, 'video${ext.isNotEmpty ? ext : '.mp4'}');
     await File(sourcePath).copy(dst);
 
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -417,16 +423,15 @@ class ReviewService {
 
     if (existing != null) {
       await deleteIfLocal(existing.assPath);
-      await (db.update(db.projectFiles)..where(
-            (t) => t.fileId.equals(existing.fileId),
-          )).write(
-        ProjectFilesCompanion(
-          assPath: Value(dst),
-          importedAtMs: Value(now),
-        ),
+      await (db.update(
+        db.projectFiles,
+      )..where((t) => t.fileId.equals(existing.fileId))).write(
+        ProjectFilesCompanion(assPath: Value(dst), importedAtMs: Value(now)),
       );
     } else {
-      await db.into(db.projectFiles).insert(
+      await db
+          .into(db.projectFiles)
+          .insert(
             ProjectFilesCompanion.insert(
               fileId: const Uuid().v4(),
               projectId: projectId,
@@ -439,8 +444,7 @@ class ReviewService {
           );
     }
 
-    await (db.update(db.projects)
-          ..where((t) => t.projectId.equals(projectId)))
+    await (db.update(db.projects)..where((t) => t.projectId.equals(projectId)))
         .write(ProjectsCompanion(updatedAtMs: Value(now)));
   }
 
@@ -601,21 +605,16 @@ class ReviewService {
       final exp = ExportService(db);
       final xfile = await exp.exportCleanAssXFile(projectId);
       if (Platform.isWindows) {
-        final destDir = Directory(
-          r'C:\Users\ajime\OneDrive\Documentos\PENDING',
-        );
-        await destDir.create(recursive: true);
-        final destPath = p.join(destDir.path, p.basename(xfile.path));
-        await File(xfile.path).copy(destPath);
+        final exportDir = Directory(p.dirname(xfile.path));
         try {
-          await Process.start('explorer', [destDir.path]);
+          await Process.start('explorer', [exportDir.path]);
         } catch (_) {
-          // best-effort; si falla igual dejamos el archivo copiado
+          // best-effort; si falla igual dejamos el archivo exportado
         }
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('ASS exportado en $destPath')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('ASS exportado en ${xfile.path}')),
+          );
         }
       } else {
         await Share.shareXFiles(
@@ -721,10 +720,11 @@ class ReviewService {
   }
 
   Future<List<LineTiming>> fetchLineTimings(String projectId) async {
-    final rows = await (db.select(db.subtitleLines)
-          ..where((t) => t.projectId.equals(projectId))
-          ..orderBy([(t) => OrderingTerm(expression: t.dialogueIndex)]))
-        .get();
+    final rows =
+        await (db.select(db.subtitleLines)
+              ..where((t) => t.projectId.equals(projectId))
+              ..orderBy([(t) => OrderingTerm(expression: t.dialogueIndex)]))
+            .get();
     return rows
         .map(
           (r) => LineTiming(

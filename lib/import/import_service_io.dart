@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../db/app_db.dart';
+import '../settings/settings_service.dart';
 import 'ass_parser.dart';
 import 'engine.dart';
 
@@ -32,6 +33,8 @@ class ImportService {
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final projectId = _uuid.v4();
+    final exportDir = _preferredExportDirectory(baseAss, engineAssFiles);
+    final exportName = _preferredExportName(baseAss, engineAssFiles);
 
     // Carpeta interna del proyecto
     final supportDir =
@@ -247,7 +250,44 @@ class ImportService {
       });
     }
 
+    await SettingsService.instance.setProjectExportMetadata(
+      projectId,
+      directory: exportDir,
+      fileName: exportName,
+    );
+
     return projectId;
+  }
+
+  String? _preferredExportDirectory(
+    PlatformFile baseAss,
+    Map<Engine, PlatformFile> engineAssFiles,
+  ) {
+    for (final file in [...engineAssFiles.values, baseAss]) {
+      final path = file.path?.trim() ?? '';
+      if (path.isNotEmpty) {
+        return p.dirname(path);
+      }
+    }
+    return null;
+  }
+
+  String _preferredExportName(
+    PlatformFile baseAss,
+    Map<Engine, PlatformFile> engineAssFiles,
+  ) {
+    final candidates = <String>[
+      baseAss.name,
+      ...engineAssFiles.values.map((f) => f.name),
+    ].where((name) => name.trim().isNotEmpty);
+
+    final languageTagged = candidates.firstWhere(
+      (name) =>
+          RegExp(r'(ja-jp|zh-cn|en-us)', caseSensitive: false).hasMatch(name),
+      orElse: () => baseAss.name,
+    );
+
+    return languageTagged.trim().isEmpty ? 'base.ass' : languageTagged.trim();
   }
 
   String _makeLineId(

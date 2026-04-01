@@ -236,9 +236,15 @@ class _ReviewPageState extends State<ReviewPage> {
     final isRemote =
         resolved.startsWith('http://') || resolved.startsWith('https://');
     try {
+      final viewType = defaultTargetPlatform == TargetPlatform.android
+          ? VideoViewType.platformView
+          : VideoViewType.textureView;
       VideoPlayerController ctrl;
       if (isRemote) {
-        ctrl = VideoPlayerController.networkUrl(Uri.parse(resolved));
+        ctrl = VideoPlayerController.networkUrl(
+          Uri.parse(resolved),
+          viewType: viewType,
+        );
       } else {
         final file = File(resolved);
         if (!await file.exists()) {
@@ -249,7 +255,7 @@ class _ReviewPageState extends State<ReviewPage> {
           });
           return;
         }
-        ctrl = VideoPlayerController.file(file as dynamic);
+        ctrl = VideoPlayerController.file(file, viewType: viewType);
       }
       _videoController = ctrl;
       _videoPath = resolved;
@@ -957,6 +963,60 @@ Si dudas, prioriza estas grafías tal cual.
                       children: [
                         LayoutBuilder(
                           builder: (context, constraints) {
+                            final useStackedLayout =
+                                defaultTargetPlatform ==
+                                    TargetPlatform.android ||
+                                constraints.maxWidth < 720;
+
+                            if (useStackedLayout) {
+                              return Column(
+                                children: [
+                                  _VideoPanel(
+                                    controller: _videoController,
+                                    initFuture: _videoInit,
+                                    error: _videoError,
+                                    videoPath: _videoPath,
+                                    subtitle: _currentSubtitleText(
+                                      _currentLine,
+                                    ),
+                                    lineTimings: timings,
+                                    getLineText: _textFromTiming,
+                                    subtitleStartMs: _currentLine?.startMs,
+                                    subtitleEndMs: _currentLine?.endMs,
+                                    height: _videoHeight,
+                                    onDragResize: (delta) {
+                                      final next = (_videoHeight + delta * 0.8)
+                                          .clamp(180, 520);
+                                      setState(
+                                        () => _videoHeight = next.toDouble(),
+                                      );
+                                    },
+                                    onBack: () => _nudgeVideo(
+                                      const Duration(seconds: -5),
+                                    ),
+                                    onPlayPause: _togglePlayPause,
+                                    onPlaySegment: () {
+                                      final line = _currentLine;
+                                      if (line != null) {
+                                        _playSegment(line);
+                                      }
+                                    },
+                                    onForward: () =>
+                                        _nudgeVideo(const Duration(seconds: 5)),
+                                    onPrevLine: () => _gotoPrevious(project),
+                                    onNextLine: () => _gotoNext(project, total),
+                                    onHeightChanged: (h) =>
+                                        setState(() => _videoHeight = h),
+                                  ),
+                                  _TranscriberPromptPanel(
+                                    promptText: _currentPromptText(
+                                      _currentLine,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }
+
                             const splitterWidth = 14.0;
                             final availableWidth = math.max(
                               0.0,

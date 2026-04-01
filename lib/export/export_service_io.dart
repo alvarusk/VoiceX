@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../db/app_db.dart';
+import '../settings/settings_service.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -24,9 +25,15 @@ class ExportService {
             .get();
 
     final basePath = project.baseAssPath;
+    await SettingsService.instance.init();
+    final preferredName =
+        SettingsService.instance.getProjectExportName(projectId) ?? basePath;
+    final preferredDir =
+        SettingsService.instance.getProjectExportDir(projectId) ??
+        _parentDirOf(basePath);
 
     final outName = _buildOutputName(
-      basePath: basePath,
+      basePath: preferredName,
       fallbackTitle: project.title,
     );
 
@@ -100,9 +107,7 @@ class ExportService {
       );
     }
 
-    final tmp = await getTemporaryDirectory();
-    final outDir = Directory(p.join(tmp.path, 'voicex_exports'));
-    await outDir.create(recursive: true);
+    final outDir = await _resolveOutputDirectory(preferredDir);
 
     final outPath = p.join(outDir.path, outName);
 
@@ -139,6 +144,30 @@ class ExportService {
       candidate = '$candidate.ass';
     }
     return candidate;
+  }
+
+  Future<Directory> _resolveOutputDirectory(String? preferredDir) async {
+    if (preferredDir != null && preferredDir.trim().isNotEmpty) {
+      try {
+        final dir = Directory(preferredDir.trim());
+        await dir.create(recursive: true);
+        return dir;
+      } catch (_) {}
+    }
+
+    final tmp = await getTemporaryDirectory();
+    final outDir = Directory(p.join(tmp.path, 'voicex_exports'));
+    await outDir.create(recursive: true);
+    return outDir;
+  }
+
+  String? _parentDirOf(String path) {
+    if (path.trim().isEmpty) return null;
+    try {
+      return p.dirname(path);
+    } catch (_) {
+      return null;
+    }
   }
 
   int _countDialogueLines(List<String> baseLines) {

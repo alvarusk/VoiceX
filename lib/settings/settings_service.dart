@@ -12,6 +12,8 @@ class SettingsService {
   SharedPreferences? _prefs;
   String? _deviceId;
   Map<String, String> _glossaryByFolder = {};
+  Map<String, String> _projectExportDirs = {};
+  Map<String, String> _projectExportNames = {};
   List<String> _manualFolders = [];
   int _manualFoldersUpdatedAtMs = 0;
   Map<String, int> _deletedProjects = {};
@@ -54,13 +56,35 @@ class SettingsService {
       );
     }
 
+    final rawExportDirs = _prefs?.getString('project_export_dirs');
+    if (rawExportDirs != null && rawExportDirs.isNotEmpty) {
+      try {
+        final map = (jsonDecode(rawExportDirs) as Map<String, dynamic>);
+        _projectExportDirs = map.map(
+          (k, v) => MapEntry(k, (v as String?)?.trim() ?? ''),
+        )..removeWhere((_, v) => v.isEmpty);
+      } catch (_) {
+        _projectExportDirs = {};
+      }
+    }
+
+    final rawExportNames = _prefs?.getString('project_export_names');
+    if (rawExportNames != null && rawExportNames.isNotEmpty) {
+      try {
+        final map = (jsonDecode(rawExportNames) as Map<String, dynamic>);
+        _projectExportNames = map.map(
+          (k, v) => MapEntry(k, (v as String?)?.trim() ?? ''),
+        )..removeWhere((_, v) => v.isEmpty);
+      } catch (_) {
+        _projectExportNames = {};
+      }
+    }
+
     final rawDeleted = _prefs?.getString('deleted_projects') ?? '';
     if (rawDeleted.isNotEmpty) {
       try {
         final map = (jsonDecode(rawDeleted) as Map<String, dynamic>);
-        _deletedProjects = map.map(
-          (k, v) => MapEntry(k, (v as int?) ?? 0),
-        );
+        _deletedProjects = map.map((k, v) => MapEntry(k, (v as int?) ?? 0));
       } catch (_) {
         _deletedProjects = {};
       }
@@ -119,6 +143,61 @@ class SettingsService {
   }
 
   bool get hasOpenAiKey => openAiKey.isNotEmpty;
+
+  String? getProjectExportDir(String projectId) {
+    final value = _projectExportDirs[projectId]?.trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  String? getProjectExportName(String projectId) {
+    final value = _projectExportNames[projectId]?.trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  Future<void> setProjectExportMetadata(
+    String projectId, {
+    String? directory,
+    String? fileName,
+  }) async {
+    await init();
+
+    final normalizedDir = directory?.trim() ?? '';
+    if (normalizedDir.isEmpty) {
+      _projectExportDirs.remove(projectId);
+    } else {
+      _projectExportDirs[projectId] = normalizedDir;
+    }
+
+    final normalizedName = fileName?.trim() ?? '';
+    if (normalizedName.isEmpty) {
+      _projectExportNames.remove(projectId);
+    } else {
+      _projectExportNames[projectId] = normalizedName;
+    }
+
+    await _prefs?.setString(
+      'project_export_dirs',
+      jsonEncode(_projectExportDirs),
+    );
+    await _prefs?.setString(
+      'project_export_names',
+      jsonEncode(_projectExportNames),
+    );
+  }
+
+  Future<void> clearProjectExportMetadata(String projectId) async {
+    await init();
+    _projectExportDirs.remove(projectId);
+    _projectExportNames.remove(projectId);
+    await _prefs?.setString(
+      'project_export_dirs',
+      jsonEncode(_projectExportDirs),
+    );
+    await _prefs?.setString(
+      'project_export_names',
+      jsonEncode(_projectExportNames),
+    );
+  }
 
   String get deviceId {
     if (_deviceId == null) {
@@ -233,8 +312,9 @@ class SettingsService {
       final manual =
           (payload['manual_folders'] as List?)?.cast<String>() ??
           const <String>[];
-      _manualFolders = ({for (final f in manual) f.trim()}
-        ..removeWhere((e) => e.isEmpty)).toList();
+      _manualFolders = ({
+        for (final f in manual) f.trim(),
+      }..removeWhere((e) => e.isEmpty)).toList();
       _manualFolders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       await prefs.setStringList('manual_folders', _manualFolders);
       _manualFoldersUpdatedAtMs =
@@ -250,10 +330,7 @@ class SettingsService {
           (payload['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
           <String, dynamic>{};
       _deletedProjects = raw.map((k, v) => MapEntry(k, (v as int?) ?? 0));
-      await prefs.setString(
-        'deleted_projects',
-        jsonEncode(_deletedProjects),
-      );
+      await prefs.setString('deleted_projects', jsonEncode(_deletedProjects));
       _deletedProjectsUpdatedAtMs =
           payload['deleted_projects_updated_at_ms'] as int? ?? remoteUpdated;
       await prefs.setInt(
@@ -291,10 +368,7 @@ class SettingsService {
     await init();
     _deletedProjects = Map<String, int>.from(deleted);
     _deletedProjectsUpdatedAtMs = updatedAtMs;
-    await _prefs?.setString(
-      'deleted_projects',
-      jsonEncode(_deletedProjects),
-    );
+    await _prefs?.setString('deleted_projects', jsonEncode(_deletedProjects));
     await _prefs?.setInt(
       'deleted_projects_updated_at_ms',
       _deletedProjectsUpdatedAtMs,
@@ -306,10 +380,7 @@ class SettingsService {
     final ts = deletedAtMs ?? DateTime.now().millisecondsSinceEpoch;
     _deletedProjects[projectId] = ts;
     _deletedProjectsUpdatedAtMs = ts;
-    await _prefs?.setString(
-      'deleted_projects',
-      jsonEncode(_deletedProjects),
-    );
+    await _prefs?.setString('deleted_projects', jsonEncode(_deletedProjects));
     await _prefs?.setInt(
       'deleted_projects_updated_at_ms',
       _deletedProjectsUpdatedAtMs,
