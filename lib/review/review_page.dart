@@ -1705,17 +1705,123 @@ class _TranscriberPromptPanel extends StatelessWidget {
                   ),
                 ),
                 child: SingleChildScrollView(
-                  child: Text(
-                    promptText.isEmpty
-                        ? 'Sin explicacion disponible en el segundo bloque {...}.'
-                        : promptText,
-                    style: const TextStyle(height: 1.4),
+                  child: Builder(
+                    builder: (context) {
+                      final baseStyle = DefaultTextStyle.of(context).style
+                          .copyWith(height: 1.4);
+                      final text = promptText.isEmpty
+                          ? 'Sin explicacion disponible en el segundo bloque {...}.'
+                          : promptText;
+                      return Text.rich(
+                        TextSpan(
+                          style: baseStyle,
+                          children: _buildPromptTextSpans(
+                            text,
+                            baseStyle: baseStyle,
+                            furiganaColor:
+                                colorScheme.onSurfaceVariant.withAlpha(
+                                  (0.9 * 255).round(),
+                                ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+final RegExp _furiganaPromptPattern = RegExp(
+  r'([一-龯々〆ヵヶ][一-龯々〆ヵヶぁ-ゖァ-ヺー]*)[\(（]([ぁ-ゖァ-ヺー・]+)[\)）]',
+);
+
+List<InlineSpan> _buildPromptTextSpans(
+  String text, {
+  required TextStyle baseStyle,
+  required Color furiganaColor,
+}) {
+  final spans = <InlineSpan>[];
+  var cursor = 0;
+
+  for (final match in _furiganaPromptPattern.allMatches(text)) {
+    if (match.start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, match.start)));
+    }
+
+    final surface = match.group(1);
+    final reading = match.group(2);
+    if (surface == null || reading == null) {
+      spans.add(TextSpan(text: match.group(0) ?? ''));
+      cursor = match.end;
+      continue;
+    }
+
+    spans.add(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: _RubyText(
+            surface: surface,
+            reading: reading,
+            baseStyle: baseStyle,
+            furiganaStyle: baseStyle.copyWith(
+              fontSize: (baseStyle.fontSize ?? 14) * 0.62,
+              height: 1,
+              color: furiganaColor,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    cursor = match.end;
+  }
+
+  if (cursor < text.length) {
+    spans.add(TextSpan(text: text.substring(cursor)));
+  }
+
+  if (spans.isEmpty) {
+    spans.add(TextSpan(text: text));
+  }
+
+  return spans;
+}
+
+class _RubyText extends StatelessWidget {
+  const _RubyText({
+    required this.surface,
+    required this.reading,
+    required this.baseStyle,
+    required this.furiganaStyle,
+  });
+
+  final String surface;
+  final String reading;
+  final TextStyle baseStyle;
+  final TextStyle furiganaStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$surface ($reading)',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(reading, style: furiganaStyle, textAlign: TextAlign.center),
+          Text(
+            surface,
+            style: baseStyle.copyWith(height: 1.1),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
