@@ -37,6 +37,8 @@ class _ReviewPageState extends State<ReviewPage> {
   String? _localeId;
   double _videoHeight = 260;
   double _topPaneRatio = 0.6;
+  bool _showVideoPanel = true;
+  bool _showPromptPanel = true;
   bool _sessionStarted = false;
   String _currentSubtitleText(SubtitleLine? line) {
     if (line == null) return '';
@@ -185,6 +187,10 @@ class _ReviewPageState extends State<ReviewPage> {
   @override
   void initState() {
     super.initState();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _videoHeight = 220;
+      _showPromptPanel = false;
+    }
     _initSpeechLocale();
     _speech.listening.addListener(() {
       if (mounted) setState(() {});
@@ -236,18 +242,10 @@ class _ReviewPageState extends State<ReviewPage> {
     final isRemote =
         resolved.startsWith('http://') || resolved.startsWith('https://');
     try {
-      final viewType = defaultTargetPlatform == TargetPlatform.android
-          ? VideoViewType.platformView
-          : VideoViewType.textureView;
-      VideoPlayerController ctrl;
-      if (isRemote) {
-        ctrl = VideoPlayerController.networkUrl(
-          Uri.parse(resolved),
-          viewType: viewType,
-        );
-      } else {
-        final file = File(resolved);
-        if (!await file.exists()) {
+      File? localFile;
+      if (!isRemote) {
+        localFile = File(resolved);
+        if (!await localFile.exists()) {
           debugPrint('Video no encontrado en ruta: $path');
           setState(() {
             _videoPath = '';
@@ -255,30 +253,60 @@ class _ReviewPageState extends State<ReviewPage> {
           });
           return;
         }
-        ctrl = VideoPlayerController.file(file, viewType: viewType);
       }
-      _videoController = ctrl;
-      _videoPath = resolved;
-      _videoInit = ctrl
-          .initialize()
-          .then((_) async {
-            await ctrl.setVolume(1.0);
-            setState(() {});
-          })
-          .catchError((err) {
-            debugPrint('Error al inicializar video: $err');
-            _videoError = true;
-            setState(() {});
-          });
 
-      await _videoInit;
-    } catch (e) {
+      final initCompleter = Completer<void>();
+      _videoInit = initCompleter.future;
+
+      Object? lastError;
+      for (final viewType in _videoViewTypesForCurrentPlatform()) {
+        final ctrl = isRemote
+            ? VideoPlayerController.networkUrl(
+                Uri.parse(resolved),
+                viewType: viewType,
+              )
+            : VideoPlayerController.file(localFile!, viewType: viewType);
+        try {
+          await ctrl.initialize();
+          await ctrl.setVolume(1.0);
+          _videoController = ctrl;
+          _videoPath = resolved;
+          if (!initCompleter.isCompleted) {
+            initCompleter.complete();
+          }
+          if (mounted) {
+            setState(() {});
+          }
+          return;
+        } catch (err) {
+          lastError = err;
+          debugPrint(
+            'Error al inicializar video (${viewType.name}) para $resolved: $err',
+          );
+          await ctrl.dispose();
+        }
+      }
+
+      throw lastError ?? StateError('No se pudo inicializar el video.');
+    } catch (e, st) {
       debugPrint('Error al preparar video: $e');
+      debugPrintStack(stackTrace: st);
       setState(() {
+        _videoController = null;
+        _videoInit = null;
         _videoError = true;
         _videoPath = path;
       });
     }
+  }
+
+  List<VideoViewType> _videoViewTypesForCurrentPlatform() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // `textureView` funcionaba en Android antes de la regresion; dejamos
+      // `platformView` como fallback por compatibilidad con otros dispositivos.
+      return const [VideoViewType.textureView, VideoViewType.platformView];
+    }
+    return const [VideoViewType.textureView];
   }
 
   Future<void> _seekVideoForIndex(String projectId, int idx) async {
@@ -969,50 +997,111 @@ Si dudas, prioriza estas grafías tal cual.
                                 constraints.maxWidth < 720;
 
                             if (useStackedLayout) {
+                              final mobilePromptHeight =
+                                  constraints.maxHeight.isFinite
+                                  ? (constraints.maxHeight * 0.24)
+                                        .clamp(120.0, 200.0)
+                                        .toDouble()
+                                  : 168.0;
                               return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  _VideoPanel(
-                                    controller: _videoController,
-                                    initFuture: _videoInit,
-                                    error: _videoError,
-                                    videoPath: _videoPath,
-                                    subtitle: _currentSubtitleText(
-                                      _currentLine,
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      12,
+                                      8,
+                                      12,
+                                      0,
                                     ),
-                                    lineTimings: timings,
-                                    getLineText: _textFromTiming,
-                                    subtitleStartMs: _currentLine?.startMs,
-                                    subtitleEndMs: _currentLine?.endMs,
-                                    height: _videoHeight,
-                                    onDragResize: (delta) {
-                                      final next = (_videoHeight + delta * 0.8)
-                                          .clamp(180, 520);
-                                      setState(
-                                        () => _videoHeight = next.toDouble(),
-                                      );
-                                    },
-                                    onBack: () => _nudgeVideo(
-                                      const Duration(seconds: -5),
-                                    ),
-                                    onPlayPause: _togglePlayPause,
-                                    onPlaySegment: () {
-                                      final line = _currentLine;
-                                      if (line != null) {
-                                        _playSegment(line);
-                                      }
-                                    },
-                                    onForward: () =>
-                                        _nudgeVideo(const Duration(seconds: 5)),
-                                    onPrevLine: () => _gotoPrevious(project),
-                                    onNextLine: () => _gotoNext(project, total),
-                                    onHeightChanged: (h) =>
-                                        setState(() => _videoHeight = h),
-                                  ),
-                                  _TranscriberPromptPanel(
-                                    promptText: _currentPromptText(
-                                      _currentLine,
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        FilterChip(
+                                          selected: _showVideoPanel,
+                                          label: const Text('Video'),
+                                          avatar: const Icon(
+                                            Icons.video_file,
+                                            size: 18,
+                                          ),
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showVideoPanel = selected;
+                                            });
+                                          },
+                                        ),
+                                        FilterChip(
+                                          selected: _showPromptPanel,
+                                          label: const Text('Prompt'),
+                                          avatar: const Icon(
+                                            Icons.notes,
+                                            size: 18,
+                                          ),
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              _showPromptPanel = selected;
+                                            });
+                                          },
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  if (_showVideoPanel)
+                                    _VideoPanel(
+                                      controller: _videoController,
+                                      initFuture: _videoInit,
+                                      error: _videoError,
+                                      videoPath: _videoPath,
+                                      subtitle: _currentSubtitleText(
+                                        _currentLine,
+                                      ),
+                                      lineTimings: timings,
+                                      getLineText: _textFromTiming,
+                                      subtitleStartMs: _currentLine?.startMs,
+                                      subtitleEndMs: _currentLine?.endMs,
+                                      height: _videoHeight,
+                                      onDragResize: (delta) {
+                                        final next =
+                                            (_videoHeight + delta * 0.8).clamp(
+                                              180,
+                                              520,
+                                            );
+                                        setState(
+                                          () => _videoHeight = next.toDouble(),
+                                        );
+                                      },
+                                      onBack: () => _nudgeVideo(
+                                        const Duration(seconds: -5),
+                                      ),
+                                      onPlayPause: _togglePlayPause,
+                                      onPlaySegment: () {
+                                        final line = _currentLine;
+                                        if (line != null) {
+                                          _playSegment(line);
+                                        }
+                                      },
+                                      onForward: () => _nudgeVideo(
+                                        const Duration(seconds: 5),
+                                      ),
+                                      onPrevLine: () => _gotoPrevious(project),
+                                      onNextLine: () =>
+                                          _gotoNext(project, total),
+                                      onHeightChanged: (h) =>
+                                          setState(() => _videoHeight = h),
+                                    ),
+                                  if (_showPromptPanel)
+                                    _TranscriberPromptPanel(
+                                      promptText: _currentPromptText(
+                                        _currentLine,
+                                      ),
+                                      maxHeight: mobilePromptHeight,
+                                      margin: const EdgeInsets.fromLTRB(
+                                        12,
+                                        0,
+                                        12,
+                                        8,
+                                      ),
+                                    ),
                                 ],
                               );
                             }
@@ -1664,18 +1753,63 @@ class _VideoPanel extends StatelessWidget {
 }
 
 class _TranscriberPromptPanel extends StatelessWidget {
-  const _TranscriberPromptPanel({required this.promptText});
+  const _TranscriberPromptPanel({
+    required this.promptText,
+    this.maxHeight,
+    this.margin = const EdgeInsets.fromLTRB(0, 8, 12, 8),
+  });
 
   final String promptText;
+  final double? maxHeight;
+  final EdgeInsetsGeometry margin;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final promptBody = Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withAlpha(
+          (0.45 * 255).round(),
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withAlpha((0.7 * 255).round()),
+        ),
+      ),
+      child: SingleChildScrollView(
+        child: Builder(
+          builder: (context) {
+            final baseStyle = DefaultTextStyle.of(
+              context,
+            ).style.copyWith(height: 1.4);
+            final text = promptText.isEmpty
+                ? 'Sin explicacion disponible en el segundo bloque {...}.'
+                : promptText;
+            return Text.rich(
+              TextSpan(
+                style: baseStyle,
+                children: _buildPromptTextSpans(
+                  text,
+                  baseStyle: baseStyle,
+                  furiganaColor: colorScheme.onSurfaceVariant.withAlpha(
+                    (0.9 * 255).round(),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
     return Card(
-      margin: const EdgeInsets.fromLTRB(0, 8, 12, 8),
+      margin: margin,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
+          mainAxisSize: maxHeight == null ? MainAxisSize.max : MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
@@ -1689,47 +1823,10 @@ class _TranscriberPromptPanel extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withAlpha(
-                    (0.45 * 255).round(),
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: colorScheme.outlineVariant.withAlpha(
-                      (0.7 * 255).round(),
-                    ),
-                  ),
-                ),
-                child: SingleChildScrollView(
-                  child: Builder(
-                    builder: (context) {
-                      final baseStyle = DefaultTextStyle.of(context).style
-                          .copyWith(height: 1.4);
-                      final text = promptText.isEmpty
-                          ? 'Sin explicacion disponible en el segundo bloque {...}.'
-                          : promptText;
-                      return Text.rich(
-                        TextSpan(
-                          style: baseStyle,
-                          children: _buildPromptTextSpans(
-                            text,
-                            baseStyle: baseStyle,
-                            furiganaColor:
-                                colorScheme.onSurfaceVariant.withAlpha(
-                                  (0.9 * 255).round(),
-                                ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
+            if (maxHeight == null)
+              Expanded(child: promptBody)
+            else
+              SizedBox(height: maxHeight, child: promptBody),
           ],
         ),
       ),
