@@ -117,7 +117,9 @@ class CloudSyncService {
   Future<int?> lastSyncedAt(String projectId) =>
       _prefs.getLastSynced(projectId);
 
-  Future<List<Map<String, dynamic>>> listRemoteProjects() async {
+  Future<List<Map<String, dynamic>>> listRemoteProjects({
+    bool includeArchived = true,
+  }) async {
     if (!isReady) return [];
     Future<List<Map<String, dynamic>>> selectRemote({
       required bool withFolder,
@@ -132,10 +134,11 @@ class CloudSyncService {
         'updated_at_ms',
       ];
       final columns = cols.join(',');
-      final res = await _client
-          .from('projects')
-          .select(columns)
-          .order('updated_at_ms', ascending: false);
+      dynamic query = _client.from('projects').select(columns);
+      if (!includeArchived && withArchived) {
+        query = query.eq('archived', false);
+      }
+      final res = await query.order('updated_at_ms', ascending: false);
       return (res as List).cast<Map<String, dynamic>>();
     }
 
@@ -176,6 +179,30 @@ class CloudSyncService {
     }
   }
 
+  Future<Set<String>> listRemoteArchivedProjectIds() async {
+    if (!isReady || !_supportsArchivedColumn) return const <String>{};
+    try {
+      final res = await _client
+          .from('projects')
+          .select('project_id')
+          .eq('archived', true);
+      return (res as List)
+          .cast<Map<String, dynamic>>()
+          .map((m) => m['project_id'] as String)
+          .toSet();
+    } on PostgrestException catch (e) {
+      if (_supportsArchivedColumn && _isMissingColumn(e, 'archived')) {
+        _supportsArchivedColumn = false;
+      } else {
+        debugPrint('listRemoteArchivedProjectIds error: $e');
+      }
+      return const <String>{};
+    } catch (e) {
+      debugPrint('listRemoteArchivedProjectIds error: $e');
+      return const <String>{};
+    }
+  }
+
   Future<void> deleteRemoteProject(String projectId) async {
     if (!isReady) return;
     try {
@@ -194,6 +221,7 @@ class CloudSyncService {
   /// Sincronización bidireccional: sube lo local más nuevo y baja lo remoto más nuevo.
   Future<void> syncAllProjects({
     void Function(double value, String stage)? onProgress,
+    bool includeArchived = true,
   }) async {
     if (!isReady) {
       throw CloudSyncException(
@@ -203,12 +231,24 @@ class CloudSyncService {
     }
     try {
       await _syncSettings(onProgress: onProgress);
-      final remote = await listRemoteProjects();
+      final remote = await listRemoteProjects(includeArchived: includeArchived);
+      final remoteArchivedIds = includeArchived
+          ? const <String>{}
+          : await listRemoteArchivedProjectIds();
       final remoteById = <String, Map<String, dynamic>>{
         for (final m in remote) (m['project_id'] as String): m,
       };
       final remoteIds = remoteById.keys.toSet();
-      var localRows = await db.select(db.projects).get();
+      final allLocalRows = await db.select(db.projects).get();
+      final localArchivedIds = includeArchived
+          ? const <String>{}
+          : allLocalRows
+                .where((p) => p.archived)
+                .map((p) => p.projectId)
+                .toSet();
+      var localRows = includeArchived
+          ? allLocalRows
+          : allLocalRows.where((p) => !p.archived).toList();
       var localIds = localRows.map((p) => p.projectId).toSet();
 
       final settings = SettingsService.instance;
@@ -233,7 +273,10 @@ class CloudSyncService {
       }
       final remoteIdsFiltered = remoteById.keys.toSet();
 
-      final totalOps = remoteIdsFiltered.union(localIds).length;
+      final remoteCandidateIds = includeArchived
+          ? remoteIdsFiltered
+          : remoteIdsFiltered.difference(localArchivedIds);
+      final totalOps = remoteCandidateIds.union(localIds).length;
       double done = 0;
       void bump(String stage) {
         done += 1;
@@ -245,7 +288,9 @@ class CloudSyncService {
         final remoteEntry = remoteById[local.projectId];
         final remoteUpdated = remoteEntry?['updated_at_ms'] as int? ?? 0;
         try {
-          if (remoteEntry == null) {
+          if (remoteEntry == null && remoteArchivedIds.contains(local.projectId)) {
+            bump('Omitiendo archivado ${local.projectId}');
+          } else if (remoteEntry == null) {
             await pushProject(local.projectId, onProgress: onProgress);
             bump('Subiendo (solo local) ${local.projectId}');
           } else if (local.updatedAtMs > remoteUpdated) {
@@ -262,7 +307,10 @@ class CloudSyncService {
         }
       }
 
-      for (final id in remoteIdsFiltered.difference(localIds)) {
+      final remoteOnlyIds = includeArchived
+          ? remoteIdsFiltered.difference(localIds)
+          : remoteIdsFiltered.difference(localIds).difference(localArchivedIds);
+      for (final id in remoteOnlyIds) {
         try {
           await pullProject(id, onProgress: onProgress);
           bump('Descargando $id');

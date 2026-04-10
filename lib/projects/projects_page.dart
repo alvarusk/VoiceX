@@ -91,7 +91,21 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (!_cloud.isReady || !mounted) return;
     setState(() => _syncingAll = true);
     try {
-      await _cloud.syncAllProjects();
+      await _runWithProgress(
+        context,
+        initial: 'Cargando proyectos...',
+        action: (update) async {
+          update('Cargando proyectos...');
+          await _cloud.syncAllProjects(
+            includeArchived: false,
+            onProgress: (v, stage) {
+              final pct = (v * 100).toStringAsFixed(0);
+              final pctInt = double.tryParse(pct)?.toInt() ?? 0;
+              update('$stage ($pctInt %)');
+            },
+          );
+        },
+      );
       if (mounted) {
         setState(() {});
         await _loadManualFolders();
@@ -440,6 +454,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   action: (update) async {
                     update('Sincronizando proyectos...');
                     await _cloud.syncAllProjects(
+                      includeArchived: true,
                       onProgress: (v, stage) {
                         final pct = (v * 100).toStringAsFixed(0);
                         final pctInt = double.tryParse(pct)?.toInt() ?? 0;
