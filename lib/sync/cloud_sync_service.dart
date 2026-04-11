@@ -57,6 +57,8 @@ class CloudSyncService {
   bool _supportsOwnerColumnProjects = true;
   bool _supportsOwnerColumnFiles = true;
   bool _supportsOwnerColumnLines = true;
+  bool _supportsArchivedColumnLines = true;
+  bool _supportsSubtitleLinesActiveView = true;
   final Map<String, _DirtyCacheEntry> _dirtyCache = {};
   Map<String, String> _fileEnv = const {};
   bool _fileEnvLoaded = false;
@@ -804,6 +806,9 @@ class CloudSyncService {
       'doubt': l.doubt,
       'updated_at_ms': l.updatedAtMs,
     };
+    if (_supportsArchivedColumnLines) {
+      map['archived'] = false;
+    }
     final ownerId = _ownerUserId;
     if (_supportsOwnerColumnLines && ownerId != null && ownerId.isNotEmpty) {
       map['owner_user_id'] = ownerId;
@@ -821,10 +826,24 @@ class CloudSyncService {
       try {
         await _client.from('subtitle_lines').upsert(chunk);
       } on PostgrestException catch (e) {
-        if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+        final missingOwner =
+            _supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id');
+        final missingArchived =
+            _supportsArchivedColumnLines && _isMissingColumn(e, 'archived');
+        if (missingOwner) {
           _supportsOwnerColumnLines = false;
+        }
+        if (missingArchived) {
+          _supportsArchivedColumnLines = false;
+        }
+        if (missingOwner || missingArchived) {
           for (final m in chunk) {
-            m.remove('owner_user_id');
+            if (missingOwner) {
+              m.remove('owner_user_id');
+            }
+            if (missingArchived) {
+              m.remove('archived');
+            }
           }
           await _client.from('subtitle_lines').upsert(chunk);
         } else {
@@ -925,19 +944,60 @@ class CloudSyncService {
     final all = <Map<String, dynamic>>[];
     var from = 0;
     while (true) {
-      final res = await _client
-          .from('subtitle_lines')
-          .select()
-          .eq('project_id', projectId)
-          .order('dialogue_index')
-          .range(from, from + pageSize - 1);
-      final chunk = (res as List).cast<Map<String, dynamic>>();
+      final chunk = await _fetchSubtitleLinesPage(
+        projectId,
+        from: from,
+        pageSize: pageSize,
+      );
       if (chunk.isEmpty) break;
       all.addAll(chunk);
       if (chunk.length < pageSize) break;
       from += pageSize;
     }
     return all;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchSubtitleLinesPage(
+    String projectId, {
+    required int from,
+    required int pageSize,
+  }) async {
+    Future<List<Map<String, dynamic>>> runQuery(
+      String relation, {
+      bool filterArchived = false,
+    }) async {
+      dynamic query = _client.from(relation).select().eq('project_id', projectId);
+      if (filterArchived) {
+        query = query.eq('archived', false);
+      }
+      final res = await query
+          .order('dialogue_index')
+          .range(from, from + pageSize - 1);
+      return (res as List).cast<Map<String, dynamic>>();
+    }
+
+    if (_supportsSubtitleLinesActiveView) {
+      try {
+        return await runQuery('subtitle_lines_active');
+      } on PostgrestException catch (e) {
+        _supportsSubtitleLinesActiveView = false;
+        debugPrint('subtitle_lines_active fallback: $e');
+      }
+    }
+
+    if (_supportsArchivedColumnLines) {
+      try {
+        return await runQuery('subtitle_lines', filterArchived: true);
+      } on PostgrestException catch (e) {
+        if (_isMissingColumn(e, 'archived')) {
+          _supportsArchivedColumnLines = false;
+        } else {
+          rethrow;
+        }
+      }
+    }
+
+    return await runQuery('subtitle_lines');
   }
 
   Future<String> _uploadFileToCloud(ProjectFile f) async {
