@@ -106,6 +106,10 @@ class ExportService {
       RegExp('(en-us|ja-jp|zh-cn)', caseSensitive: false),
       'es-es',
     );
+    candidate = candidate.replaceAll(
+      RegExp(r'([._-])ja_asr(?=(?:\.ass)?$)', caseSensitive: false),
+      '',
+    );
     if (!candidate.toLowerCase().endsWith('.ass')) {
       candidate = '$candidate.ass';
     }

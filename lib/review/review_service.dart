@@ -381,6 +381,31 @@ class ReviewService {
     await _touchProjectByLine(lineId, now);
   }
 
+  Future<void> setActorName(String lineId, String? actor) async {
+    final row = await (db.select(
+      db.subtitleLines,
+    )..where((t) => t.lineId.equals(lineId))).getSingleOrNull();
+    if (row == null) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final normalizedActor = _normalizeActorName(actor);
+    final updatedPrefix = _replaceActorInDialoguePrefix(
+      row.dialoguePrefix,
+      normalizedActor ?? '',
+    );
+
+    await (db.update(
+      db.subtitleLines,
+    )..where((t) => t.lineId.equals(lineId))).write(
+      SubtitleLinesCompanion(
+        name: Value(normalizedActor),
+        dialoguePrefix: Value(updatedPrefix),
+        updatedAtMs: Value(now),
+      ),
+    );
+    await _touchProjectByLine(lineId, now);
+  }
+
   Future<String?> getVideoPath(String projectId) async {
     final row =
         await (db.select(db.projectFiles)..where(
@@ -748,6 +773,36 @@ class ReviewService {
     await (db.update(db.projects)
           ..where((t) => t.projectId.equals(row.projectId)))
         .write(ProjectsCompanion(updatedAtMs: Value(tsMs)));
+  }
+
+  String? _normalizeActorName(String? actor) {
+    final normalized = (actor ?? '')
+        .replaceAll(RegExp(r'[\r\n,]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  String _replaceActorInDialoguePrefix(String dialoguePrefix, String actor) {
+    final parts = <String>[];
+    int commas = 0;
+    int last = 0;
+
+    for (int i = 0; i < dialoguePrefix.length; i++) {
+      if (dialoguePrefix[i] == ',' && commas < 9) {
+        parts.add(dialoguePrefix.substring(last, i));
+        last = i + 1;
+        commas++;
+      }
+    }
+    parts.add(dialoguePrefix.substring(last));
+
+    if (parts.length < 10) {
+      return dialoguePrefix;
+    }
+
+    parts[4] = actor;
+    return parts.join(',');
   }
 }
 

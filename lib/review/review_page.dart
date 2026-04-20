@@ -1283,6 +1283,8 @@ Si dudas, prioriza estas grafías tal cual.
                                     isOpenAiRecording: _isRecording,
                                     openAiBusy: _recBusy,
                                     statusText: statusText,
+                                    onSaveActor: (actor) =>
+                                        _svc.setActorName(line.lineId, actor),
                                     onEditCandidate: (src, current) =>
                                         _editCandidateText(line, src, current),
                                     onPlaySegment: () => _playSegment(line),
@@ -1936,6 +1938,7 @@ class _LineCard extends StatelessWidget {
     required this.isOpenAiRecording,
     required this.openAiBusy,
     required this.statusText,
+    required this.onSaveActor,
     required this.onTapCandidate,
     required this.onEditCandidate,
     required this.onToggleDoubt,
@@ -1957,6 +1960,7 @@ class _LineCard extends StatelessWidget {
   final bool openAiBusy;
   final String statusText;
 
+  final Future<void> Function(String actor) onSaveActor;
   final CandidateTap onTapCandidate;
   final void Function(String source, String current) onEditCandidate;
   final VoidCallback onToggleDoubt;
@@ -2017,16 +2021,13 @@ class _LineCard extends StatelessWidget {
                     ),
                 ],
               ),
-              if ((line.name ?? '').isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Actor: ${line.name}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _ActorEditor(
+                  initialValue: line.name ?? '',
+                  onSave: onSaveActor,
                 ),
+              ),
               const SizedBox(height: 8),
               if (originCombined.isNotEmpty)
                 _SourceBlock(label: '', text: originCombined, highlight: true),
@@ -2230,6 +2231,102 @@ class _CandidateTile extends StatelessWidget {
           onPressed: onEdit,
         ),
       ),
+    );
+  }
+}
+
+class _ActorEditor extends StatefulWidget {
+  const _ActorEditor({required this.initialValue, required this.onSave});
+
+  final String initialValue;
+  final Future<void> Function(String actor) onSave;
+
+  @override
+  State<_ActorEditor> createState() => _ActorEditorState();
+}
+
+class _ActorEditorState extends State<_ActorEditor> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
+  bool _saving = false;
+
+  bool get _isDirty =>
+      _normalize(_controller.text) != _normalize(widget.initialValue);
+
+  @override
+  void didUpdateWidget(covariant _ActorEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialValue == oldWidget.initialValue) return;
+    if (_normalize(widget.initialValue) == _normalize(_controller.text)) return;
+
+    _controller.value = TextEditingValue(
+      text: widget.initialValue,
+      selection: TextSelection.collapsed(offset: widget.initialValue.length),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    if (_saving || !_isDirty) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(_controller.text);
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  String _normalize(String value) {
+    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        SizedBox(
+          width: 56,
+          child: Text(
+            'Actor',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _handleSave(),
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'Sin actor',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton.filled(
+          tooltip: 'Guardar actor',
+          onPressed: (!_isDirty || _saving) ? null : _handleSave,
+          icon: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save),
+        ),
+      ],
     );
   }
 }
