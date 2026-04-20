@@ -204,14 +204,15 @@ jobs:
           $exitCode = $LASTEXITCODE
           if ($output) { $output | ForEach-Object { Write-Host $_ } }
           if ($exitCode -ne 0) {
-            throw @"
-msstore publish failed (exit $exitCode).
-Common causes:
-- STORE_PRODUCT_ID is not the Partner Center product ID for this app.
-- The app exists in Partner Center, but it has never had its first manual submission completed there.
-- The Azure AD app is missing the Manager role in Partner Center.
-- The submission is in a bad draft state in Partner Center and must be deleted manually.
-"@
+            $message = @(
+              "msstore publish failed (exit $exitCode)."
+              "Common causes:"
+              "- STORE_PRODUCT_ID is not the Partner Center product ID for this app."
+              "- The app exists in Partner Center, but it has never had its first manual submission completed there."
+              "- The Azure AD app is missing the Manager role in Partner Center."
+              "- The submission is in a bad draft state in Partner Center and must be deleted manually."
+            ) -join "`n"
+            throw $message
           }
 
   build-android:
