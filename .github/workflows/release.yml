@@ -6,6 +6,9 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -20,7 +23,7 @@ jobs:
       R2_BUCKET: "${{ secrets.R2_BUCKET }}"
       R2_PUBLIC_BASE: "${{ secrets.R2_PUBLIC_BASE }}"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Resolve app version (Windows)
         shell: pwsh
         run: |
@@ -52,7 +55,7 @@ jobs:
           channel: stable
           cache: true
       - name: Cache Pub (Windows)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             C:\Users\runneradmin\AppData\Local\Pub\Cache
@@ -60,7 +63,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
       - name: Cache Gradle (Windows)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             C:\Users\runneradmin\.gradle
@@ -127,7 +130,7 @@ jobs:
             }
           }
       - name: Upload MSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: msix
           path: build/msix/**/*.msix
@@ -187,6 +190,9 @@ jobs:
 
           $msix = Get-ChildItem -Path build/msix -Recurse -Filter *.msix | Select-Object -First 1
           if (-not $msix) { throw "MSIX not found under build/msix" }
+          Write-Host "Publishing MSIX: $($msix.FullName)"
+          Write-Host "STORE_PRODUCT_ID=$env:STORE_PRODUCT_ID"
+          Write-Host "PARTNER_CENTER_SELLER_ID=$env:PARTNER_CENTER_SELLER_ID"
 
           msstore reconfigure `
             --tenantId $env:AZURE_TENANT_ID `
@@ -194,7 +200,19 @@ jobs:
             --clientId $env:AZURE_CLIENT_ID `
             --clientSecret $env:AZURE_CLIENT_SECRET
 
-          msstore publish "$($msix.FullName)" -id $env:STORE_PRODUCT_ID
+          $output = & msstore publish "$($msix.FullName)" -id $env:STORE_PRODUCT_ID 2>&1
+          $exitCode = $LASTEXITCODE
+          if ($output) { $output | ForEach-Object { Write-Host $_ } }
+          if ($exitCode -ne 0) {
+            throw @"
+msstore publish failed (exit $exitCode).
+Common causes:
+- STORE_PRODUCT_ID is not the Partner Center product ID for this app.
+- The app exists in Partner Center, but it has never had its first manual submission completed there.
+- The Azure AD app is missing the Manager role in Partner Center.
+- The submission is in a bad draft state in Partner Center and must be deleted manually.
+"@
+          }
 
   build-android:
     runs-on: ubuntu-latest
@@ -209,7 +227,7 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Resolve app version (Linux)
         shell: bash
         run: |
@@ -236,7 +254,7 @@ jobs:
           channel: stable
           cache: true
       - name: Cache Pub (Linux)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.pub-cache
@@ -244,7 +262,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
       - name: Cache Gradle (Linux)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.gradle
@@ -302,7 +320,7 @@ jobs:
           --dart-define R2_BUCKET=$R2_BUCKET
           --dart-define R2_PUBLIC_BASE=$R2_PUBLIC_BASE
       - name: Upload Android artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: android
           path: |
