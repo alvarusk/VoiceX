@@ -87,7 +87,7 @@ flutter:
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: assets/voicex.png
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: assets/voicex.png
