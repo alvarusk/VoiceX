@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -35,9 +37,10 @@ class SupabaseManager {
     final platformEnv = Platform.environment;
 
     String readEnv(String key) {
-      return _readDefine(
-        key,
-      ).ifEmpty(() => platformEnv[key] ?? '').ifEmpty(() => fileEnv[key] ?? '');
+      return _readDefine(key)
+          .ifEmpty(() => platformEnv[key] ?? '')
+          .ifEmpty(() => _readDotenv(key))
+          .ifEmpty(() => fileEnv[key] ?? '');
     }
 
     final envUrl = fileEnv['SUPABASE_URL'] ?? '';
@@ -46,7 +49,14 @@ class SupabaseManager {
     final url = readEnv('SUPABASE_URL');
     final key = readEnv('SUPABASE_ANON_KEY');
     _authEmail = readEnv('SUPABASE_USER_EMAIL');
-    _authPassword = readEnv('SUPABASE_USER_PASSWORD');
+    _authPassword = readEnv('SUPABASE_USER_PASSWORD').ifEmpty(
+      () => _readBase64Secret(
+        _readDefine('SUPABASE_USER_PASSWORD_B64')
+            .ifEmpty(() => platformEnv['SUPABASE_USER_PASSWORD_B64'] ?? '')
+            .ifEmpty(() => _readDotenv('SUPABASE_USER_PASSWORD_B64'))
+            .ifEmpty(() => fileEnv['SUPABASE_USER_PASSWORD_B64'] ?? ''),
+      ),
+    );
 
     await _ensureCoreInitialized(
       url: url,
@@ -133,6 +143,11 @@ class SupabaseManager {
           _authEmail.isNotEmpty || _authPassword.isNotEmpty;
       final wantsPasswordAuth =
           _authEmail.isNotEmpty && _authPassword.isNotEmpty;
+      if (kDebugMode) {
+        debugPrint(
+          '[supabase] auth email present=${_authEmail.isNotEmpty}, password present=${_authPassword.isNotEmpty}',
+        );
+      }
       if (hasAnyPasswordAuth && !wantsPasswordAuth) {
         if (kDebugMode) {
           debugPrint(
@@ -188,6 +203,20 @@ class SupabaseManager {
     } finally {
       _authInFlight = null;
     }
+  }
+}
+
+String _readDotenv(String key) {
+  if (!dotenv.isInitialized) return '';
+  return dotenv.env[key] ?? '';
+}
+
+String _readBase64Secret(String encoded) {
+  if (encoded.isEmpty) return '';
+  try {
+    return utf8.decode(base64.decode(encoded));
+  } catch (_) {
+    return '';
   }
 }
 

@@ -378,9 +378,104 @@ class _ProjectsPageState extends State<ProjectsPage> {
     setState(() {});
   }
 
+  Future<void> _openCostsSheet() async {
+    if (!SupabaseManager.instance.isReady) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Supabase no disponible (config/auth).'),
+          ),
+        );
+      }
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: CostsSheet(repo: CostsRepository()),
+      ),
+    );
+  }
+
+  Future<void> _syncAllProjects() async {
+    if (_syncingAll) {
+      _showSnack('Ya hay una sincronizacion en curso.');
+      return;
+    }
+    if (mounted) {
+      setState(() => _syncingAll = true);
+    }
+    await _cloud.ensureInit();
+    if (!_cloud.isReady) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Supabase no disponible (config/auth).'),
+          ),
+        );
+      }
+      if (mounted) {
+        setState(() => _syncingAll = false);
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    try {
+      await _runWithProgress(
+        context,
+        initial: 'Sincronizando proyectos...',
+        action: (update) async {
+          update('Sincronizando proyectos...');
+          await _cloud.syncAllProjects(
+            includeArchived: true,
+            onProgress: (v, stage) {
+              final pct = (v * 100).toStringAsFixed(0);
+              final pctInt = double.tryParse(pct)?.toInt() ?? 0;
+              update('$stage ($pctInt %)');
+            },
+          );
+        },
+      );
+      if (!context.mounted) return;
+      await _loadManualFolders();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sincronizacion cloud completa.'),
+        ),
+      );
+    } on TimeoutException {
+      // El mensaje se muestra en _runWithProgress.
+    } on CloudSyncException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.userMessage)));
+      debugPrint(
+        'sync button cloud error [${e.code}]: ${e.debugMessage ?? e}',
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error al sincronizar con cloud.'),
+        ),
+      );
+      debugPrint('sync button error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _syncingAll = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final svc = ReviewService(widget.db);
+    final compactAppBar = MediaQuery.sizeOf(context).width < 700;
+    final toolbarHeight = compactAppBar ? 68.0 : 150.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -390,31 +485,12 @@ class _ProjectsPageState extends State<ProjectsPage> {
           height: 128, // 200% más grande
           child: Image.asset('assets/voicex_logo.png', fit: BoxFit.contain),
         ),
-        toolbarHeight: 150,
+        toolbarHeight: toolbarHeight,
         actions: [
           IconButton(
             tooltip: 'Costes API',
             icon: const Icon(Icons.receipt_long),
-            onPressed: () {
-              if (!SupabaseManager.instance.isReady) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Supabase no disponible (config/auth).'),
-                    ),
-                  );
-                }
-                return;
-              }
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.6,
-                  child: CostsSheet(repo: CostsRepository()),
-                ),
-              );
-            },
+            onPressed: _openCostsSheet,
           ),
           IconButton(
             tooltip: widget.isDark ? 'Modo claro' : 'Modo oscuro',
@@ -424,77 +500,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
           IconButton(
             tooltip: 'Sincronizar con cloud',
             icon: const Icon(Icons.sync),
-            onPressed: () async {
-              if (_syncingAll) {
-                _showSnack('Ya hay una sincronizacion en curso.');
-                return;
-              }
-              if (mounted) {
-                setState(() => _syncingAll = true);
-              }
-              await _cloud.ensureInit();
-              if (!_cloud.isReady) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Supabase no disponible (config/auth).'),
-                    ),
-                  );
-                }
-                if (mounted) {
-                  setState(() => _syncingAll = false);
-                }
-                return;
-              }
-              if (!context.mounted) return;
-              try {
-                await _runWithProgress(
-                  context,
-                  initial: 'Sincronizando proyectos...',
-                  action: (update) async {
-                    update('Sincronizando proyectos...');
-                    await _cloud.syncAllProjects(
-                      includeArchived: true,
-                      onProgress: (v, stage) {
-                        final pct = (v * 100).toStringAsFixed(0);
-                        final pctInt = double.tryParse(pct)?.toInt() ?? 0;
-                        update('$stage ($pctInt %)');
-                      },
-                    );
-                  },
-                );
-                if (!context.mounted) return;
-                await _loadManualFolders();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sincronizacion cloud completa.'),
-                  ),
-                );
-              } on TimeoutException {
-                // El mensaje se muestra en _runWithProgress.
-              } on CloudSyncException catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text(e.userMessage)));
-                debugPrint(
-                  'sync button cloud error [${e.code}]: ${e.debugMessage ?? e}',
-                );
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Error al sincronizar con cloud.'),
-                  ),
-                );
-                debugPrint('sync button error: $e');
-              } finally {
-                if (mounted) {
-                  setState(() => _syncingAll = false);
-                }
-              }
-            },
+            onPressed: _syncAllProjects,
           ),
           IconButton(
             tooltip: 'Crear carpeta',
