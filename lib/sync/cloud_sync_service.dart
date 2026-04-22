@@ -352,6 +352,22 @@ class CloudSyncService {
       final files = await (db.select(
         db.projectFiles,
       )..where((t) => t.projectId.equals(projectId))).get();
+      final remoteProject =
+          await _client
+              .from('projects')
+              .select('base_ass_path')
+              .eq('project_id', projectId)
+              .maybeSingle()
+          as Map<String, dynamic>?;
+      final remoteFilesRes = await _client
+          .from('project_files')
+          .select('engine,ass_path')
+          .eq('project_id', projectId);
+      final remoteFilesByEngine = <String, String>{
+        for (final m in (remoteFilesRes as List).cast<Map<String, dynamic>>())
+          if ((m['engine'] as String?)?.isNotEmpty == true)
+            m['engine'] as String: (m['ass_path'] as String? ?? ''),
+      };
 
       debugPrint('[cloud] pushProject $projectId');
       onProgress?.call(0.1, 'Preparando subida');
@@ -365,6 +381,18 @@ class CloudSyncService {
           debugPrint('[cloud] reuse video url ${f.assPath} -> $url');
           remotePaths[f.fileId] = url;
           await _setLocalFilePath(f.fileId, url);
+          continue;
+        }
+        final reusableRemote = _reusableRemotePath(
+          engine: f.engine,
+          remoteFilesByEngine: remoteFilesByEngine,
+        );
+        if (reusableRemote != null) {
+          debugPrint(
+            '[cloud] reuse remote video path for missing local file ${f.fileId}: $reusableRemote',
+          );
+          remotePaths[f.fileId] = reusableRemote;
+          await _setLocalFilePath(f.fileId, reusableRemote);
           continue;
         }
         if (!_r2Available) {
@@ -383,6 +411,28 @@ class CloudSyncService {
       }
 
       for (final f in files.where((f) => f.engine != 'video')) {
+        if (_looksLikeUrl(f.assPath)) {
+          final rebased = _rebaseR2Url(f.assPath);
+          final url = rebased ?? f.assPath;
+          remotePaths[f.fileId] = url;
+          continue;
+        }
+        final file = File(f.assPath);
+        if (!await file.exists()) {
+          final reusableRemote = _reusableRemotePath(
+            engine: f.engine,
+            remoteFilesByEngine: remoteFilesByEngine,
+            remoteBasePath: remoteProject?['base_ass_path'] as String?,
+          );
+          if (reusableRemote != null) {
+            debugPrint(
+              '[cloud] reuse remote ${f.engine} path for missing local file ${f.fileId}: $reusableRemote',
+            );
+            remotePaths[f.fileId] = reusableRemote;
+            await _setLocalFilePath(f.fileId, reusableRemote);
+            continue;
+          }
+        }
         final uploaded = await _uploadFileToCloud(f);
         final rebased = _rebaseR2Url(uploaded);
         if (rebased != null) {
@@ -487,6 +537,21 @@ class CloudSyncService {
         debugContext: 'pushProject($projectId)',
       );
     }
+  }
+
+  String? _reusableRemotePath({
+    required String engine,
+    required Map<String, String> remoteFilesByEngine,
+    String? remoteBasePath,
+  }) {
+    final remotePath = remoteFilesByEngine[engine] ?? '';
+    if (_looksLikeUrl(remotePath)) {
+      return _rebaseR2Url(remotePath) ?? remotePath;
+    }
+    if (engine == 'base' && remoteBasePath != null && _looksLikeUrl(remoteBasePath)) {
+      return _rebaseR2Url(remoteBasePath) ?? remoteBasePath;
+    }
+    return null;
   }
 
   Future<void> _syncSettings({
