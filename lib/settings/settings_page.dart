@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../db/app_db.dart';
 import '../sync/cloud_sync_service.dart';
+import '../sync/supabase_manager.dart';
 import 'settings_service.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -236,6 +237,50 @@ class _SettingsPageState extends State<SettingsPage> {
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            AnimatedBuilder(
+              animation: SupabaseManager.instance,
+              builder: (context, _) {
+                final supabase = SupabaseManager.instance;
+                if (!supabase.hasCloudConfig) {
+                  return const SizedBox.shrink();
+                }
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Cuenta cloud',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          supabase.isAuthenticated
+                              ? 'Sesion iniciada como ${supabase.currentUserEmail ?? 'usuario sin email'}'
+                              : 'No hay sesion iniciada.',
+                        ),
+                        if (supabase.isAuthenticated) ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await supabase.signOut();
+                            },
+                            icon: const Icon(Icons.logout),
+                            label: const Text('Cerrar sesion'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            if (SupabaseManager.instance.hasCloudConfig)
+              const SizedBox(height: 16),
             const Text(
               'OpenAI',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),

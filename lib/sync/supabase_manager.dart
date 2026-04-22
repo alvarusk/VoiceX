@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:path/path.dart' as p;
@@ -11,10 +13,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 /// Usa variables de entorno (dart-define o .env) SUPABASE_URL y SUPABASE_ANON_KEY.
 /// Si faltan o no hay sesion, el cliente no queda listo y `isReady` sera false.
-class SupabaseManager {
+class SupabaseManager extends ChangeNotifier {
   SupabaseManager._();
   static final SupabaseManager instance = SupabaseManager._();
 
+  bool _configPresent = false;
   bool _ready = false;
   bool _authed = false;
   bool _initAttempted = false;
@@ -22,10 +25,20 @@ class SupabaseManager {
   Future<Map<String, String>>? _envLoadInFlight;
   Map<String, String>? _cachedFileEnv;
   Future<void>? _authInFlight;
+  StreamSubscription<AuthState>? _authStateSub;
   String _authEmail = '';
   String _authPassword = '';
+  String? _authError;
 
+  bool get hasCloudConfig => _configPresent;
   bool get isReady => _ready && _authed;
+  bool get isAuthenticated => _authed;
+  bool get initAttempted => _initAttempted;
+  bool get isInitializing =>
+      _coreInitInFlight != null || _authInFlight != null;
+  String? get authError => _authError;
+  String? get currentUserEmail =>
+      _authed ? Supabase.instance.client.auth.currentUser?.email : null;
   SupabaseClient get client => Supabase.instance.client;
   String? get userId =>
       _authed ? Supabase.instance.client.auth.currentUser?.id : null;
@@ -48,6 +61,11 @@ class SupabaseManager {
 
     final url = readEnv('SUPABASE_URL');
     final key = readEnv('SUPABASE_ANON_KEY');
+    final configPresent = url.isNotEmpty && key.isNotEmpty;
+    if (_configPresent != configPresent) {
+      _configPresent = configPresent;
+      notifyListeners();
+    }
     _authEmail = readEnv('SUPABASE_USER_EMAIL');
     _authPassword = readEnv('SUPABASE_USER_PASSWORD').ifEmpty(
       () => _readBase64Secret(
@@ -68,6 +86,39 @@ class SupabaseManager {
     );
 
     await _ensureAuth();
+  }
+
+  Future<bool> signInWithPassword({
+    required String email,
+    required String password,
+  }) async {
+    await init();
+    if (!_ready) {
+      _authError = 'Supabase no esta configurado correctamente.';
+      notifyListeners();
+      return false;
+    }
+
+    _authEmail = email.trim();
+    _authPassword = password;
+    await _ensureAuth(force: true);
+    return _authed;
+  }
+
+  Future<void> signOut() async {
+    if (!_ready) return;
+    _authEmail = '';
+    _authPassword = '';
+    _authError = null;
+    _authed = false;
+    notifyListeners();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[supabase] signOut error: $e');
+      }
+    }
   }
 
   Future<void> _ensureCoreInitialized({
@@ -113,12 +164,16 @@ class SupabaseManager {
           );
         }
         await Supabase.initialize(url: url, anonKey: key);
+        _attachAuthStateListener();
         _ready = true;
+        _authError = null;
+        notifyListeners();
       } catch (e) {
         if (kDebugMode) {
           debugPrint('[supabase] init error: $e');
         }
         _ready = false;
+        notifyListeners();
       }
     }();
 
@@ -129,7 +184,24 @@ class SupabaseManager {
     }
   }
 
-  Future<void> _ensureAuth() async {
+  void _attachAuthStateListener() {
+    if (_authStateSub != null) return;
+    _authStateSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      final user = data.session?.user;
+      final nextAuthed = user != null && !user.isAnonymous;
+      if (_authed != nextAuthed) {
+        _authed = nextAuthed;
+        if (nextAuthed) {
+          _authError = null;
+        }
+        notifyListeners();
+      }
+    });
+  }
+
+  Future<void> _ensureAuth({bool force = false}) async {
     if (!_ready) return;
     if (_authInFlight != null) {
       await _authInFlight;
@@ -155,12 +227,18 @@ class SupabaseManager {
           );
         }
         _authed = false;
+        _authError = 'Faltan credenciales de acceso a cloud.';
+        notifyListeners();
         return;
       }
 
       if (current != null) {
-        if (!wantsPasswordAuth || !current.isAnonymous) {
+        if (!force &&
+            !current.isAnonymous &&
+            (!wantsPasswordAuth || current.email == _authEmail)) {
           _authed = true;
+          _authError = null;
+          notifyListeners();
           return;
         }
         try {
@@ -180,22 +258,18 @@ class SupabaseManager {
             password: _authPassword,
           );
           ok = res.user != null;
+          _authError = ok ? null : 'No se pudo iniciar sesion en Supabase.';
         } catch (e) {
           if (kDebugMode) {
             debugPrint('[supabase] signInWithPassword error: $e');
           }
+          _authError = 'Credenciales invalidas o acceso no permitido.';
         }
       } else {
-        try {
-          final res = await auth.signInAnonymously();
-          ok = res.user != null;
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[supabase] signInAnonymously error: $e');
-          }
-        }
+        _authError = null;
       }
       _authed = ok;
+      notifyListeners();
     }();
 
     try {
