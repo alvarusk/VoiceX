@@ -226,6 +226,8 @@ jobs:
 
             $message = @(
               "msstore publish failed (exit $exitCode)."
+              "CLI output:"
+              $joined
               "Common causes:"
               "- STORE_PRODUCT_ID is not the Partner Center product ID for this app."
               "- The app exists in Partner Center, but it has never had its first manual submission completed there."
@@ -614,6 +616,86 @@ jobs:
           pod install
           popd >/dev/null
 
+      - name: Configure iOS Runner signing for CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("ios/Runner.xcodeproj/project.pbxproj")
+          text = path.read_text(encoding="utf-8")
+          profile_name = os.environ["IOS_PROFILE_NAME"]
+
+          def patch_block(match: re.Match[str]) -> str:
+              block = match.group(0)
+              if "PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex;" not in block:
+                  return block
+              if "name = Release;" not in block and "name = Profile;" not in block:
+                  return block
+
+              block = re.sub(r"CODE_SIGN_STYLE = [^;]+;", "CODE_SIGN_STYLE = Manual;", block)
+              if 'CODE_SIGN_IDENTITY = "Apple Distribution";' not in block:
+                  block = block.replace(
+                      "CODE_SIGN_ENTITLEMENTS = \"\";\n",
+                      "CODE_SIGN_ENTITLEMENTS = \"\";\n\t\t\t\tCODE_SIGN_IDENTITY = \"Apple Distribution\";\n",
+                  )
+              else:
+                  block = re.sub(r'CODE_SIGN_IDENTITY = "[^"]+";', 'CODE_SIGN_IDENTITY = "Apple Distribution";', block)
+
+              sdk_identity = '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";'
+              if sdk_identity not in block:
+                  block = re.sub(
+                      r'(CODE_SIGN_IDENTITY = "Apple Distribution";\n)',
+                      r'\1\t\t\t\t"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";\n',
+                      block,
+                      count=1,
+                  )
+              else:
+                  block = re.sub(
+                      r'"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "[^"]+";',
+                      sdk_identity,
+                      block,
+                  )
+
+              if "PROVISIONING_PROFILE_SPECIFIER =" in block:
+                  block = re.sub(
+                      r'PROVISIONING_PROFILE_SPECIFIER = "[^"]*";',
+                      f'PROVISIONING_PROFILE_SPECIFIER = "{profile_name}";',
+                      block,
+                  )
+              else:
+                  block = block.replace(
+                      'PRODUCT_NAME = "$(TARGET_NAME)";\n',
+                      f'PRODUCT_NAME = "$(TARGET_NAME)";\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{profile_name}";\n',
+                  )
+
+              sdk_profile = f'"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "{profile_name}";'
+              if '"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]"' in block:
+                  block = re.sub(
+                      r'"PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\]" = "[^"]*";',
+                      sdk_profile,
+                      block,
+                  )
+              else:
+                  block = block.replace(
+                      f'PROVISIONING_PROFILE_SPECIFIER = "{profile_name}";\n',
+                      f'PROVISIONING_PROFILE_SPECIFIER = "{profile_name}";\n\t\t\t\t{sdk_profile}\n',
+                      1,
+                  )
+              return block
+
+          text = re.sub(
+              r"\t\t[0-9A-F]+ /\* (?:Debug|Release|Profile) \*/ = \{\n.*?\n\t\t\};",
+              patch_block,
+              text,
+              flags=re.S,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Create iOS export options plist
         shell: bash
         run: |
@@ -661,10 +743,6 @@ jobs:
             -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
             -authenticationKeyID "$APPSTORE_API_KEY_ID" \
             -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
             archive
           echo "IOS_ARCHIVE_PATH=$IOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
@@ -727,6 +805,59 @@ jobs:
           pod install
           popd >/dev/null
 
+      - name: Configure macOS Runner signing for CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("macos/Runner.xcodeproj/project.pbxproj")
+          text = path.read_text(encoding="utf-8")
+          profile_name = os.environ["MACOS_PROFILE_NAME"]
+
+          def patch_block(match: re.Match[str]) -> str:
+              block = match.group(0)
+              if "PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex;" not in block:
+                  return block
+              if "name = Release;" not in block and "name = Profile;" not in block:
+                  return block
+
+              block = re.sub(r"CODE_SIGN_STYLE = [^;]+;", "CODE_SIGN_STYLE = Manual;", block)
+              if 'CODE_SIGN_IDENTITY = "Apple Distribution";' not in block:
+                  block = re.sub(
+                      r'("CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "Apple Development";\n)',
+                      r'CODE_SIGN_IDENTITY = "Apple Distribution";\n\1',
+                      block,
+                      count=1,
+                  )
+              else:
+                  block = re.sub(r'CODE_SIGN_IDENTITY = "[^"]+";', 'CODE_SIGN_IDENTITY = "Apple Distribution";', block)
+
+              block = re.sub(
+                  r'"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "[^"]+";',
+                  '"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Distribution";',
+                  block,
+              )
+
+              block = re.sub(
+                  r'PROVISIONING_PROFILE_SPECIFIER = "[^"]*";',
+                  f'PROVISIONING_PROFILE_SPECIFIER = "{profile_name}";',
+                  block,
+              )
+              return block
+
+          text = re.sub(
+              r"\t\t[0-9A-F]+ /\* (?:Debug|Release|Profile) \*/ = \{\n.*?\n\t\t\};",
+              patch_block,
+              text,
+              flags=re.S,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Create macOS export options plist
         shell: bash
         run: |
@@ -775,10 +906,6 @@ jobs:
             -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
             -authenticationKeyID "$APPSTORE_API_KEY_ID" \
             -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$MACOS_PROFILE_NAME" \
             archive
           echo "MACOS_ARCHIVE_PATH=$MACOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
