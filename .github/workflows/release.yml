@@ -382,7 +382,7 @@ jobs:
             --skip_upload_screenshots true
 
   build-apple:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 120
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -482,6 +482,19 @@ jobs:
             printf 'Missing Apple CI configuration: %s\n' "${missing[*]}"
             exit 1
           fi
+
+      - name: Select Xcode 26
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n1)"
+          if [ -z "$XCODE_APP" ]; then
+            echo "No Xcode 26 installation found on this runner."
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -switch "$XCODE_APP/Contents/Developer"
+          echo "Selected Xcode app: $XCODE_APP"
 
       - name: Log selected Xcode
         run: |
