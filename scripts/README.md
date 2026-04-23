@@ -41,3 +41,14 @@ Artifacts: `dist/android/voicex_android_<stamp>.apk` (+ .aab si no se usa -SkipA
 - Las claves **no** deben quedar en `.env` para builds de distribución. Pasa todo con `--dart-define` (lo aceptan los scripts).
 - `.env` se puede usar solo en desarrollo local; no lo incluyas en builds finales ni en control de versiones.
 - Variables soportadas: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_USER_EMAIL`, `SUPABASE_USER_PASSWORD`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY`, `R2_SECRET_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE`.
+
+## Apple CI
+
+The Apple release flow is handled in GitHub Actions from the same repo:
+
+- `main` -> iOS/macOS upload to TestFlight
+- `v*` tags -> iOS/macOS upload + App Store review submission
+
+See:
+
+- `docs/apple_ci.md`

@@ -16,6 +16,9 @@ migrate_working_dir/
 pfx.b64
 .env
 .env*
+ios_public.json
+apple_public.json
+ci_dart_defines.json
 
 # IntelliJ related
 *.iml

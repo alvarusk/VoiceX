@@ -5,6 +5,15 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      apple_release_track:
+        description: "How Apple builds should be distributed"
+        required: false
+        default: testflight
+        type: choice
+        options:
+          - testflight
+          - app-store
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -349,3 +358,485 @@ jobs:
             --skip_upload_metadata true \
             --skip_upload_images true \
             --skip_upload_screenshots true
+
+  build-apple:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+      R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
+      APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+      APPLE_CERTIFICATES_P12_BASE64: ${{ secrets.APPLE_CERTIFICATES_P12_BASE64 }}
+      APPLE_CERTIFICATES_P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+      APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+      APPLE_TEAM_ID: R24Q9H7VFW
+      IOS_BUNDLE_ID: com.kingdomm.voicex
+      MACOS_BUNDLE_ID: com.kingdomm.voicex
+      APPLE_AUTOMATIC_RELEASE: ${{ vars.APPLE_AUTOMATIC_RELEASE || 'false' }}
+      APPLE_SUBMISSION_INFORMATION_JSON: ${{ vars.APPLE_SUBMISSION_INFORMATION_JSON || '' }}
+      APPLE_RUNNER_KEYCHAIN: build
+      APPLE_RUNNER_KEYCHAIN_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-apple
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve app version (Apple)
+        id: apple_version
+        shell: bash
+        env:
+          APPLE_RELEASE_TRACK_INPUT: ${{ inputs.apple_release_track || '' }}
+        run: |
+          set -euo pipefail
+          VERSION_LINE="$(grep -E '^version:' pubspec.yaml | head -n1 | awk '{print $2}')"
+          if [ -z "$VERSION_LINE" ]; then
+            echo "Missing version in pubspec.yaml"
+            exit 1
+          fi
+          BUILD_NAME="${VERSION_LINE%%+*}"
+          if [[ "$VERSION_LINE" == *"+"* ]]; then
+            BUILD_NUMBER="${VERSION_LINE##*+}"
+          else
+            BUILD_NUMBER="0"
+          fi
+          if [ -n "${GITHUB_RUN_NUMBER:-}" ] && [ "$GITHUB_RUN_NUMBER" -gt "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          fi
+
+          RELEASE_TRACK="testflight"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ -n "$APPLE_RELEASE_TRACK_INPUT" ]; then
+            RELEASE_TRACK="$APPLE_RELEASE_TRACK_INPUT"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            RELEASE_TRACK="app-store"
+          fi
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VERSION" != "$BUILD_NAME" ]; then
+              echo "Tag version ($TAG_VERSION) does not match pubspec version ($BUILD_NAME)."
+              exit 1
+            fi
+          fi
+
+          echo "APP_VERSION_NAME=$BUILD_NAME" >> "$GITHUB_ENV"
+          echo "APP_VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "APPLE_RELEASE_TRACK=$RELEASE_TRACK" >> "$GITHUB_ENV"
+          echo "build_name=$BUILD_NAME" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "release_track=$RELEASE_TRACK" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Apple CI secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for key in \
+            SUPABASE_URL \
+            SUPABASE_ANON_KEY \
+            R2_ACCOUNT_ID \
+            R2_ACCESS_KEY \
+            R2_SECRET_KEY \
+            R2_BUCKET \
+            R2_PUBLIC_BASE \
+            APPSTORE_API_PRIVATE_KEY \
+            APPSTORE_API_KEY_ID \
+            APPSTORE_ISSUER_ID \
+            APPLE_CERTIFICATES_P12_BASE64 \
+            APPLE_CERTIFICATES_P12_PASSWORD
+          do
+            if [ -z "${!key:-}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing Apple CI configuration: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Log selected Xcode
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Cache Pub (Apple)
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Cache CocoaPods (Apple)
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cocoapods/repos
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('ios/Podfile.lock', 'macos/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install fastlane
+        run: gem install fastlane -N
+
+      - name: Import Apple signing certificates
+        uses: apple-actions/import-codesign-certs@v5
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+          keychain: ${{ env.APPLE_RUNNER_KEYCHAIN }}
+          keychain-password: ${{ env.APPLE_RUNNER_KEYCHAIN_PASSWORD }}
+
+      - name: Download iOS provisioning profiles
+        id: ios_profiles
+        uses: apple-actions/download-provisioning-profiles@v1
+        with:
+          bundle-id: ${{ env.IOS_BUNDLE_ID }}
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
+
+      - name: Download macOS provisioning profiles
+        id: macos_profiles
+        uses: apple-actions/download-provisioning-profiles@v1
+        with:
+          bundle-id: ${{ env.MACOS_BUNDLE_ID }}
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
+
+      - name: Resolve Apple profile names
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "IOS_PROFILE_NAME=${{ fromJson(steps.ios_profiles.outputs.profiles)[0].name }}" >> "$GITHUB_ENV"
+          echo "MACOS_PROFILE_NAME=${{ fromJson(steps.macos_profiles.outputs.profiles)[0].name }}" >> "$GITHUB_ENV"
+
+      - name: Create App Store Connect API key files
+        shell: bash
+        run: |
+          set -euo pipefail
+          P8_PATH="$RUNNER_TEMP/AuthKey_${APPSTORE_API_KEY_ID}.p8"
+          JSON_PATH="$RUNNER_TEMP/appstore_api_key.json"
+          printf '%s' "$APPSTORE_API_PRIVATE_KEY" > "$P8_PATH"
+          cat > "$JSON_PATH" <<EOF
+          {
+            "key_id": "${APPSTORE_API_KEY_ID}",
+            "issuer_id": "${APPSTORE_ISSUER_ID}",
+            "key_filepath": "${P8_PATH}",
+            "in_house": false
+          }
+          EOF
+          echo "APPSTORE_API_KEY_P8=$P8_PATH" >> "$GITHUB_ENV"
+          echo "APPSTORE_API_KEY_JSON=$JSON_PATH" >> "$GITHUB_ENV"
+
+      - name: Create Apple dart-defines file
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEFINES_PATH="$RUNNER_TEMP/apple_dart_defines.json"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          keys = [
+              "SUPABASE_URL",
+              "SUPABASE_ANON_KEY",
+              "R2_ACCOUNT_ID",
+              "R2_ACCESS_KEY",
+              "R2_SECRET_KEY",
+              "R2_BUCKET",
+              "R2_PUBLIC_BASE",
+          ]
+          data = {k: os.environ[k] for k in keys if os.environ.get(k)}
+          path = Path(os.environ["RUNNER_TEMP"]) / "apple_dart_defines.json"
+          path.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+          print(path)
+          PY
+          echo "APPLE_DART_DEFINES_FILE=$DEFINES_PATH" >> "$GITHUB_ENV"
+
+      - name: Resolve Apple release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          notes="$(git log -1 --pretty=%s)"
+          if [ -z "$notes" ]; then
+            notes="Automated release from GitHub Actions"
+          fi
+          printf 'APPLE_RELEASE_NOTES=%s\n' "$notes" >> "$GITHUB_ENV"
+
+      - name: Prepare iOS Flutter config
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build ios \
+            --release \
+            --config-only \
+            --build-name "$APP_VERSION_NAME" \
+            --build-number "$APP_VERSION_CODE" \
+            --dart-define-from-file="$APPLE_DART_DEFINES_FILE"
+          pushd ios >/dev/null
+          pod install
+          popd >/dev/null
+
+      - name: Create iOS export options plist
+        shell: bash
+        run: |
+          set -euo pipefail
+          IOS_EXPORT_OPTIONS="$RUNNER_TEMP/ios-export-options.plist"
+          cat > "$IOS_EXPORT_OPTIONS" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${IOS_BUNDLE_ID}</key>
+              <string>${IOS_PROFILE_NAME}</string>
+            </dict>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          echo "IOS_EXPORT_OPTIONS=$IOS_EXPORT_OPTIONS" >> "$GITHUB_ENV"
+
+      - name: Archive iOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          IOS_ARCHIVE_PATH="$RUNNER_TEMP/ios/VoiceX.xcarchive"
+          mkdir -p "$(dirname "$IOS_ARCHIVE_PATH")"
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
+            archive
+          echo "IOS_ARCHIVE_PATH=$IOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
+
+      - name: Export iOS IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IOS_EXPORT_DIR="$RUNNER_TEMP/ios-export"
+          rm -rf "$IOS_EXPORT_DIR"
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$IOS_ARCHIVE_PATH" \
+            -exportPath "$IOS_EXPORT_DIR" \
+            -exportOptionsPlist "$IOS_EXPORT_OPTIONS"
+          IOS_IPA_PATH="$(find "$IOS_EXPORT_DIR" -maxdepth 2 -name '*.ipa' -print -quit)"
+          if [ -z "$IOS_IPA_PATH" ]; then
+            echo "iOS IPA not found under $IOS_EXPORT_DIR"
+            exit 1
+          fi
+          echo "IOS_IPA_PATH=$IOS_IPA_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-ipa
+          path: ${{ env.IOS_IPA_PATH }}
+
+      - name: Upload iOS build to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            pilot upload
+            --api_key_path "$APPSTORE_API_KEY_JSON"
+            --app_identifier "$IOS_BUNDLE_ID"
+            --ipa "$IOS_IPA_PATH"
+            --changelog "$APPLE_RELEASE_NOTES"
+            --skip_submission true
+          )
+          if [ "$APPLE_RELEASE_TRACK" != "app-store" ]; then
+            args+=(--skip_waiting_for_build_processing true)
+          fi
+          fastlane "${args[@]}"
+
+      - name: Prepare macOS Flutter config
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build macos \
+            --release \
+            --config-only \
+            --build-name "$APP_VERSION_NAME" \
+            --build-number "$APP_VERSION_CODE" \
+            --dart-define-from-file="$APPLE_DART_DEFINES_FILE"
+          pushd macos >/dev/null
+          pod install
+          popd >/dev/null
+
+      - name: Create macOS export options plist
+        shell: bash
+        run: |
+          set -euo pipefail
+          MACOS_EXPORT_OPTIONS="$RUNNER_TEMP/macos-export-options.plist"
+          cat > "$MACOS_EXPORT_OPTIONS" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${MACOS_BUNDLE_ID}</key>
+              <string>${MACOS_PROFILE_NAME}</string>
+            </dict>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          echo "MACOS_EXPORT_OPTIONS=$MACOS_EXPORT_OPTIONS" >> "$GITHUB_ENV"
+
+      - name: Archive macOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          MACOS_ARCHIVE_PATH="$RUNNER_TEMP/macos/VoiceX.xcarchive"
+          mkdir -p "$(dirname "$MACOS_ARCHIVE_PATH")"
+          xcodebuild \
+            -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$MACOS_ARCHIVE_PATH" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$MACOS_PROFILE_NAME" \
+            archive
+          echo "MACOS_ARCHIVE_PATH=$MACOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
+
+      - name: Export macOS package
+        shell: bash
+        run: |
+          set -euo pipefail
+          MACOS_EXPORT_DIR="$RUNNER_TEMP/macos-export"
+          rm -rf "$MACOS_EXPORT_DIR"
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$MACOS_ARCHIVE_PATH" \
+            -exportPath "$MACOS_EXPORT_DIR" \
+            -exportOptionsPlist "$MACOS_EXPORT_OPTIONS"
+          MACOS_PKG_PATH="$(find "$MACOS_EXPORT_DIR" -maxdepth 3 -name '*.pkg' -print -quit)"
+          if [ -z "$MACOS_PKG_PATH" ]; then
+            echo "macOS package not found under $MACOS_EXPORT_DIR"
+            exit 1
+          fi
+          echo "MACOS_PKG_PATH=$MACOS_PKG_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-pkg
+          path: ${{ env.MACOS_PKG_PATH }}
+
+      - name: Upload macOS build to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            pilot upload
+            --api_key_path "$APPSTORE_API_KEY_JSON"
+            --app_identifier "$MACOS_BUNDLE_ID"
+            --pkg "$MACOS_PKG_PATH"
+            --changelog "$APPLE_RELEASE_NOTES"
+            --skip_submission true
+          )
+          if [ "$APPLE_RELEASE_TRACK" != "app-store" ]; then
+            args+=(--skip_waiting_for_build_processing true)
+          fi
+          fastlane "${args[@]}"
+
+      - name: Submit iOS build to App Store review
+        if: ${{ steps.apple_version.outputs.release_track == 'app-store' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            deliver submit_build
+            --api_key_path "$APPSTORE_API_KEY_JSON"
+            --app_identifier "$IOS_BUNDLE_ID"
+            --platform ios
+            --app_version "$APP_VERSION_NAME"
+            --build_number "$APP_VERSION_CODE"
+            --skip_binary_upload true
+            --skip_metadata true
+            --skip_screenshots true
+            --submit_for_review true
+            --force
+          )
+          if [ "${APPLE_AUTOMATIC_RELEASE,,}" = "true" ]; then
+            args+=(--automatic_release true)
+          else
+            args+=(--automatic_release false)
+          fi
+          if [ -n "$APPLE_SUBMISSION_INFORMATION_JSON" ]; then
+            args+=(--submission_information "$APPLE_SUBMISSION_INFORMATION_JSON")
+          fi
+          fastlane "${args[@]}"
+
+      - name: Submit macOS build to App Store review
+        if: ${{ steps.apple_version.outputs.release_track == 'app-store' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            deliver submit_build
+            --api_key_path "$APPSTORE_API_KEY_JSON"
+            --app_identifier "$MACOS_BUNDLE_ID"
+            --platform osx
+            --app_version "$APP_VERSION_NAME"
+            --build_number "$APP_VERSION_CODE"
+            --skip_binary_upload true
+            --skip_metadata true
+            --skip_screenshots true
+            --submit_for_review true
+            --force
+          )
+          if [ "${APPLE_AUTOMATIC_RELEASE,,}" = "true" ]; then
+            args+=(--automatic_release true)
+          else
+            args+=(--automatic_release false)
+          fi
+          if [ -n "$APPLE_SUBMISSION_INFORMATION_JSON" ]; then
+            args+=(--submission_information "$APPLE_SUBMISSION_INFORMATION_JSON")
+          fi
+          fastlane "${args[@]}"
