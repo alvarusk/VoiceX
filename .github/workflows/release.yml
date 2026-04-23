@@ -525,14 +525,24 @@ jobs:
           P8_PATH="$RUNNER_TEMP/AuthKey_${APPSTORE_API_KEY_ID}.p8"
           JSON_PATH="$RUNNER_TEMP/appstore_api_key.json"
           printf '%s' "$APPSTORE_API_PRIVATE_KEY" > "$P8_PATH"
-          cat > "$JSON_PATH" <<EOF
-          {
-            "key_id": "${APPSTORE_API_KEY_ID}",
-            "issuer_id": "${APPSTORE_ISSUER_ID}",
-            "key_filepath": "${P8_PATH}",
-            "in_house": false
-          }
-          EOF
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "appstore_api_key.json"
+          path.write_text(
+              json.dumps(
+                  {
+                      "key_id": os.environ["APPSTORE_API_KEY_ID"],
+                      "issuer_id": os.environ["APPSTORE_ISSUER_ID"],
+                      "key": os.environ["APPSTORE_API_PRIVATE_KEY"],
+                      "in_house": False,
+                  }
+              ),
+              encoding="utf-8",
+          )
+          PY
           echo "APPSTORE_API_KEY_P8=$P8_PATH" >> "$GITHUB_ENV"
           echo "APPSTORE_API_KEY_JSON=$JSON_PATH" >> "$GITHUB_ENV"
 
@@ -596,10 +606,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          notes="$(git log -1 --pretty=%s)"
-          if [ -z "$notes" ]; then
-            notes="Automated release from GitHub Actions"
-          fi
+          notes="Improvements and minor bug fixes."
           printf 'APPLE_RELEASE_NOTES=%s\n' "$notes" >> "$GITHUB_ENV"
 
       - name: Prepare iOS Flutter config
