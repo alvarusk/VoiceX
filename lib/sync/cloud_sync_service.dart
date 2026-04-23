@@ -352,13 +352,11 @@ class CloudSyncService {
       final files = await (db.select(
         db.projectFiles,
       )..where((t) => t.projectId.equals(projectId))).get();
-      final remoteProject =
-          await _client
-              .from('projects')
-              .select('base_ass_path')
-              .eq('project_id', projectId)
-              .maybeSingle()
-          as Map<String, dynamic>?;
+      final Map<String, dynamic>? remoteProject = await _client
+          .from('projects')
+          .select('base_ass_path')
+          .eq('project_id', projectId)
+          .maybeSingle();
       final remoteFilesRes = await _client
           .from('project_files')
           .select('engine,ass_path')

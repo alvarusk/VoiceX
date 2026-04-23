@@ -404,24 +404,23 @@ class _ProjectsPageState extends State<ProjectsPage> {
       _showSnack('Ya hay una sincronizacion en curso.');
       return;
     }
+    final messenger = ScaffoldMessenger.of(context);
     if (mounted) {
       setState(() => _syncingAll = true);
     }
     await _cloud.ensureInit();
+    if (!mounted) return;
     if (!_cloud.isReady) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Supabase no disponible (config/auth).'),
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Supabase no disponible (config/auth).'),
+        ),
+      );
       if (mounted) {
         setState(() => _syncingAll = false);
       }
       return;
     }
-    if (!context.mounted) return;
     try {
       await _runWithProgress(
         context,
@@ -438,10 +437,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
           );
         },
       );
-      if (!context.mounted) return;
+      if (!mounted) return;
       await _loadManualFolders();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Sincronizacion cloud completa.'),
         ),
@@ -449,16 +448,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
     } on TimeoutException {
       // El mensaje se muestra en _runWithProgress.
     } on CloudSyncException catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.userMessage)));
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
       debugPrint(
         'sync button cloud error [${e.code}]: ${e.debugMessage ?? e}',
       );
     } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('Error al sincronizar con cloud.'),
         ),

@@ -501,33 +501,6 @@ jobs:
           keychain: ${{ env.APPLE_RUNNER_KEYCHAIN }}
           keychain-password: ${{ env.APPLE_RUNNER_KEYCHAIN_PASSWORD }}
 
-      - name: Download iOS provisioning profiles
-        id: ios_profiles
-        uses: apple-actions/download-provisioning-profiles@v1
-        with:
-          bundle-id: ${{ env.IOS_BUNDLE_ID }}
-          profile-type: IOS_APP_STORE
-          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
-          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
-          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
-
-      - name: Download macOS provisioning profiles
-        id: macos_profiles
-        uses: apple-actions/download-provisioning-profiles@v1
-        with:
-          bundle-id: ${{ env.MACOS_BUNDLE_ID }}
-          profile-type: MAC_APP_STORE
-          issuer-id: ${{ env.APPSTORE_ISSUER_ID }}
-          api-key-id: ${{ env.APPSTORE_API_KEY_ID }}
-          api-private-key: ${{ env.APPSTORE_API_PRIVATE_KEY }}
-
-      - name: Resolve Apple profile names
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "IOS_PROFILE_NAME=${{ fromJson(steps.ios_profiles.outputs.profiles)[0].name }}" >> "$GITHUB_ENV"
-          echo "MACOS_PROFILE_NAME=${{ fromJson(steps.macos_profiles.outputs.profiles)[0].name }}" >> "$GITHUB_ENV"
-
       - name: Create App Store Connect API key files
         shell: bash
         run: |
@@ -609,14 +582,9 @@ jobs:
             <key>method</key>
             <string>app-store-connect</string>
             <key>signingStyle</key>
-            <string>manual</string>
+            <string>automatic</string>
             <key>teamID</key>
             <string>${APPLE_TEAM_ID}</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>${IOS_BUNDLE_ID}</key>
-              <string>${IOS_PROFILE_NAME}</string>
-            </dict>
             <key>uploadSymbols</key>
             <true/>
           </dict>
@@ -637,9 +605,12 @@ jobs:
             -sdk iphoneos \
             -destination "generic/platform=iOS" \
             -archivePath "$IOS_ARCHIVE_PATH" \
-            CODE_SIGN_STYLE=Manual \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
             archive
           echo "IOS_ARCHIVE_PATH=$IOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
@@ -653,7 +624,11 @@ jobs:
             -exportArchive \
             -archivePath "$IOS_ARCHIVE_PATH" \
             -exportPath "$IOS_EXPORT_DIR" \
-            -exportOptionsPlist "$IOS_EXPORT_OPTIONS"
+            -exportOptionsPlist "$IOS_EXPORT_OPTIONS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
           IOS_IPA_PATH="$(find "$IOS_EXPORT_DIR" -maxdepth 2 -name '*.ipa' -print -quit)"
           if [ -z "$IOS_IPA_PATH" ]; then
             echo "iOS IPA not found under $IOS_EXPORT_DIR"
@@ -711,14 +686,9 @@ jobs:
             <key>method</key>
             <string>app-store-connect</string>
             <key>signingStyle</key>
-            <string>manual</string>
+            <string>automatic</string>
             <key>teamID</key>
             <string>${APPLE_TEAM_ID}</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>${MACOS_BUNDLE_ID}</key>
-              <string>${MACOS_PROFILE_NAME}</string>
-            </dict>
             <key>uploadSymbols</key>
             <true/>
           </dict>
@@ -738,9 +708,12 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$MACOS_ARCHIVE_PATH" \
-            CODE_SIGN_STYLE=Manual \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$MACOS_PROFILE_NAME" \
             archive
           echo "MACOS_ARCHIVE_PATH=$MACOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
@@ -754,7 +727,11 @@ jobs:
             -exportArchive \
             -archivePath "$MACOS_ARCHIVE_PATH" \
             -exportPath "$MACOS_EXPORT_DIR" \
-            -exportOptionsPlist "$MACOS_EXPORT_OPTIONS"
+            -exportOptionsPlist "$MACOS_EXPORT_OPTIONS" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
+            -authenticationKeyID "$APPSTORE_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
           MACOS_PKG_PATH="$(find "$MACOS_EXPORT_DIR" -maxdepth 3 -name '*.pkg' -print -quit)"
           if [ -z "$MACOS_PKG_PATH" ]; then
             echo "macOS package not found under $MACOS_EXPORT_DIR"

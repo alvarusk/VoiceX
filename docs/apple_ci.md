@@ -95,7 +95,12 @@ Keep active App Store profiles for:
 - iOS bundle id: `com.kingdomm.voicex`
 - macOS bundle id: `com.kingdomm.voicex`
 
-The workflow downloads them dynamically from Apple with the API key, so you do **not** need to store provisioning profiles as GitHub secrets.
+The workflow does **not** store profiles in GitHub. It uses automatic signing on the GitHub macOS runner and lets Xcode fetch the required profiles from Apple using the App Store Connect API key.
+
+That means:
+
+- the profiles must exist and be valid in Apple Developer
+- but you do not upload them to GitHub secrets
 
 ### 3. Certificates
 
@@ -112,7 +117,7 @@ Then base64-encode that `.p12` and save it in `APPLE_CERTIFICATES_P12_BASE64`.
 
 1. `flutter build ios --config-only`
 2. `pod install`
-3. `xcodebuild archive`
+3. `xcodebuild archive` with automatic signing and `-allowProvisioningUpdates`
 4. `xcodebuild -exportArchive` to `.ipa`
 5. `fastlane pilot upload`
 
@@ -120,7 +125,7 @@ Then base64-encode that `.p12` and save it in `APPLE_CERTIFICATES_P12_BASE64`.
 
 1. `flutter build macos --config-only`
 2. `pod install`
-3. `xcodebuild archive`
+3. `xcodebuild archive` with automatic signing and `-allowProvisioningUpdates`
 4. `xcodebuild -exportArchive` to `.pkg`
 5. `fastlane pilot upload`
 
