@@ -217,7 +217,16 @@ jobs:
             if ($exitCode -eq 0) { break }
 
             $joined = $output -join "`n"
+            $publishingLocked = $joined -match "Submission in its current state cannot be deleted"
             $retryable = $joined -match "Could not retrieve submission" -or $joined -match "Error while creating submission" -or $joined -match "Please try again"
+            if ($publishingLocked) {
+              throw @(
+                "msstore publish blocked by an existing Partner Center submission still in publication."
+                "CLI output:"
+                $joined
+                "Wait until the current Store publication finishes, then rerun the workflow."
+              ) -join "`n"
+            }
             if ($attempt -lt $maxAttempts -and $retryable) {
               Write-Host "Transient Microsoft Store publish failure detected. Retrying in 20 seconds (attempt $attempt/$maxAttempts)..."
               Start-Sleep -Seconds 20
@@ -791,6 +800,7 @@ jobs:
             --app_identifier "$IOS_BUNDLE_ID"
             --ipa "$IOS_IPA_PATH"
             --changelog "$APPLE_RELEASE_NOTES"
+            --uses_non_exempt_encryption false
             --skip_submission true
           )
           if [ "$APPLE_RELEASE_TRACK" != "app-store" ]; then
@@ -954,6 +964,7 @@ jobs:
             --app_identifier "$MACOS_BUNDLE_ID"
             --pkg "$MACOS_PKG_PATH"
             --changelog "$APPLE_RELEASE_NOTES"
+            --uses_non_exempt_encryption false
             --skip_submission true
           )
           if [ "$APPLE_RELEASE_TRACK" != "app-store" ]; then
