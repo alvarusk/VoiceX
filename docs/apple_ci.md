@@ -62,6 +62,10 @@ Apple signing/upload secrets:
     - Mac Installer Distribution certificate
 - `APPLE_CERTIFICATES_P12_PASSWORD`
   - password used when exporting the `.p12`
+- `APPLE_IOS_APPSTORE_PROFILE_BASE64`
+  - base64 of the iOS App Store provisioning profile (`.mobileprovision`) for `com.kingdomm.voicex`
+- `APPLE_MACOS_APPSTORE_PROFILE_BASE64`
+  - base64 of the macOS App Store provisioning profile (`.provisionprofile`) for `com.kingdomm.voicex`
 
 ### Repository variables
 
@@ -95,12 +99,12 @@ Keep active App Store profiles for:
 - iOS bundle id: `com.kingdomm.voicex`
 - macOS bundle id: `com.kingdomm.voicex`
 
-The workflow does **not** store profiles in GitHub. It uses automatic signing on the GitHub macOS runner and lets Xcode fetch the required profiles from Apple using the App Store Connect API key.
+The workflow stores App Store provisioning profiles in GitHub and uses **manual signing in CI**.
 
 That means:
 
 - the profiles must exist and be valid in Apple Developer
-- but you do not upload them to GitHub secrets
+- you export them once and store them as GitHub secrets
 
 ### 3. Certificates
 
@@ -117,17 +121,19 @@ Then base64-encode that `.p12` and save it in `APPLE_CERTIFICATES_P12_BASE64`.
 
 1. `flutter build ios --config-only`
 2. `pod install`
-3. `xcodebuild archive` with automatic signing and `-allowProvisioningUpdates`
-4. `xcodebuild -exportArchive` to `.ipa`
-5. `fastlane pilot upload`
+3. install the iOS App Store provisioning profile from GitHub secrets
+4. `xcodebuild archive` with manual signing
+5. `xcodebuild -exportArchive` to `.ipa`
+6. `fastlane pilot upload`
 
 ### macOS
 
 1. `flutter build macos --config-only`
 2. `pod install`
-3. `xcodebuild archive` with automatic signing and `-allowProvisioningUpdates`
-4. `xcodebuild -exportArchive` to `.pkg`
-5. `fastlane pilot upload`
+3. install the macOS App Store provisioning profile from GitHub secrets
+4. `xcodebuild archive` with manual signing
+5. `xcodebuild -exportArchive` to `.pkg`
+6. `fastlane pilot upload`
 
 ## TestFlight behavior
 
@@ -186,7 +192,7 @@ Result:
 
 - Apple review still exists; CI can submit builds, but Apple can still reject them.
 - If Apple changes required SDK/Xcode levels, update the GitHub runner image and/or workflow.
-- If signing changes in the Apple Developer portal, the `.p12` or profiles may need refreshing.
+- If signing changes in the Apple Developer portal, the `.p12` or provisioning profile secrets may need refreshing.
 - Keep local files like `ios_public.json` out of Git; the workflow generates its own CI-only defines file.
 
 ## Exact setup steps
@@ -247,16 +253,24 @@ If you prefer to inspect the file instead of copying to clipboard:
 base64 -i apple_signing.p12 > apple_signing.p12.b64
 ```
 
-### 3. Check provisioning profiles in Apple Developer
-
-You do not need to upload provisioning profiles to GitHub, but they must exist and remain valid in Apple Developer.
+### 3. Export provisioning profiles for GitHub
 
 Required profiles:
 
 - iOS App Store profile for `com.kingdomm.voicex`
 - macOS App Store profile for `com.kingdomm.voicex`
 
-The workflow downloads them dynamically using the API key.
+Download both profiles from Apple Developer and convert them to base64 on the Mac:
+
+```bash
+base64 -i VoiceX_iOS_AppStore.mobileprovision > VoiceX_iOS_AppStore.mobileprovision.b64
+base64 -i VoiceX_macOS_AppStore.provisionprofile > VoiceX_macOS_AppStore.provisionprofile.b64
+```
+
+Store them in GitHub secrets:
+
+- `APPLE_IOS_APPSTORE_PROFILE_BASE64`
+- `APPLE_MACOS_APPSTORE_PROFILE_BASE64`
 
 ### 4. Create GitHub secrets
 
@@ -276,6 +290,8 @@ In GitHub:
 - `APPSTORE_API_PRIVATE_KEY`
 - `APPLE_CERTIFICATES_P12_BASE64`
 - `APPLE_CERTIFICATES_P12_PASSWORD`
+- `APPLE_IOS_APPSTORE_PROFILE_BASE64`
+- `APPLE_MACOS_APPSTORE_PROFILE_BASE64`
 
 ### 5. Create GitHub variables
 

@@ -209,10 +209,21 @@ jobs:
             --clientId $env:AZURE_CLIENT_ID `
             --clientSecret $env:AZURE_CLIENT_SECRET
 
-          $output = & msstore publish "$($msix.FullName)" -id $env:STORE_PRODUCT_ID 2>&1
-          $exitCode = $LASTEXITCODE
-          if ($output) { $output | ForEach-Object { Write-Host $_ } }
-          if ($exitCode -ne 0) {
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $output = & msstore publish "$($msix.FullName)" -id $env:STORE_PRODUCT_ID 2>&1
+            $exitCode = $LASTEXITCODE
+            if ($output) { $output | ForEach-Object { Write-Host $_ } }
+            if ($exitCode -eq 0) { break }
+
+            $joined = $output -join "`n"
+            $retryable = $joined -match "Could not retrieve submission" -or $joined -match "Error while creating submission" -or $joined -match "Please try again"
+            if ($attempt -lt $maxAttempts -and $retryable) {
+              Write-Host "Transient Microsoft Store publish failure detected. Retrying in 20 seconds (attempt $attempt/$maxAttempts)..."
+              Start-Sleep -Seconds 20
+              continue
+            }
+
             $message = @(
               "msstore publish failed (exit $exitCode)."
               "Common causes:"
@@ -373,6 +384,8 @@ jobs:
       APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
       APPLE_CERTIFICATES_P12_BASE64: ${{ secrets.APPLE_CERTIFICATES_P12_BASE64 }}
       APPLE_CERTIFICATES_P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+      APPLE_IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.APPLE_IOS_APPSTORE_PROFILE_BASE64 }}
+      APPLE_MACOS_APPSTORE_PROFILE_BASE64: ${{ secrets.APPLE_MACOS_APPSTORE_PROFILE_BASE64 }}
       APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
       APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
       APPLE_TEAM_ID: R24Q9H7VFW
@@ -446,7 +459,9 @@ jobs:
             APPSTORE_API_KEY_ID \
             APPSTORE_ISSUER_ID \
             APPLE_CERTIFICATES_P12_BASE64 \
-            APPLE_CERTIFICATES_P12_PASSWORD
+            APPLE_CERTIFICATES_P12_PASSWORD \
+            APPLE_IOS_APPSTORE_PROFILE_BASE64 \
+            APPLE_MACOS_APPSTORE_PROFILE_BASE64
           do
             if [ -z "${!key:-}" ]; then
               missing+=("$key")
@@ -519,6 +534,36 @@ jobs:
           echo "APPSTORE_API_KEY_P8=$P8_PATH" >> "$GITHUB_ENV"
           echo "APPSTORE_API_KEY_JSON=$JSON_PATH" >> "$GITHUB_ENV"
 
+      - name: Install App Store provisioning profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+
+          install_profile() {
+            local profile_path="$1"
+            local decoded_plist="$2"
+            local extension="$3"
+            local env_name="$4"
+
+            security cms -D -i "$profile_path" > "$decoded_plist"
+            local uuid
+            local name
+            uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" "$decoded_plist")
+            name=$(/usr/libexec/PlistBuddy -c "Print Name" "$decoded_plist")
+            cp "$profile_path" "$PROFILES_DIR/$uuid.$extension"
+            printf '%s=%s\n' "$env_name" "$name" >> "$GITHUB_ENV"
+          }
+
+          IOS_PROFILE_PATH="$RUNNER_TEMP/voiceX-ios-appstore.mobileprovision"
+          printf '%s' "$APPLE_IOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$IOS_PROFILE_PATH"
+          install_profile "$IOS_PROFILE_PATH" "$RUNNER_TEMP/voiceX-ios-appstore.plist" "mobileprovision" "IOS_PROFILE_NAME"
+
+          MACOS_PROFILE_PATH="$RUNNER_TEMP/voiceX-macos-appstore.provisionprofile"
+          printf '%s' "$APPLE_MACOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$MACOS_PROFILE_PATH"
+          install_profile "$MACOS_PROFILE_PATH" "$RUNNER_TEMP/voiceX-macos-appstore.plist" "provisionprofile" "MACOS_PROFILE_NAME"
+
       - name: Create Apple dart-defines file
         shell: bash
         run: |
@@ -582,7 +627,14 @@ jobs:
             <key>method</key>
             <string>app-store-connect</string>
             <key>signingStyle</key>
-            <string>automatic</string>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${IOS_BUNDLE_ID}</key>
+              <string>${IOS_PROFILE_NAME}</string>
+            </dict>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
             <key>teamID</key>
             <string>${APPLE_TEAM_ID}</string>
             <key>uploadSymbols</key>
@@ -609,8 +661,10 @@ jobs:
             -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
             -authenticationKeyID "$APPSTORE_API_KEY_ID" \
             -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROFILE_NAME" \
             archive
           echo "IOS_ARCHIVE_PATH=$IOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
@@ -686,7 +740,16 @@ jobs:
             <key>method</key>
             <string>app-store-connect</string>
             <key>signingStyle</key>
-            <string>automatic</string>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${MACOS_BUNDLE_ID}</key>
+              <string>${MACOS_PROFILE_NAME}</string>
+            </dict>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>installerSigningCertificate</key>
+            <string>3rd Party Mac Developer Installer</string>
             <key>teamID</key>
             <string>${APPLE_TEAM_ID}</string>
             <key>uploadSymbols</key>
@@ -712,8 +775,10 @@ jobs:
             -authenticationKeyPath "$APPSTORE_API_KEY_P8" \
             -authenticationKeyID "$APPSTORE_API_KEY_ID" \
             -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$MACOS_PROFILE_NAME" \
             archive
           echo "MACOS_ARCHIVE_PATH=$MACOS_ARCHIVE_PATH" >> "$GITHUB_ENV"
 
