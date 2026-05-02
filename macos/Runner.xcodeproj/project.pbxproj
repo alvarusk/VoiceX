@@ -580,7 +580,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX for TakoWorks";
+				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -720,7 +720,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX for TakoWorks";
+				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -748,7 +748,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX for TakoWorks";
+				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
 				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (

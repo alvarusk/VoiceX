@@ -82,7 +82,7 @@ class _VoiceXAppState extends State<VoiceXApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VoiceX for TakoWorks',
+      title: 'VoiceX',
       themeMode: _themeMode,
       theme: ThemeData(
         useMaterial3: true,

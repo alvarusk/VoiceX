@@ -193,6 +193,7 @@ Result:
 - Apple review still exists; CI can submit builds, but Apple can still reject them.
 - If Apple changes required SDK/Xcode levels, update the GitHub runner image and/or workflow.
 - If signing changes in the Apple Developer portal, the `.p12` or provisioning profile secrets may need refreshing.
+- Xcode 26 is stricter with older iOS pods. VoiceX pins the CocoaPods iOS deployment target to `13.0` in `ios/Podfile` and disables Swift asset symbol generation for pods during `post_install` to avoid archive failures in resource bundle targets such as `DKPhotoGallery`.
 - Keep local files like `ios_public.json` out of Git; the workflow generates its own CI-only defines file.
 
 ## Exact setup steps
