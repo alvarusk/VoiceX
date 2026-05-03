@@ -241,23 +241,34 @@ class CloudSyncService {
         for (final m in remote) (m['project_id'] as String): m,
       };
       final remoteIds = remoteById.keys.toSet();
-      final allLocalRows = await db.select(db.projects).get();
-      final localArchivedIds = includeArchived
+      final allLocalRows = includeArchived
+          ? await db.select(db.projects).get()
+          : await (db.select(
+              db.projects,
+            )..where((t) => t.archived.equals(false))).get();
+      var localArchivedIds = includeArchived
           ? const <String>{}
-          : allLocalRows
-                .where((p) => p.archived)
-                .map((p) => p.projectId)
+          : (await db
+                    .customSelect(
+                      'SELECT project_id FROM projects WHERE archived = 1',
+                      readsFrom: {db.projects},
+                    )
+                    .get())
+                .map((r) => r.read<String>('project_id'))
                 .toSet();
       var localRows = includeArchived
           ? allLocalRows
           : allLocalRows.where((p) => !p.archived).toList();
       var localIds = localRows.map((p) => p.projectId).toSet();
+      final allLocalIds = includeArchived
+          ? localIds
+          : localIds.union(localArchivedIds);
 
       final settings = SettingsService.instance;
       final deleted = settings.deletedProjects;
       if (deleted.isNotEmpty) {
         final deletedIds = deleted.keys.toSet();
-        for (final id in deletedIds.intersection(localIds)) {
+        for (final id in deletedIds.intersection(allLocalIds)) {
           await _deleteLocalProject(id);
         }
         for (final id in deletedIds.intersection(remoteIds)) {
@@ -268,8 +279,9 @@ class CloudSyncService {
               .where((p) => !deletedIds.contains(p.projectId))
               .toList();
           localIds = localRows.map((p) => p.projectId).toSet();
-          for (final id in deletedIds) {
-            remoteById.remove(id);
+          remoteById.removeWhere((id, _) => deletedIds.contains(id));
+          if (!includeArchived) {
+            localArchivedIds = localArchivedIds.difference(deletedIds);
           }
         }
       }
@@ -290,7 +302,8 @@ class CloudSyncService {
         final remoteEntry = remoteById[local.projectId];
         final remoteUpdated = remoteEntry?['updated_at_ms'] as int? ?? 0;
         try {
-          if (remoteEntry == null && remoteArchivedIds.contains(local.projectId)) {
+          if (remoteEntry == null &&
+              remoteArchivedIds.contains(local.projectId)) {
             bump('Omitiendo archivado ${local.projectId}');
           } else if (remoteEntry == null) {
             await pushProject(local.projectId, onProgress: onProgress);
@@ -546,7 +559,9 @@ class CloudSyncService {
     if (_looksLikeUrl(remotePath)) {
       return _rebaseR2Url(remotePath) ?? remotePath;
     }
-    if (engine == 'base' && remoteBasePath != null && _looksLikeUrl(remoteBasePath)) {
+    if (engine == 'base' &&
+        remoteBasePath != null &&
+        _looksLikeUrl(remoteBasePath)) {
       return _rebaseR2Url(remoteBasePath) ?? remoteBasePath;
     }
     return null;
@@ -1029,7 +1044,10 @@ class CloudSyncService {
       String relation, {
       bool filterArchived = false,
     }) async {
-      dynamic query = _client.from(relation).select().eq('project_id', projectId);
+      dynamic query = _client
+          .from(relation)
+          .select()
+          .eq('project_id', projectId);
       if (filterArchived) {
         query = query.eq('archived', false);
       }
