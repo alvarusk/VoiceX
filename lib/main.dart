@@ -15,9 +15,9 @@ import 'utils/app_version.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await dotenv.load(fileName: '.env');
+    await dotenv.load(fileName: '.env', isOptional: true);
   } catch (_) {
-    // Si no existe .env en assets, seguimos con dart-define/Platform.
+    // Si no existe .env, seguimos con dart-define/Platform.
   }
   await SettingsService.instance.init();
   unawaited(SupabaseManager.instance.init());
