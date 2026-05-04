@@ -637,9 +637,9 @@ class ReviewService {
           // best-effort; si falla igual dejamos el archivo exportado
         }
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('ASS exportado en ${xfile.path}')),
-          );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('ASS exported to ${xfile.path}')),
+            );
         }
       } else {
         await Share.shareXFiles(
@@ -652,7 +652,7 @@ class ReviewService {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('No se pudo exportar: $e')));
+        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
       }
     }
   }

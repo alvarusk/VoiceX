@@ -113,9 +113,9 @@ class _SettingsPageState extends State<SettingsPage> {
       await _cloud.syncSettingsOnly();
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Ajustes guardados')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Settings saved')),
+    );
   }
 
   Future<void> _pickTxtForFolder(String folder) async {
@@ -153,7 +153,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Glosario actualizado desde TXT')),
+        const SnackBar(content: Text('Glossary updated from TXT')),
       );
     }
   }
@@ -185,15 +185,15 @@ class _SettingsPageState extends State<SettingsPage> {
     final res = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('¿Salir sin guardar ajustes?'),
+        title: const Text('Exit without saving settings?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop('cancel'),
-            child: const Text('Cancelar'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop('save'),
-            child: const Text('Guardar'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -210,7 +210,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir el enlace de actualización.')),
+        const SnackBar(
+          content: Text('Could not open the update link.'),
+        ),
       );
     }
   }
@@ -225,10 +227,10 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: const Text('Ajustes'),
+          title: const Text('Settings'),
           actions: [
             IconButton(
-              tooltip: widget.isDark ? 'Modo claro' : 'Modo oscuro',
+              tooltip: widget.isDark ? 'Light mode' : 'Dark mode',
               icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: widget.onToggleTheme,
             ),
@@ -251,7 +253,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Cuenta cloud',
+                          'Cloud account',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
@@ -260,8 +262,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(height: 8),
                         Text(
                           supabase.isAuthenticated
-                              ? 'Sesion iniciada como ${supabase.currentUserEmail ?? 'usuario sin email'}'
-                              : 'No hay sesion iniciada.',
+                              ? 'Signed in as ${supabase.currentUserEmail ?? 'user without email'}'
+                              : 'No active session.',
                         ),
                         if (supabase.isAuthenticated) ...[
                           const SizedBox(height: 12),
@@ -270,7 +272,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               await supabase.signOut();
                             },
                             icon: const Icon(Icons.logout),
-                            label: const Text('Cerrar sesion'),
+                            label: const Text('Sign out'),
                           ),
                         ],
                       ],
@@ -299,7 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
             TextField(
               controller: _textModelCtrl,
               decoration: const InputDecoration(
-                labelText: 'Modelo texto (puntuación / ayudas)',
+                labelText: 'Text model (punctuation / assists)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -307,33 +309,33 @@ class _SettingsPageState extends State<SettingsPage> {
             TextField(
               controller: _sttModelCtrl,
               decoration: const InputDecoration(
-                labelText: 'Modelo STT (audio→texto)',
+                labelText: 'STT model (audio→text)',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             const Text(
-              'Glosarios',
+              'Glossaries',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             if (_folders.isEmpty)
               const Text(
-                'No hay carpetas todavía. Crea o selecciona una carpeta para vincular glosarios.',
+                'No folders yet. Create or select a folder to link glossaries.',
               )
             else ...[
               DropdownButtonFormField<String>(
                 value: _selectedFolder,
                 items: _folders
                     .map(
-                      (f) => DropdownMenuItem(
+                    (f) => DropdownMenuItem(
                         value: f,
-                        child: Text(f.trim().isEmpty ? 'Sin carpeta' : f),
+                        child: Text(f.trim().isEmpty ? 'No folder' : f),
                       ),
                     )
                     .toList(),
                 decoration: const InputDecoration(
-                  labelText: 'Serie / Carpeta',
+                  labelText: 'Series / Folder',
                   border: OutlineInputBorder(),
                 ),
                 onChanged: (v) {
@@ -348,7 +350,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 controller: _glossaryCtrls[_selectedFolder],
                 maxLines: null,
                 decoration: const InputDecoration(
-                  labelText: 'Términos (separados por comas)',
+                  labelText: 'Terms (comma-separated)',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -358,14 +360,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   ElevatedButton.icon(
                     onPressed: () => _pickTxtForFolder(_selectedFolder),
                     icon: const Icon(Icons.upload_file),
-                    label: const Text('Subir TXT'),
+                    label: const Text('Upload TXT'),
                   ),
                 ],
               ),
             ],
             const SizedBox(height: 16),
             const Text(
-              'Entrada de voz',
+              'Voice input',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -377,7 +379,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 _markDirty();
               }),
               title: const Text('Local (speech_to_text)'),
-              subtitle: const Text('Rápido, pero suele venir sin puntuación.'),
+              subtitle: const Text('Fast, but usually without punctuation.'),
             ),
             RadioListTile<VoiceInputMode>(
               value: VoiceInputMode.openai,
@@ -388,31 +390,31 @@ class _SettingsPageState extends State<SettingsPage> {
                       _mode = v!;
                       _markDirty();
                     }),
-              title: const Text('OpenAI (grabación + transcripción)'),
+              title: const Text('OpenAI (recording + transcription)'),
               subtitle: Text(
                 disabledOpenAiMode
-                    ? 'En Web lo activaremos más adelante.'
-                    : 'Mejor puntuación/capitalización y más estabilidad en PC.',
+                    ? 'We will enable this on Web later.'
+                    : 'Better punctuation/capitalization and more stability on PC.',
               ),
             ),
             const SizedBox(height: 16),
             const _VoiceCommandsBox(),
             const SizedBox(height: 16),
             const Text(
-              'Sincronizacion de videos (R2)',
+              'Video sync across devices (R2)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               _cloud.isR2Available
-                  ? 'R2 disponible: si'
-                  : 'R2 disponible: no (faltan R2_* en el entorno)',
+                  ? 'R2 configured on this device: yes'
+                  : 'R2 configured on this device: no (missing R2_* env vars)',
             ),
             const SizedBox(height: 4),
             Text(
               _cloud.hasR2PublicBase
-                  ? 'Base publica: ${_cloud.r2PublicBase}'
-                  : 'Base publica: no configurada (R2_PUBLIC_BASE)',
+                  ? 'Public base: ${_cloud.r2PublicBase}'
+                  : 'Public base: not configured (R2_PUBLIC_BASE)',
             ),
             const SizedBox(height: 4),
             Text(
@@ -422,8 +424,8 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Para ver videos en otros dispositivos, subelos con "Subir a cloud" '
-              'y asegurate de que R2_* este disponible en cada dispositivo.',
+              'R2 is only needed to sync and view videos on other devices. '
+              'If the project already has a local video, it will keep playing even when R2 is not configured.',
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -438,11 +440,11 @@ class _SettingsPageState extends State<SettingsPage> {
               FilledButton.icon(
                 onPressed: _launchUpdater,
                 icon: const Icon(Icons.system_update),
-                label: const Text('Actualizar (Windows)'),
+                label: const Text('Update (Windows)'),
               ),
               const SizedBox(height: 4),
               Text(
-                'Abre la última versión en GitHub Releases y descarga el MSIX.',
+                'Opens the latest version in GitHub Releases and downloads the MSIX.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -452,12 +454,12 @@ class _SettingsPageState extends State<SettingsPage> {
             FilledButton.icon(
               onPressed: _save,
               icon: const Icon(Icons.save),
-              label: const Text('Guardar'),
+              label: const Text('Save'),
             ),
             if (_saved) const SizedBox(height: 8),
             if (_saved)
               Text(
-                'Tip: en Review, el botón ✨ refina puntuación si ya tienes texto.',
+                'Tip: in Review, the ✨ button refines punctuation if you already have text.',
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -475,13 +477,13 @@ class _VoiceCommandsBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = const [
-      'siguiente / adelante / avanzar / next → ir a la siguiente línea',
-      'anterior / atrás / previous → ir a la línea anterior',
-      'duda / marcar duda / quitar duda → alternar duda',
-      'aceptar / usar / usar voz / confirmar → usar el texto dictado',
-      'rechazar / borrar / limpiar → borrar el texto dictado',
-      'repetir / otra vez / escuchar de nuevo → volver a escuchar',
-      'Otra frase → se guarda como texto dictado',
+      'next / forward / advance → go to the next line',
+      'previous / back → go to the previous line',
+      'doubt / mark doubt / clear doubt → toggle doubt',
+      'accept / use / use voice / confirm → use the dictated text',
+      'reject / delete / clear → delete the dictated text',
+      'repeat / again / listen again → listen again',
+      'Any other phrase → save as dictated text',
     ];
 
     return Card(
@@ -491,7 +493,7 @@ class _VoiceCommandsBox extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Comandos de voz',
+              'Voice commands',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),

@@ -162,11 +162,11 @@ class _VoiceXAppState extends State<VoiceXApp> {
                     destinations: const [
                       NavigationDestination(
                         icon: Icon(Icons.folder),
-                        label: 'Proyectos',
+                        label: 'Projects',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.settings),
-                        label: 'Ajustes',
+                        label: 'Settings',
                       ),
                     ],
                     onDestinationSelected: (i) => setState(() => _tab = i),
@@ -227,15 +227,15 @@ class _CloudLoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Inicializando cloud...'),
-          ],
-        ),
-      ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Initializing cloud...'),
+              ],
+            ),
+          ),
     );
   }
 }
@@ -273,15 +273,15 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!ok) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            SupabaseManager.instance.authError ??
-                'No se pudo iniciar sesion en cloud.',
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              SupabaseManager.instance.authError ??
+                'Could not sign in to cloud.',
+            ),
           ),
-        ),
-      );
-    }
+        );
+      }
   }
 
   @override
@@ -289,10 +289,10 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
     final manager = SupabaseManager.instance;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Acceso cloud'),
+        title: const Text('Cloud Access'),
         actions: [
           IconButton(
-            tooltip: widget.isDark ? 'Modo claro' : 'Modo oscuro',
+            tooltip: widget.isDark ? 'Light mode' : 'Dark mode',
             icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
             onPressed: widget.onToggleTheme,
           ),
@@ -308,7 +308,7 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Inicia sesion para cargar tus proyectos cloud.',
+                  'Sign in to load your cloud projects.',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 16),
@@ -342,7 +342,7 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.login),
-                  label: Text(_submitting ? 'Entrando...' : 'Iniciar sesion'),
+                  label: Text(_submitting ? 'Signing in...' : 'Sign in'),
                 ),
                 if (manager.authError != null) ...[
                   const SizedBox(height: 12),

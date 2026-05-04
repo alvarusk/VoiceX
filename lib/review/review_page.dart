@@ -115,20 +115,22 @@ class _ReviewPageState extends State<ReviewPage> {
     final res = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('¿Salir sin guardar?'),
-        content: const Text('Hay cambios locales sin subir.'),
+        title: const Text('Exit without saving?'),
+        content: const Text(
+          'There are local changes that have not been uploaded.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop('cancel'),
-            child: const Text('Cancelar'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop('exit'),
-            child: const Text('Salir'),
+            child: const Text('Exit'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop('save'),
-            child: const Text('Guardar'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -257,7 +259,7 @@ class _ReviewPageState extends State<ReviewPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'STT: no hay paquetes de voz instalados en Windows. Añade un idioma de voz en Configuración.',
+              'STT: no voice packages are installed on Windows. Add a voice language in Settings.',
             ),
           ),
         );
@@ -294,7 +296,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!isRemote) {
         localFile = File(resolved);
         if (!await localFile.exists()) {
-          debugPrint('Video no encontrado en ruta: $path');
+          debugPrint('Video not found at path: $path');
           setState(() {
             _videoPath = '';
             _videoError = true;
@@ -335,7 +337,7 @@ class _ReviewPageState extends State<ReviewPage> {
         }
       }
 
-      throw lastError ?? StateError('No se pudo inicializar el video.');
+      throw lastError ?? StateError('Could not initialize the video.');
     } catch (e, st) {
       debugPrint('Error al preparar video: $e');
       debugPrintStack(stackTrace: st);
@@ -350,8 +352,8 @@ class _ReviewPageState extends State<ReviewPage> {
 
   List<VideoViewType> _videoViewTypesForCurrentPlatform() {
     if (defaultTargetPlatform == TargetPlatform.android) {
-      // `textureView` funcionaba en Android antes de la regresion; dejamos
-      // `platformView` como fallback por compatibilidad con otros dispositivos.
+      // `textureView` worked on Android before the regression; keep
+      // `platformView` as a fallback for compatibility with other devices.
       return const [VideoViewType.textureView, VideoViewType.platformView];
     }
     return const [VideoViewType.textureView];
@@ -412,12 +414,13 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _jumpToIndex(Project project, int idx) async {
-    if (_pageController == null) return;
-    await _pageController!.animateToPage(
-      idx,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-    );
+    if (_pageController?.hasClients == true) {
+      await _pageController!.animateToPage(
+        idx,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
     await _svc.setCurrentIndex(project.projectId, idx);
     await _seekVideoForIndex(project.projectId, idx);
   }
@@ -429,9 +432,9 @@ class _ReviewPageState extends State<ReviewPage> {
     );
     if (next == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay más líneas sin revisar.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No more lines to review.')));
       return;
     }
     await _jumpToIndex(project, next);
@@ -446,7 +449,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('No hay más dudas.')));
+      ).showSnackBar(const SnackBar(content: Text('No more doubts.')));
       return;
     }
     await _jumpToIndex(project, next);
@@ -455,7 +458,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void> _gotoNext(Project project, int total) async {
     final target = (project.currentIndex + 1).clamp(0, total - 1);
     if (target == project.currentIndex) {
-      _showSnack('Es la ultima linea.');
+      _showSnack('This is the last line.');
       return;
     }
     await _jumpToIndex(project, target);
@@ -464,7 +467,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void> _gotoPrevious(Project project) async {
     final target = (project.currentIndex - 1).clamp(0, project.currentIndex);
     if (target == project.currentIndex) {
-      _showSnack('Ya estas en la primera linea.');
+      _showSnack('You are already on the first line.');
       return;
     }
     await _jumpToIndex(project, target);
@@ -479,7 +482,7 @@ class _ReviewPageState extends State<ReviewPage> {
             shrinkWrap: true,
             children: [
               SwitchListTile(
-                title: const Text('Saltar revisadas al avanzar'),
+                title: const Text('Skip reviewed lines when advancing'),
                 value: skipReviewedOnAdvance,
                 onChanged: (v) => setState(() => skipReviewedOnAdvance = v),
               ),
@@ -493,7 +496,7 @@ class _ReviewPageState extends State<ReviewPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.flag),
-                title: const Text('Ir a siguiente duda'),
+                title: const Text('Go to next doubt'),
                 onTap: () {
                   Navigator.pop(context);
                   _gotoNextDoubt(project);
@@ -548,7 +551,7 @@ class _ReviewPageState extends State<ReviewPage> {
     if (res == null || res.files.isEmpty) return;
     final path = res.files.single.path;
     if (path == null || path.isEmpty) {
-      _showSnack('No se pudo leer el archivo de video.');
+      _showSnack('Could not read the video file.');
       return;
     }
     try {
@@ -561,10 +564,10 @@ class _ReviewPageState extends State<ReviewPage> {
       _videoPath = null;
       _initialSeekDone = false;
       await _ensureVideo(project);
-      _showSnack('Video actualizado.');
+      _showSnack('Video updated.');
     } catch (e) {
       debugPrint('attach video error: $e');
-      _showSnack('No se pudo actualizar el video.');
+      _showSnack('Could not update the video.');
     }
   }
 
@@ -611,7 +614,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Fin del proyecto.')));
+      ).showSnackBar(const SnackBar(content: Text('End of project.')));
     }
   }
 
@@ -659,7 +662,7 @@ class _ReviewPageState extends State<ReviewPage> {
     String source,
     String current,
   ) async {
-    final edited = await _promptEdit(line, 'Editar $source', current);
+    final edited = await _promptEdit(line, 'Edit $source', current);
     if (edited == null) return;
     await _svc.setCandidateText(
       lineId: line.lineId,
@@ -716,7 +719,7 @@ class _ReviewPageState extends State<ReviewPage> {
       case CommandAction.acceptVoice:
         final voice = line.candVoice?.trim() ?? '';
         if (voice.isEmpty) {
-          _showSnack('No hay texto de voz para usar.');
+          _showSnack('There is no voice text to use.');
           return;
         }
         await _pickCandidate(
@@ -734,7 +737,7 @@ class _ReviewPageState extends State<ReviewPage> {
       case CommandAction.repeat:
         await _speech.stop();
         await _startLocalListening(project, line, total);
-        _showSnack('Escuchando de nuevo.');
+        _showSnack('Listening again.');
         break;
     }
   }
@@ -764,7 +767,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (kIsWeb) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('OpenAI STT en Web: lo activamos más adelante.'),
+            content: Text('OpenAI STT on Web: we will enable it later.'),
           ),
         );
         return;
@@ -779,7 +782,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('speech_to_text no disponible en este dispositivo.'),
+          content: Text('speech_to_text is not available on this device.'),
         ),
       );
       return;
@@ -803,7 +806,7 @@ class _ReviewPageState extends State<ReviewPage> {
     if (!settings.hasOpenAiKey) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Falta API key en Ajustes.')),
+        const SnackBar(content: Text('Missing API key in Settings.')),
       );
       return;
     }
@@ -814,7 +817,7 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!hasPerm) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sin permiso de micrófono.')),
+          const SnackBar(content: Text('No microphone permission.')),
         );
         return;
       }
@@ -841,9 +844,9 @@ class _ReviewPageState extends State<ReviewPage> {
       if (glossary.isNotEmpty) {
         prompt =
             '''
-Transcribe al español respetando estos nombres y términos exactamente como están escritos (aunque la pronunciación suene distinta):
+Transcribe into Spanish, preserving these names and terms exactly as written (even if the pronunciation sounds different):
 $glossary
-Si dudas, prioriza estas grafías tal cual.
+If in doubt, prefer these spellings as-is.
 ''';
       }
       final result = await client.transcribeAudioFile(
@@ -872,7 +875,7 @@ Si dudas, prioriza estas grafías tal cual.
     if (!settings.hasOpenAiKey) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configura la API key en Ajustes.')),
+        const SnackBar(content: Text('Set the API key in Settings.')),
       );
       return;
     }
@@ -895,7 +898,7 @@ Si dudas, prioriza estas grafías tal cual.
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Puntuación refinada ✨')));
+    ).showSnackBar(const SnackBar(content: Text('Punctuation refined ✨')));
   }
 
   // --------
@@ -965,8 +968,8 @@ Si dudas, prioriza estas grafías tal cual.
                     final icon = dirty ? Icons.cloud_upload : Icons.cloud_done;
                     final color = dirty ? Colors.orange : null;
                     final tooltip = dirty
-                        ? 'Guardar (hay cambios locales sin subir)'
-                        : 'Guardado en cloud';
+                        ? 'Save (local changes not uploaded yet)'
+                        : 'Saved to cloud';
                     return IconButton(
                       icon: Icon(icon, color: color),
                       tooltip: tooltip,
@@ -977,24 +980,24 @@ Si dudas, prioriza estas grafías tal cual.
                   },
                 ),
                 StreamBuilder<int>(
-                  stream: _svc.watchReviewedLines(widget.projectId),
-                  builder: (context, reviewedSnap) {
-                    return StreamBuilder<int>(
-                      stream: _svc.watchTotalLines(widget.projectId),
-                      builder: (context, totalSnap) {
-                        final reviewed = reviewedSnap.data ?? 0;
-                        final total = totalSnap.data ?? 0;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Center(child: Text('$reviewed/$total')),
-                        );
-                      },
+                  stream: _svc.watchTotalLines(widget.projectId),
+                  builder: (context, totalSnap) {
+                    final total = totalSnap.data ?? 0;
+                    final currentLine = project.currentIndex + 1;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: _LineJumpCounter(
+                        currentLine: currentLine,
+                        total: total,
+                        onJump: (lineNumber) =>
+                            _jumpToIndex(project, lineNumber - 1),
+                      ),
                     );
                   },
                 ),
                 IconButton(
                   icon: const Icon(Icons.bar_chart),
-                  tooltip: 'Metricas',
+                  tooltip: 'Metrics',
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -1011,7 +1014,7 @@ Si dudas, prioriza estas grafías tal cual.
                 IconButton(
                   icon: const Icon(Icons.tune),
                   onPressed: () => _openTools(project),
-                  tooltip: 'Herramientas',
+                  tooltip: 'Tools',
                 ),
                 IconButton(
                   icon: const Icon(Icons.ios_share),
@@ -1019,7 +1022,7 @@ Si dudas, prioriza estas grafías tal cual.
                     context,
                     projectId: project.projectId,
                   ),
-                  tooltip: 'Exportar ASS final',
+                  tooltip: 'Export final ASS',
                 ),
               ],
             ),
@@ -1028,7 +1031,7 @@ Si dudas, prioriza estas grafías tal cual.
               builder: (context, snapTotal) {
                 final total = snapTotal.data ?? 0;
                 if (total == 0) {
-                  return const Center(child: Text('Sin líneas.'));
+                  return const Center(child: Text('No lines.'));
                 }
 
                 final timingsFuture =
@@ -1398,15 +1401,15 @@ Si dudas, prioriza estas grafías tal cual.
             final sttAvailable = _speech.available.value;
             final statusText = voiceMode == VoiceInputMode.openai
                 ? (_recBusy
-                      ? 'Procesando grabacion...'
+                      ? 'Processing recording...'
                       : (_isRecording
-                            ? 'Grabando para OpenAI...'
-                            : 'Listo para grabar.'))
+                            ? 'Recording for OpenAI...'
+                            : 'Ready to record.'))
                 : (!sttAvailable
-                      ? 'STT local no disponible (Windows beta).'
+                      ? 'Local STT not available (Windows beta).'
                       : (_speech.isListening
-                            ? 'Escuchando...'
-                            : 'Listo para dictar.'));
+                            ? 'Listening...'
+                            : 'Ready to dictate.'));
 
             return _LineCard(
               project: project,
@@ -1502,7 +1505,7 @@ Si dudas, prioriza estas grafías tal cual.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Subida cancelada por tardar demasiado.'),
+            content: Text('Upload canceled because it took too long.'),
           ),
         );
       }
@@ -1516,18 +1519,18 @@ Si dudas, prioriza estas grafías tal cual.
     } catch (e) {
       debugPrint('save cloud error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al guardar en cloud.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Error saving to cloud.')));
       }
     } finally {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
     }
 
     if (mounted && ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Proyecto guardado en cloud.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Project saved to cloud.')));
       setState(() {}); // refresca indicadores de suciedad
     }
     if (mounted) setState(() => _savingCloud = false);
@@ -1584,11 +1587,11 @@ class _VideoPanel extends StatelessWidget {
       if (error) {
         player = Center(
           child: Text(
-            'Video no disponible (ruta inválida o Web): ${videoPath ?? '-'}',
+            'Video unavailable (invalid path or Web): ${videoPath ?? '-'}',
           ),
         );
       } else if (controller == null || initFuture == null) {
-        player = const Center(child: Text('Sin video importado.'));
+        player = const Center(child: Text('No video imported.'));
       } else {
         player = FutureBuilder<void>(
           future: initFuture,
@@ -1603,7 +1606,7 @@ class _VideoPanel extends StatelessWidget {
               );
             }
             if (controller!.value.hasError) {
-              return const Center(child: Text('No se pudo cargar el video.'));
+              return const Center(child: Text('Could not load the video.'));
             }
             return ValueListenableBuilder<VideoPlayerValue>(
               valueListenable: controller!,
@@ -1709,7 +1712,7 @@ class _VideoPanel extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    tooltip: 'Rebobinar 5s',
+                    tooltip: 'Rewind 5s',
                     icon: const Icon(Icons.replay_5),
                     onPressed: controller == null ? null : onBack,
                     iconSize: 20,
@@ -1718,8 +1721,8 @@ class _VideoPanel extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: controller?.value.isPlaying == true
-                        ? 'Pausar'
-                        : 'Reproducir',
+                        ? 'Pause'
+                        : 'Play',
                     icon: Icon(
                       controller?.value.isPlaying == true
                           ? Icons.pause_circle
@@ -1731,7 +1734,7 @@ class _VideoPanel extends StatelessWidget {
                     padding: const EdgeInsets.all(6),
                   ),
                   IconButton(
-                    tooltip: 'Reproducir solo la línea actual',
+                    tooltip: 'Play only the current line',
                     icon: const Icon(Icons.playlist_play),
                     onPressed: controller == null ? null : onPlaySegment,
                     iconSize: 22,
@@ -1739,7 +1742,7 @@ class _VideoPanel extends StatelessWidget {
                     padding: const EdgeInsets.all(6),
                   ),
                   IconButton(
-                    tooltip: 'Avanzar 5s',
+                    tooltip: 'Forward 5s',
                     icon: const Icon(Icons.forward_5),
                     onPressed: controller == null ? null : onForward,
                     iconSize: 20,
@@ -1753,7 +1756,7 @@ class _VideoPanel extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    tooltip: 'Línea anterior',
+                    tooltip: 'Previous line',
                     icon: const Icon(Icons.skip_previous),
                     onPressed: onPrevLine,
                     iconSize: 20,
@@ -1762,7 +1765,7 @@ class _VideoPanel extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    tooltip: 'Línea siguiente',
+                    tooltip: 'Next line',
                     icon: const Icon(Icons.skip_next),
                     onPressed: onNextLine,
                     iconSize: 20,
@@ -1879,7 +1882,7 @@ class _TranscriberPromptPanel extends StatelessWidget {
               context,
             ).style.copyWith(height: 1.4);
             final text = promptText.isEmpty
-                ? 'Sin explicacion disponible en el segundo bloque {...}.'
+                ? 'No explanation available in the second block {...}.'
                 : promptText;
             return Text.rich(
               TextSpan(
@@ -2063,12 +2066,12 @@ class _LineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title =
-        'Línea ${line.dialogueIndex + 1} • ${_fmtTime(line.startMs)} → ${_fmtTime(line.endMs)}';
+        'Line ${line.dialogueIndex + 1} • ${_fmtTime(line.startMs)} → ${_fmtTime(line.endMs)}';
     final hasOtherCand =
         (line.candClaude ?? '').isNotEmpty ||
         (line.candGemini ?? '').isNotEmpty ||
         (line.candDeepseek ?? '').isNotEmpty;
-    final gptLabel = hasOtherCand ? 'GPT' : 'Guion ES';
+    final gptLabel = hasOtherCand ? 'GPT' : 'ES script';
     final romajiTag =
         _firstTag(line.sourceText ?? '') ?? _firstTag(line.originalText);
     final displayRomanization = (line.romanization ?? '').trim().isNotEmpty
@@ -2102,7 +2105,7 @@ class _LineCard extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Marcar duda',
+                    tooltip: 'Mark doubt',
                     icon: Icon(line.doubt ? Icons.flag : Icons.outlined_flag),
                     onPressed: onToggleDoubt,
                   ),
@@ -2124,10 +2127,10 @@ class _LineCard extends StatelessWidget {
               if (originCombined.isNotEmpty)
                 _SourceBlock(label: '', text: originCombined, highlight: true),
               if ((line.gloss ?? '').isNotEmpty)
-                _SourceBlock(label: 'Glosa', text: line.gloss ?? ''),
+                _SourceBlock(label: 'Gloss', text: line.gloss ?? ''),
               const SizedBox(height: 12),
 
-              // Candidatos con CPS
+              // Candidates with CPS
               if (showGpt && (line.candGpt ?? '').isNotEmpty)
                 _CandidateTile(
                   label: gptLabel,
@@ -2277,6 +2280,122 @@ class _SourceBlock extends StatelessWidget {
   }
 }
 
+class _LineJumpCounter extends StatefulWidget {
+  const _LineJumpCounter({
+    required this.currentLine,
+    required this.total,
+    required this.onJump,
+  });
+
+  final int currentLine;
+  final int total;
+  final ValueChanged<int> onJump;
+
+  @override
+  State<_LineJumpCounter> createState() => _LineJumpCounterState();
+}
+
+class _LineJumpCounterState extends State<_LineJumpCounter> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: _lineText(widget.currentLine));
+    _focusNode = FocusNode();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LineJumpCounter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_focusNode.hasFocus) return;
+    if (oldWidget.currentLine != widget.currentLine ||
+        oldWidget.total != widget.total) {
+      _controller.text = _lineText(widget.currentLine);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  String _lineText(int value) {
+    if (value < 1) return '0';
+    return value.toString();
+  }
+
+  void _submit() {
+    final total = widget.total;
+    if (total <= 0) return;
+    final parsed = int.tryParse(_controller.text.trim());
+    if (parsed == null) {
+      _controller.text = _lineText(widget.currentLine);
+      return;
+    }
+    final clamped = parsed.clamp(1, total).toInt();
+    _controller.text = clamped.toString();
+    widget.onJump(clamped);
+    _focusNode.unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = widget.total > 0 ? widget.total.toString() : '--';
+    return Tooltip(
+      message: 'Type a number and press Enter to jump to that line.',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+            (0.45 * 255).round(),
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withAlpha(
+              (0.7 * 255).round(),
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 44,
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  textAlign: TextAlign.right,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.go,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onSubmitted: (_) => _submit(),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Text(
+                '/$total',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CandidateTile extends StatelessWidget {
   const _CandidateTile({
     required this.label,
@@ -2318,7 +2437,7 @@ class _CandidateTile extends StatelessWidget {
         subtitle: _LineLimitPreviewText(text: text),
         onTap: onTap,
         trailing: IconButton(
-          tooltip: 'Editar',
+          tooltip: 'Edit',
           icon: const Icon(Icons.edit),
           onPressed: onEdit,
         ),
@@ -2401,14 +2520,14 @@ class _ActorEditorState extends State<_ActorEditor> {
             onSubmitted: (_) => _handleSave(),
             decoration: const InputDecoration(
               isDense: true,
-              hintText: 'Sin actor',
+              hintText: 'No actor',
               border: OutlineInputBorder(),
             ),
           ),
         ),
         const SizedBox(width: 8),
         IconButton.filled(
-          tooltip: 'Guardar actor',
+          tooltip: 'Save actor',
           onPressed: (!_isDirty || _saving) ? null : _handleSave,
           icon: _saving
               ? const SizedBox(
@@ -2650,7 +2769,7 @@ class _EditDialogState extends State<_EditDialog> {
                               child: Text('CPS ${_cps.toStringAsFixed(1)}'),
                             ),
                           Text(
-                            'Limite por linea: $_lineLimit',
+                            'Line limit: $_lineLimit',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -2707,11 +2826,11 @@ class _EditDialogState extends State<_EditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
+          child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: const Text('Guardar'),
+          child: const Text('Save'),
         ),
       ],
     );
@@ -2756,13 +2875,13 @@ class _VoiceTile extends StatelessWidget {
     String tooltip;
     if (isRecordingOpenAi) {
       icon = Icons.stop_circle;
-      tooltip = 'Detener (OpenAI)';
+      tooltip = 'Stop (OpenAI)';
     } else if (isListening) {
       icon = Icons.stop_circle;
-      tooltip = 'Detener';
+      tooltip = 'Stop';
     } else {
       icon = Icons.mic;
-      tooltip = 'Hablar';
+      tooltip = 'Speak';
     }
 
     return Card(
@@ -2776,7 +2895,7 @@ class _VoiceTile extends StatelessWidget {
               children: [
                 const Expanded(
                   child: Text(
-                    'Mi voz',
+                    'My voice',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -2786,25 +2905,27 @@ class _VoiceTile extends StatelessWidget {
                   onPressed: openAiBusy ? null : onMic,
                 ),
                 IconButton(
-                  tooltip: 'Refinar puntuación ✨',
+                  tooltip: 'Refine punctuation ✨',
                   icon: const Icon(Icons.auto_fix_high),
                   onPressed: hasText ? onRefine : null,
                 ),
                 IconButton(
-                  tooltip: 'Editar',
+                  tooltip: 'Edit',
                   icon: const Icon(Icons.edit),
                   onPressed: hasText ? onEdit : null,
                 ),
                 FilledButton(
                   onPressed: hasText ? () => onUse(text) : null,
-                  child: const Text('Usar'),
+                  child: const Text('Use'),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             hasText
                 ? _LineLimitPreviewText(text: text)
-                : const Text('Pulsa el micrófono y dicta tu traducción.'),
+                : const Text(
+                    'Press the microphone and dictate your translation.',
+                  ),
             const SizedBox(height: 6),
             if (cps > 0 && cpsColor != null)
               Container(
@@ -2892,7 +3013,7 @@ class _ReviewTimerControl extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: running ? 'Pausar temporizador' : 'Iniciar temporizador',
+            tooltip: running ? 'Pause timer' : 'Start timer',
             icon: Icon(running ? Icons.pause : Icons.play_arrow),
             onPressed: onToggle,
             visualDensity: VisualDensity.compact,
@@ -2904,7 +3025,7 @@ class _ReviewTimerControl extends StatelessWidget {
             iconSize: iconSize,
           ),
           IconButton(
-            tooltip: 'Reiniciar temporizador',
+            tooltip: 'Reset timer',
             icon: const Icon(Icons.replay),
             onPressed: elapsed == Duration.zero ? null : onReset,
             visualDensity: VisualDensity.compact,

@@ -48,7 +48,7 @@ class ExportService {
 
     final baseFile = File(basePath);
     if (!await baseFile.exists()) {
-      throw ExportBlockedException('No se encuentra el ASS base en: $basePath');
+      throw ExportBlockedException('Could not find the base ASS at: $basePath');
     }
 
     final baseLines = await baseFile.readAsLines();
@@ -57,7 +57,7 @@ class ExportService {
       (l) => l.trim().toLowerCase() == '[events]',
     );
     if (eventsStart < 0) {
-      throw ExportBlockedException('ASS base sin sección [Events].');
+      throw ExportBlockedException('Base ASS is missing the [Events] section.');
     }
 
     int firstDialogue = -1;
@@ -68,7 +68,7 @@ class ExportService {
       }
     }
     if (firstDialogue < 0) {
-      throw ExportBlockedException('ASS base sin líneas Dialogue:.');
+      throw ExportBlockedException('Base ASS has no Dialogue: lines.');
     }
 
     final byEventRow = {for (final l in lines) l.eventsRowIndex: l};

@@ -35,7 +35,7 @@ class _MetricsPageState extends State<MetricsPage> {
 
   String _normalizedSeries(String folder) {
     final trimmed = folder.trim();
-    return trimmed.isEmpty ? 'Sin carpeta' : trimmed;
+    return trimmed.isEmpty ? 'No folder' : trimmed;
   }
 
   String _fmtDuration(int ms) {
@@ -60,7 +60,7 @@ class _MetricsPageState extends State<MetricsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Metricas')),
+      appBar: AppBar(title: const Text('Metrics')),
       body: StreamBuilder<MetricsSnapshot>(
         stream: _svc.watchMetrics(widget.projectId),
         builder: (context, snap) {
@@ -72,7 +72,7 @@ class _MetricsPageState extends State<MetricsPage> {
           return ListView(
             children: [
               ListTile(
-                title: const Text('Revisadas'),
+                title: const Text('Reviewed'),
                 subtitle: Text('${m.reviewed}/${m.total}'),
               ),
               FutureBuilder<CostEpisodeSummary?>(
@@ -80,16 +80,16 @@ class _MetricsPageState extends State<MetricsPage> {
                 builder: (context, costSnap) {
                   if (costSnap.connectionState == ConnectionState.waiting) {
                     return const ListTile(
-                      title: Text('Coste IA'),
-                      subtitle: Text('Cargando costes del episodio...'),
+                      title: Text('AI cost'),
+                      subtitle: Text('Loading episode costs...'),
                     );
                   }
 
                   final summary = costSnap.data;
                   if (summary == null) {
                     return const ListTile(
-                      title: Text('Coste IA'),
-                      subtitle: Text('Sin costes registrados para este episodio.'),
+                      title: Text('AI cost'),
+                      subtitle: Text('No costs recorded for this episode.'),
                     );
                   }
 
@@ -99,7 +99,7 @@ class _MetricsPageState extends State<MetricsPage> {
                       .join(' | ');
 
                   return ListTile(
-                    title: const Text('Coste IA'),
+                    title: const Text('AI cost'),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -144,12 +144,12 @@ class _MetricsPageState extends State<MetricsPage> {
                     children: [
                       const Divider(),
                       ListTile(
-                        title: const Text('Tiempo en el episodio'),
+                        title: const Text('Time in episode'),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('PC: ${_fmtDuration(pcMs)}'),
-                            Text('Telefono: ${_fmtDuration(phoneMs)}'),
+                            Text('Phone: ${_fmtDuration(phoneMs)}'),
                             if (extras.isNotEmpty)
                               ...extras.entries.map(
                                 (e) => Text('${e.key}: ${_fmtDuration(e.value)}'),
@@ -163,17 +163,17 @@ class _MetricsPageState extends State<MetricsPage> {
                 },
               ),
               const Divider(),
-              const ListTile(title: Text('Motores en este episodio')),
+              const ListTile(title: Text('Engines in this episode')),
               _sourceRow('GPT', m.bySource['gpt'] ?? 0, m.reviewed),
               _sourceRow('Claude', m.bySource['claude'] ?? 0, m.reviewed),
               _sourceRow('Gemini', m.bySource['gemini'] ?? 0, m.reviewed),
               _sourceRow('DeepSeek', m.bySource['deepseek'] ?? 0, m.reviewed),
-              _sourceRow('Mi voz', m.bySource['voice'] ?? 0, m.reviewed),
-              _sourceRow('Otro', m.bySource['other'] ?? 0, m.reviewed),
+              _sourceRow('My voice', m.bySource['voice'] ?? 0, m.reviewed),
+              _sourceRow('Other', m.bySource['other'] ?? 0, m.reviewed),
               const Divider(),
               ListTile(
-                title: const Text('Motores historicos'),
-                subtitle: Text('${m.historicalReviewed} lineas revisadas en total'),
+                title: const Text('Historical engines'),
+                subtitle: Text('${m.historicalReviewed} lines reviewed in total'),
               ),
               _sourceRow(
                 'GPT',
@@ -196,18 +196,18 @@ class _MetricsPageState extends State<MetricsPage> {
                 m.historicalReviewed,
               ),
               _sourceRow(
-                'Mi voz',
+                'My voice',
                 m.historicalBySource['voice'] ?? 0,
                 m.historicalReviewed,
               ),
               _sourceRow(
-                'Otro',
+                'Other',
                 m.historicalBySource['other'] ?? 0,
                 m.historicalReviewed,
               ),
               const Divider(),
               ListTile(
-                title: const Text('Marcadas como duda'),
+                title: const Text('Flagged as doubt'),
                 trailing: Text('${m.doubtCount}'),
               ),
             ],

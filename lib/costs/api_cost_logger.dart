@@ -7,13 +7,13 @@ import 'costs_repository.dart';
 
 class ApiCostLogger {
   static const Map<String, ({double inputUsdPer1M, double outputUsdPer1M})>
-      _tokenRates = {
-        'gpt-4.1': (inputUsdPer1M: 2.0, outputUsdPer1M: 8.0),
-        'gpt-4.1-mini': (inputUsdPer1M: 0.4, outputUsdPer1M: 1.6),
-        'gpt-4.1-nano': (inputUsdPer1M: 0.1, outputUsdPer1M: 0.4),
-        'gpt-4o': (inputUsdPer1M: 2.5, outputUsdPer1M: 10.0),
-        'gpt-4o-mini': (inputUsdPer1M: 0.15, outputUsdPer1M: 0.6),
-      };
+  _tokenRates = {
+    'gpt-4.1': (inputUsdPer1M: 2.0, outputUsdPer1M: 8.0),
+    'gpt-4.1-mini': (inputUsdPer1M: 0.4, outputUsdPer1M: 1.6),
+    'gpt-4.1-nano': (inputUsdPer1M: 0.1, outputUsdPer1M: 0.4),
+    'gpt-4o': (inputUsdPer1M: 2.5, outputUsdPer1M: 10.0),
+    'gpt-4o-mini': (inputUsdPer1M: 0.15, outputUsdPer1M: 0.6),
+  };
 
   static const Map<String, double> _audioUsdPerMinute = {
     'gpt-4o-transcribe': 0.006,
@@ -51,14 +51,11 @@ class ApiCostLogger {
             'created_at': DateTime.now().toUtc().toIso8601String(),
           });
     } catch (e) {
-      debugPrint('[costs] no se pudo registrar coste OpenAI: $e');
+      debugPrint('[costs] could not record OpenAI cost: $e');
     }
   }
 
-  double _estimateUsd({
-    required String model,
-    required OpenAiUsage usage,
-  }) {
+  double _estimateUsd({required String model, required OpenAiUsage usage}) {
     final canonicalModel = _canonicalizeModel(model);
 
     final audioRate = _audioUsdPerMinute[canonicalModel];
@@ -81,10 +78,8 @@ class ApiCostLogger {
       inputTokens = (totalTokens - outputTokens).clamp(0, totalTokens).toInt();
     }
 
-    final inputCost =
-        (inputTokens / 1000000.0) * tokenRate.inputUsdPer1M;
-    final outputCost =
-        (outputTokens / 1000000.0) * tokenRate.outputUsdPer1M;
+    final inputCost = (inputTokens / 1000000.0) * tokenRate.inputUsdPer1M;
+    final outputCost = (outputTokens / 1000000.0) * tokenRate.outputUsdPer1M;
     return inputCost + outputCost;
   }
 
@@ -100,6 +95,6 @@ class ApiCostLogger {
 
   String _normalizeSeries(String folder) {
     final trimmed = folder.trim();
-    return trimmed.isEmpty ? 'Sin carpeta' : trimmed;
+    return trimmed.isEmpty ? 'No folder' : trimmed;
   }
 }

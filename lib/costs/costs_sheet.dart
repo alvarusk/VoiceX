@@ -23,13 +23,13 @@ class CostsSheet extends StatelessWidget {
         if (snapshot.hasError) {
           return Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('Error cargando costes: ${snapshot.error}'),
+            child: Text('Error loading costs: ${snapshot.error}'),
           );
         }
         if (data.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(16),
-            child: Text('No hay costes disponibles.'),
+            child: Text('No costs available.'),
           );
         }
 
@@ -49,7 +49,7 @@ class CostsSheet extends StatelessWidget {
                     const Icon(Icons.receipt_long),
                     const SizedBox(width: 8),
                     const Text(
-                      'Costes API',
+                      'API costs',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
@@ -83,10 +83,10 @@ class CostsSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                                'Total: \$${item.totalCostUsd.toStringAsFixed(4)} | ${item.totalTokens} tok'),
+                              'Total: \$${item.totalCostUsd.toStringAsFixed(4)} | ${item.totalTokens} tok'),
                             Text(engines),
                             Text(
-                              'Ultima: ${item.lastAt.toLocal()}',
+                              'Latest: ${item.lastAt.toLocal()}',
                               style: const TextStyle(fontSize: 12),
                             ),
                           ],

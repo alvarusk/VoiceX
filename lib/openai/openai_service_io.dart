@@ -12,22 +12,23 @@ class OpenAiService {
   static const _base = 'https://api.openai.com/v1';
 
   Map<String, String> get _headers => {
-        'Authorization': 'Bearer $apiKey',
-        'Content-Type': 'application/json',
-      };
+    'Authorization': 'Bearer $apiKey',
+    'Content-Type': 'application/json',
+  };
 
   Future<OpenAiTextResult> refineSpanishPunctuation({
     required String text,
     String model = 'gpt-4o-mini',
   }) async {
-    final prompt = '''
-Arregla la puntuación y las mayúsculas en español.
-- NO cambies palabras, nombres ni números.
-- NO inventes contenido.
-- Mantén el mismo registro.
-Devuelve SOLO el texto final (sin comillas, sin explicaciones).
+    final prompt =
+        '''
+Fix punctuation and capitalization in Spanish.
+- Do NOT change words, names, or numbers.
+- Do NOT invent content.
+- Keep the same register.
+Return ONLY the final text (no quotes, no explanations).
 
-TEXTO:
+TEXT:
 $text
 ''';
 
@@ -38,7 +39,9 @@ $text
       body: jsonEncode({
         'model': model,
         'input': prompt,
-        'text': {'format': {'type': 'text'}},
+        'text': {
+          'format': {'type': 'text'},
+        },
       }),
     );
 

@@ -221,7 +221,7 @@ class CloudSyncService {
     }
   }
 
-  /// Sincronización bidireccional: sube lo local más nuevo y baja lo remoto más nuevo.
+  /// Bidirectional sync: uploads the newest local data and downloads the newest remote data.
   Future<void> syncAllProjects({
     void Function(double value, String stage)? onProgress,
     bool includeArchived = true,
@@ -229,7 +229,7 @@ class CloudSyncService {
     if (!isReady) {
       throw CloudSyncException(
         code: 'supabase_not_ready',
-        userMessage: 'Supabase no está disponible (configuración o sesión).',
+        userMessage: 'Supabase is not available (configuration or session).',
       );
     }
     try {
@@ -305,21 +305,21 @@ class CloudSyncService {
         try {
           if (remoteEntry == null &&
               remoteArchivedIds.contains(local.projectId)) {
-            bump('Omitiendo archivado ${local.projectId}');
+            bump('Skipping archived ${local.projectId}');
           } else if (remoteEntry == null) {
             await pushProject(local.projectId, onProgress: onProgress);
-            bump('Subiendo (solo local) ${local.projectId}');
+            bump('Uploading (local only) ${local.projectId}');
           } else if (local.updatedAtMs > remoteUpdated) {
             await pushProject(local.projectId, onProgress: onProgress);
-            bump('Subiendo ${local.projectId}');
+            bump('Uploading ${local.projectId}');
           } else if (remoteUpdated > local.updatedAtMs) {
             await pullProject(local.projectId, onProgress: onProgress);
-            bump('Descargando ${local.projectId}');
+            bump('Downloading ${local.projectId}');
           } else {
-            bump('Sin cambios ${local.projectId}');
+            bump('No changes ${local.projectId}');
           }
         } on CloudSyncException catch (e) {
-          throw e.withContext('Proyecto "${local.title}" (${local.projectId})');
+          throw e.withContext('Project "${local.title}" (${local.projectId})');
         }
       }
 
@@ -329,9 +329,9 @@ class CloudSyncService {
       for (final id in remoteOnlyIds) {
         try {
           await pullProject(id, onProgress: onProgress);
-          bump('Descargando $id');
+          bump('Downloading $id');
         } on CloudSyncException catch (e) {
-          throw e.withContext('Proyecto remoto ($id)');
+          throw e.withContext('Remote project ($id)');
         }
       }
     } on CloudSyncException {
@@ -339,7 +339,7 @@ class CloudSyncService {
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'sincronizar con cloud',
+        action: 'sync with cloud',
         debugContext: 'syncAllProjects',
       );
     }
@@ -352,7 +352,7 @@ class CloudSyncService {
     if (!isReady) {
       throw CloudSyncException(
         code: 'supabase_not_ready',
-        userMessage: 'Supabase no está disponible (configuración o sesión).',
+        userMessage: 'Supabase is not available (configuration or session).',
       );
     }
     await _ensureR2EnvLoaded();
@@ -382,7 +382,7 @@ class CloudSyncService {
       };
 
       debugPrint('[cloud] pushProject $projectId');
-      onProgress?.call(0.1, 'Preparando subida');
+      onProgress?.call(0.1, 'Preparing upload');
 
       final remotePaths = <String, String>{}; // fileId -> remote url
       for (final f in files.where((f) => f.engine == 'video')) {
@@ -414,7 +414,7 @@ class CloudSyncService {
           );
           continue;
         }
-        onProgress?.call(0.2, 'Subiendo video');
+        onProgress?.call(0.2, 'Uploading video');
         final uploaded = await _uploadFileToCloud(f);
         final rebased = _rebaseR2Url(uploaded) ?? uploaded;
         remotePaths[f.fileId] = rebased;
@@ -457,7 +457,7 @@ class CloudSyncService {
         }
       }
 
-      onProgress?.call(0.35, 'Subiendo ficheros');
+      onProgress?.call(0.35, 'Uploading files');
       final baseRemote = remotePaths[_baseFileId(files)];
 
       var projectMap = _mapProject(project, assPathOverride: baseRemote);
@@ -490,7 +490,7 @@ class CloudSyncService {
           rethrow;
         }
       }
-      onProgress?.call(0.5, 'Guardando ficheros');
+      onProgress?.call(0.5, 'Saving files');
       if (files.isNotEmpty) {
         final mapped = <Map<String, dynamic>>[];
         for (final f in files) {
@@ -526,9 +526,9 @@ class CloudSyncService {
         'folder': project.folder,
         'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
       });
-      onProgress?.call(0.7, 'Guardando lineas');
+      onProgress?.call(0.7, 'Saving lines');
       await _upsertLinesInBatches(lines);
-      onProgress?.call(1.0, 'Completado');
+      onProgress?.call(1.0, 'Completed');
 
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       await _prefs.setLastSynced(projectId, nowMs);
@@ -545,7 +545,7 @@ class CloudSyncService {
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'subir el proyecto a cloud',
+        action: 'upload the project to cloud',
         debugContext: 'pushProject($projectId)',
       );
     }
@@ -579,7 +579,7 @@ class CloudSyncService {
 
       if (remote == null) {
         await _uploadSettingsPayload(local);
-        onProgress?.call(0.05, 'Ajustes subidos');
+        onProgress?.call(0.05, 'Settings uploaded');
         return;
       }
 
@@ -624,14 +624,14 @@ class CloudSyncService {
           includeDeletedProjects: false,
         );
         if (applied) {
-          onProgress?.call(0.05, 'Ajustes sincronizados');
+          onProgress?.call(0.05, 'Settings synced');
         }
       } else if (useRemoteFolders) {
         await settings.setManualFoldersFromSync(
           remoteFolders,
           remoteFoldersUpdated,
         );
-        onProgress?.call(0.05, 'Carpetas sincronizadas');
+        onProgress?.call(0.05, 'Folders synced');
       }
 
       final mergedDeleted = <String, int>{};
@@ -654,7 +654,7 @@ class CloudSyncService {
           mergedDeleted,
           mergedDeletedUpdated,
         );
-        onProgress?.call(0.05, 'Borrados sincronizados');
+        onProgress?.call(0.05, 'Deleted items synced');
       }
 
       final shouldUpload =
@@ -677,14 +677,14 @@ class CloudSyncService {
         merged['deleted_projects'] = mergedDeleted;
         merged['deleted_projects_updated_at_ms'] = mergedDeletedUpdated;
         await _uploadSettingsPayload(merged);
-        onProgress?.call(0.05, 'Ajustes subidos');
+        onProgress?.call(0.05, 'Settings uploaded');
       }
     } on CloudSyncException {
       rethrow;
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'sincronizar ajustes de cloud',
+        action: 'sync cloud settings',
         debugContext: '_syncSettings',
       );
     }
@@ -720,7 +720,7 @@ class CloudSyncService {
     if (!isReady) {
       throw CloudSyncException(
         code: 'supabase_not_ready',
-        userMessage: 'Supabase no está disponible (configuración o sesión).',
+        userMessage: 'Supabase is not available (configuration or session).',
       );
     }
     await _ensureR2EnvLoaded();
@@ -735,7 +735,7 @@ class CloudSyncService {
           .select()
           .eq('project_id', projectId)
           .maybeSingle();
-      onProgress?.call(0.1, 'Proyecto');
+      onProgress?.call(0.1, 'Project');
       final filesRes = await _client
           .from('project_files')
           .select()
@@ -757,7 +757,7 @@ class CloudSyncService {
             // Mantén vacío; el usuario deberá volver a subir el vídeo desde un dispositivo con URL pública.
             m['ass_path'] = '';
             await _upsertFileLocal(m);
-            debugPrint('[cloud] skip video path (no URL) para $projectId');
+            debugPrint('[cloud] skip video path (no URL) for $projectId');
           }
           continue;
         }
@@ -772,7 +772,7 @@ class CloudSyncService {
           engine,
           remotePath,
           onProgress: (v) =>
-              onProgress?.call(0.1 + v * 0.6, 'Descargando $engine'),
+              onProgress?.call(0.1 + v * 0.6, 'Downloading $engine'),
         );
         if (localPath != null) {
           m['ass_path'] = localPath;
@@ -806,7 +806,7 @@ class CloudSyncService {
       for (final m in linesList) {
         await _upsertLineLocal(m);
       }
-      onProgress?.call(1.0, 'Completado');
+      onProgress?.call(1.0, 'Completed');
 
       final nowMs = DateTime.now().millisecondsSinceEpoch;
       await _prefs.setLastSynced(projectId, nowMs);
@@ -819,7 +819,7 @@ class CloudSyncService {
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'descargar el proyecto desde cloud',
+        action: 'download the project from cloud',
         debugContext: 'pullProject($projectId)',
       );
     }
@@ -965,7 +965,7 @@ class CloudSyncService {
       await (db.update(db.projectFiles)..where((t) => t.fileId.equals(fileId)))
           .write(ProjectFilesCompanion(assPath: Value(path)));
     } catch (e) {
-      debugPrint('[cloud] no se pudo actualizar ruta local para $fileId: $e');
+      debugPrint('[cloud] could not update local path for $fileId: $e');
     }
   }
 
@@ -1099,7 +1099,7 @@ class CloudSyncService {
       throw CloudSyncException(
         code: 'local_file_missing',
         userMessage:
-            'No se encontró el archivo local para "${f.engine}" y no se pudo subir.',
+            'The local file for "${f.engine}" was not found and could not be uploaded.',
         debugMessage: 'missing local file: ${f.assPath}',
       );
     }
@@ -1116,7 +1116,7 @@ class CloudSyncService {
           throw CloudSyncException(
             code: 'r2_missing_config',
             userMessage:
-                'Este proyecto tiene video local y falta configuración R2 para subirlo (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
+                'This project has a local video and is missing R2 config for upload (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
             debugMessage: 'R2 required for video upload: $storagePath',
           );
         }
@@ -1165,7 +1165,7 @@ class CloudSyncService {
       throw CloudSyncException(
         code: 'r2_missing_config',
         userMessage:
-            'Falta configuración R2 para subir el video (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
+            'Missing R2 configuration to upload the video (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
       );
     }
 
@@ -1224,8 +1224,7 @@ class CloudSyncService {
         await request.sink.close();
         throw CloudSyncException(
           code: 'video_upload_timeout',
-          userMessage:
-              'La subida del video tardó demasiado (timeout de 5 minutos).',
+          userMessage: 'The video upload took too long (5 minute timeout).',
           debugMessage: 'R2 upload stream timeout: $storagePath',
         );
       }
@@ -1244,7 +1243,7 @@ class CloudSyncService {
         throw CloudSyncException(
           code: 'video_upload_rejected',
           userMessage:
-              'R2 rechazó la subida del video (HTTP ${resp.statusCode}). Revisa credenciales y permisos del bucket.',
+              'R2 rejected the video upload (HTTP ${resp.statusCode}). Check bucket credentials and permissions.',
           debugMessage:
               'R2 upload failed: ${resp.statusCode} ${resp.reasonPhrase} ($storagePath)',
         );
@@ -1254,14 +1253,13 @@ class CloudSyncService {
     } on TimeoutException {
       throw CloudSyncException(
         code: 'video_upload_timeout',
-        userMessage:
-            'La subida del video tardó demasiado (timeout de 5 minutos).',
+        userMessage: 'The video upload took too long (5 minute timeout).',
         debugMessage: 'R2 upload timeout: $storagePath',
       );
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'subir video a R2',
+        action: 'upload video to R2',
         debugContext: '_uploadVideoToR2($storagePath)',
       );
     }
@@ -1362,7 +1360,7 @@ class CloudSyncService {
     if (ownerId == null || ownerId.isEmpty) {
       throw _mapCloudError(
         StateError('missing owner user id'),
-        action: 'subir ajustes de cloud',
+        action: 'upload cloud settings',
         debugContext: '_uploadSettingsPayload',
       );
     }
@@ -1383,7 +1381,7 @@ class CloudSyncService {
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'subir ajustes de cloud',
+        action: 'upload cloud settings',
         debugContext: '_uploadSettingsPayload',
       );
     }
@@ -1402,13 +1400,13 @@ class CloudSyncService {
       }
       throw _mapCloudError(
         e,
-        action: 'descargar ajustes de cloud',
+        action: 'download cloud settings',
         debugContext: '_downloadSettingsPayloadFromPath($path)',
       );
     } catch (e) {
       throw _mapCloudError(
         e,
-        action: 'descargar ajustes de cloud',
+        action: 'download cloud settings',
         debugContext: '_downloadSettingsPayloadFromPath($path)',
       );
     }
@@ -1483,7 +1481,7 @@ class CloudSyncService {
     if (error is TimeoutException) {
       return CloudSyncException(
         code: 'timeout',
-        userMessage: 'La operación tardó demasiado al $action.',
+        userMessage: 'The operation took too long while trying to $action.',
         debugMessage: '$prefix${error.message ?? error.toString()}',
         cause: error,
       );
@@ -1492,7 +1490,7 @@ class CloudSyncService {
       return CloudSyncException(
         code: 'network_error',
         userMessage:
-            'No hay conexión de red estable para $action. Revisa internet y vuelve a intentarlo.',
+            'There is no stable network connection to $action. Check your internet and try again.',
         debugMessage: '$prefix${_compactError(error)}',
         cause: error,
       );
@@ -1501,7 +1499,7 @@ class CloudSyncService {
       return CloudSyncException(
         code: 'auth_error',
         userMessage:
-            'La sesión de Supabase no es válida para $action. Revisa credenciales o vuelve a iniciar sesión.',
+            'The Supabase session is not valid to $action. Check credentials or sign in again.',
         debugMessage: '$prefix${_compactError(error)}',
         cause: error,
       );
@@ -1513,7 +1511,7 @@ class CloudSyncService {
         return CloudSyncException(
           code: 'storage_auth_error',
           userMessage:
-              'Cloud rechazó la autenticación al $action. Revisa credenciales de Supabase/R2.',
+              'Cloud rejected authentication while trying to $action. Check Supabase/R2 credentials.',
           debugMessage:
               '$prefix storage status=$status message=${error.message}',
           cause: error,
@@ -1522,8 +1520,7 @@ class CloudSyncService {
       if (status == '413') {
         return CloudSyncException(
           code: 'storage_file_too_large',
-          userMessage:
-              'El archivo es demasiado grande para subir a cloud (HTTP 413).',
+          userMessage: 'The file is too large to upload to cloud (HTTP 413).',
           debugMessage:
               '$prefix storage status=$status message=${error.message}',
           cause: error,
@@ -1532,7 +1529,7 @@ class CloudSyncService {
       return CloudSyncException(
         code: 'storage_error',
         userMessage:
-            'No se pudo $action por un error de almacenamiento en cloud (HTTP ${status.isEmpty ? '?' : status}).',
+            'Could not $action due to a cloud storage error (HTTP ${status.isEmpty ? '?' : status}).',
         debugMessage: '$prefix storage status=$status message=${error.message}',
         cause: error,
       );
@@ -1544,7 +1541,7 @@ class CloudSyncService {
         return CloudSyncException(
           code: 'supabase_auth_error',
           userMessage:
-              'Supabase rechazó la autenticación al $action. Revisa la sesión y las claves.',
+              'Supabase rejected authentication while trying to $action. Check the session and keys.',
           debugMessage: '$prefix postgrest code=$code message=${error.message}',
           cause: error,
         );
@@ -1561,7 +1558,7 @@ class CloudSyncService {
       return CloudSyncException(
         code: 'supabase_postgrest_error',
         userMessage:
-            'Supabase devolvió un error al $action (${code ?? 'sin código'}).',
+            'Supabase returned an error while trying to $action (${code ?? 'no code'}).',
         debugMessage: '$prefix postgrest code=$code message=${error.message}',
         cause: error,
       );
@@ -1569,7 +1566,7 @@ class CloudSyncService {
 
     return CloudSyncException(
       code: 'unknown_cloud_error',
-      userMessage: 'No se pudo $action. Error inesperado.',
+      userMessage: 'Could not $action. Unexpected error.',
       debugMessage: '$prefix${_compactError(error)}',
       cause: error,
     );

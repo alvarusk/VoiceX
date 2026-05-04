@@ -93,9 +93,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
     try {
       await _runWithProgress(
         context,
-        initial: 'Cargando proyectos...',
+        initial: 'Loading projects...',
         action: (update) async {
-          update('Cargando proyectos...');
+          update('Loading projects...');
           await _cloud.syncAllProjects(
             includeArchived: false,
             onProgress: (v, stage) {
@@ -109,7 +109,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (mounted) {
         setState(() {});
         await _loadManualFolders();
-        _showSnack('Sincronizacion inicial completa.');
+        _showSnack('Initial sync complete.');
       }
     } on CloudSyncException catch (e) {
       debugPrint('autoSync cloud error [${e.code}]: ${e.debugMessage ?? e}');
@@ -119,7 +119,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     } catch (e) {
       debugPrint('autoSync error: $e');
       if (mounted) {
-        _showSnack('Error al sincronizar al iniciar.');
+        _showSnack('Error while syncing on startup.');
       }
     }
     if (mounted) setState(() => _syncingAll = false);
@@ -151,7 +151,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
         : '';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Nueva version disponible$versionSuffix$playCode'),
+      content: Text('New version available$versionSuffix$playCode'),
         action: SnackBarAction(
           label: 'Google Play',
           onPressed: checker.openPlayStore,
@@ -201,7 +201,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     } on TimeoutException {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Operación cancelada por tardar demasiado.'),
+          content: Text('Operation canceled because it took too long.'),
         ),
       );
       rethrow;
@@ -216,7 +216,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       context: context,
       builder: (_) {
         return AlertDialog(
-          title: const Text('Carpeta'),
+          title: const Text('Folder'),
           content: TextField(
             controller: ctrl,
             decoration: const InputDecoration(
@@ -228,11 +228,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
+              child: const Text('Cancel'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
-              child: const Text('Guardar'),
+              child: const Text('Save'),
             ),
           ],
         );
@@ -258,7 +258,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     ReviewService svc,
   ) async {
     final folders = <String>{
-      'Sin carpeta',
+      'No folder',
       ..._manualFolders,
       if (p.folder.trim().isNotEmpty) p.folder.trim(),
     };
@@ -284,7 +284,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'Mover a carpeta',
+                      'Move to folder',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 16,
@@ -296,13 +296,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
                         leading: const Icon(Icons.folder),
                         title: Text(f),
                         onTap: () =>
-                            Navigator.pop(ctx, f == 'Sin carpeta' ? '' : f),
+                            Navigator.pop(ctx, f == 'No folder' ? '' : f),
                       ),
                     ),
                     const Divider(),
                     TextField(
                       decoration: const InputDecoration(
-                        labelText: 'Crear carpeta nueva',
+                        labelText: 'Create new folder',
                         border: OutlineInputBorder(),
                       ),
                       onChanged: (v) => newName = v,
@@ -312,7 +312,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                     FilledButton.icon(
                       onPressed: () => Navigator.pop(ctx, newName.trim()),
                       icon: const Icon(Icons.create_new_folder_outlined),
-                      label: const Text('Crear y mover'),
+                      label: const Text('Create and move'),
                     ),
                   ],
                 ),
@@ -334,7 +334,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     final newName = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Renombrar proyecto'),
+        title: const Text('Rename project'),
         content: Shortcuts(
           shortcuts: {
             LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter):
@@ -354,7 +354,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               child: TextField(
                 controller: ctrl,
                 decoration: const InputDecoration(
-                  hintText: 'Solo episodio, ej: E05',
+                  hintText: 'Episode only, e.g. E05',
                 ),
                 onSubmitted: (v) => Navigator.pop(context, v.trim()),
               ),
@@ -364,11 +364,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, ctrl.text.trim()),
-            child: const Text('Guardar'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -383,7 +383,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Supabase no disponible (config/auth).'),
+            content: Text('Supabase not available (config/auth).'),
           ),
         );
       }
@@ -413,7 +413,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (!_cloud.isReady) {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Supabase no disponible (config/auth).'),
+          content: Text('Supabase not available (config/auth).'),
         ),
       );
       if (mounted) {
@@ -424,9 +424,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
     try {
       await _runWithProgress(
         context,
-        initial: 'Sincronizando proyectos...',
+        initial: 'Syncing projects...',
         action: (update) async {
-          update('Sincronizando proyectos...');
+          update('Syncing projects...');
           await _cloud.syncAllProjects(
             includeArchived: true,
             onProgress: (v, stage) {
@@ -442,7 +442,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Sincronizacion cloud completa.'),
+          content: Text('Cloud sync complete.'),
         ),
       );
     } on TimeoutException {
@@ -457,7 +457,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Error al sincronizar con cloud.'),
+          content: Text('Error syncing with cloud.'),
         ),
       );
       debugPrint('sync button error: $e');
@@ -485,22 +485,22 @@ class _ProjectsPageState extends State<ProjectsPage> {
         toolbarHeight: toolbarHeight,
         actions: [
           IconButton(
-            tooltip: 'Costes API',
+            tooltip: 'API costs',
             icon: const Icon(Icons.receipt_long),
             onPressed: _openCostsSheet,
           ),
           IconButton(
-            tooltip: widget.isDark ? 'Modo claro' : 'Modo oscuro',
+            tooltip: widget.isDark ? 'Light mode' : 'Dark mode',
             icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
             onPressed: widget.onToggleTheme,
           ),
           IconButton(
-            tooltip: 'Sincronizar con cloud',
+            tooltip: 'Sync with cloud',
             icon: const Icon(Icons.sync),
             onPressed: _syncAllProjects,
           ),
           IconButton(
-            tooltip: 'Crear carpeta',
+            tooltip: 'Create folder',
             icon: const Icon(Icons.create_new_folder_outlined),
             onPressed: () async {
               final name = await _promptFolderName(initial: '');
@@ -510,7 +510,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Carpeta "$name" lista. Úsala al crear o mover proyectos.',
+                      'Folder "$name" ready. Use it when creating or moving projects.',
                     ),
                   ),
                 );
@@ -518,7 +518,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             },
           ),
           IconButton(
-            tooltip: 'Nuevo proyecto',
+            tooltip: 'New project',
             icon: const Icon(Icons.add),
             onPressed: () async {
               final projectId = await showModalBottomSheet<String?>(
@@ -528,7 +528,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   db: widget.db,
                   initialFolder: null,
                   folderOptions: _folderNamesCache
-                      .where((f) => f != 'Sin carpeta')
+                      .where((f) => f != 'No folder')
                       .toList(),
                   onFolderCreated: (f) => _ensureFolder(f),
                 ),
@@ -556,7 +556,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'No hay proyectos todavía.\nPulsa + para importar un ASS.',
+                  'No projects yet.\nPress + to import an ASS.',
                 ),
               ),
             );
@@ -565,7 +565,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
           final grouped = <String, List<ProjectSummary>>{};
           for (final p in items) {
             final folder = p.folder.trim().isEmpty
-                ? 'Sin carpeta'
+                ? 'No folder'
                 : p.folder.trim();
             (grouped[folder] ??= []).add(p);
           }
@@ -577,8 +577,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
           }
           final folderNames = grouped.keys.toList()
             ..sort((a, b) {
-              if (a == 'Sin carpeta') return -1;
-              if (b == 'Sin carpeta') return 1;
+              if (a == 'No folder') return -1;
+              if (b == 'No folder') return 1;
               return a.toLowerCase().compareTo(b.toLowerCase());
             });
           _folderNamesCache = folderNames;
@@ -629,7 +629,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                   ),
                                 ),
                               ),
-                              if (folder != 'Sin carpeta')
+                              if (folder != 'No folder')
                                 PopupMenuButton<String>(
                                   onSelected: (v) async {
                                     if (v == 'rename') {
@@ -662,20 +662,20 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                       final ok = await showDialog<bool>(
                                         context: context,
                                         builder: (_) => AlertDialog(
-                                          title: const Text('Eliminar carpeta'),
+                                          title: const Text('Delete folder'),
                                           content: Text(
-                                            'Los proyectos se moverán a "Sin carpeta". ¿Seguro que deseas borrar "$folder"?',
+                                            'Projects will be moved to "No folder". Are you sure you want to delete "$folder"?',
                                           ),
                                           actions: [
                                             TextButton(
                                               onPressed: () =>
                                                   Navigator.pop(context, false),
-                                              child: const Text('Cancelar'),
+                                              child: const Text('Cancel'),
                                             ),
                                             FilledButton(
                                               onPressed: () =>
                                                   Navigator.pop(context, true),
-                                              child: const Text('Eliminar'),
+                                              child: const Text('Delete'),
                                             ),
                                           ],
                                         ),
@@ -697,14 +697,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                   itemBuilder: (_) => const [
                                     PopupMenuItem(
                                       value: 'rename',
-                                      child: Text('Renombrar carpeta'),
+                                      child: Text('Rename folder'),
                                     ),
                                     PopupMenuItem(
                                       value: 'delete',
-                                      child: Text('Eliminar carpeta'),
+                                      child: Text('Delete folder'),
                                     ),
                                   ],
-                                  tooltip: 'Opciones de carpeta',
+                                  tooltip: 'Folder options',
                                   icon: const Icon(Icons.more_vert),
                                 ),
                             ],
@@ -722,7 +722,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                 bottom: 8,
                               ),
                               child: Text(
-                                'Arrastra proyectos aquí',
+                                'Drag projects here',
                                 style: TextStyle(
                                   color: Theme.of(
                                     context,
@@ -743,7 +743,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   onAcceptWithDetails: (details) async {
                     setState(() => _folderHover[folder] = false);
                     final proj = details.data;
-                    final target = (folder == 'Sin carpeta' ? '' : folder)
+                    final target = (folder == 'No folder' ? '' : folder)
                         .trim();
                     final current = proj.folder.trim();
                     if (current == target) return; // no-op drop, evita ensuciar
@@ -777,7 +777,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
         ),
         title: Text(p.title),
         subtitle: Text(
-          '${p.reviewed}/${p.total} (${p.total == 0 ? 0 : (p.reviewed * 100 ~/ p.total)} %) · línea ${p.currentIndex + 1}/${p.total}',
+          '${p.reviewed}/${p.total} (${p.total == 0 ? 0 : (p.reviewed * 100 ~/ p.total)} %) · line ${p.currentIndex + 1}/${p.total}',
         ),
         trailing: PopupMenuButton<String>(
           onSelected: (v) async {
@@ -803,7 +803,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               if (!_cloud.isReady) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Supabase no disponible (config/auth).'),
+                    content: Text('Supabase not available (config/auth).'),
                   ),
                 );
                 return;
@@ -812,9 +812,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
               try {
                 await _runWithProgress(
                   context,
-                  initial: 'Subiendo proyecto...',
+                  initial: 'Uploading project...',
                   action: (update) async {
-                    update('Subiendo proyecto...');
+                    update('Uploading project...');
                     await _cloud.pushProject(
                       p.projectId,
                       onProgress: (v, stage) {
@@ -825,7 +825,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   },
                 );
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Proyecto subido.')),
+                  const SnackBar(content: Text('Project uploaded.')),
                 );
               } on TimeoutException {
                 // El mensaje ya se muestra en _runWithProgress.
@@ -836,7 +836,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 );
               } catch (e) {
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Error al subir proyecto.')),
+                  const SnackBar(content: Text('Error uploading project.')),
                 );
                 debugPrint('sync_up error: $e');
               }
@@ -845,7 +845,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               if (!_cloud.isReady) {
                 messenger.showSnackBar(
                   const SnackBar(
-                    content: Text('Supabase no disponible (config/auth).'),
+                    content: Text('Supabase not available (config/auth).'),
                   ),
                 );
                 return;
@@ -854,9 +854,9 @@ class _ProjectsPageState extends State<ProjectsPage> {
               try {
                 await _runWithProgress(
                   context,
-                  initial: 'Descargando proyecto...',
+                  initial: 'Downloading project...',
                   action: (update) async {
-                    update('Descargando proyecto...');
+                    update('Downloading project...');
                     await _cloud.pullProject(
                       p.projectId,
                       onProgress: (v, stage) {
@@ -867,7 +867,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   },
                 );
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Proyecto descargado.')),
+                  const SnackBar(content: Text('Project downloaded.')),
                 );
               } on TimeoutException {
                 // El mensaje ya se muestra en _runWithProgress.
@@ -878,7 +878,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 );
               } catch (e) {
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Error al descargar proyecto.')),
+                  const SnackBar(content: Text('Error downloading project.')),
                 );
                 debugPrint('sync_down error: $e');
               }
@@ -886,18 +886,18 @@ class _ProjectsPageState extends State<ProjectsPage> {
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (_) => AlertDialog(
-                  title: const Text('Eliminar proyecto'),
+                  title: const Text('Delete project'),
                   content: const Text(
-                    'Se borrarán líneas y métricas. ¿Seguro?',
+                    'Lines and metrics will be deleted. Are you sure?',
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar'),
+                      child: const Text('Cancel'),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Eliminar'),
+                      child: const Text('Delete'),
                     ),
                   ],
                 ),
@@ -913,18 +913,18 @@ class _ProjectsPageState extends State<ProjectsPage> {
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (_) => AlertDialog(
-                  title: const Text('Archivar proyecto'),
+                  title: const Text('Archive project'),
                   content: const Text(
-                    'Se eliminarán los archivos locales (ASS/vídeo) pero se mantienen métricas y líneas. ¿Archivar?',
+                    'Local files (ASS/video) will be deleted, but metrics and lines will be kept. Archive it?',
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancelar'),
+                      child: const Text('Cancel'),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Archivar'),
+                      child: const Text('Archive'),
                     ),
                   ],
                 ),
@@ -947,7 +947,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   }
                 }
                 messenger.showSnackBar(
-                  const SnackBar(content: Text('Proyecto archivado.')),
+                  const SnackBar(content: Text('Project archived.')),
                 );
               }
             }
@@ -957,25 +957,25 @@ class _ProjectsPageState extends State<ProjectsPage> {
                 DateTime.now().millisecondsSinceEpoch ==
                 -1; // oculto por ahora, lo mantenemos en código
             return [
-              const PopupMenuItem(value: 'open', child: Text('Abrir')),
-              const PopupMenuItem(value: 'export', child: Text('Exportar ASS')),
+              const PopupMenuItem(value: 'open', child: Text('Open')),
+              const PopupMenuItem(value: 'export', child: Text('Export ASS')),
               const PopupMenuItem(
                 value: 'move_folder',
-                child: Text('Mover a carpeta'),
+                child: Text('Move to folder'),
               ),
-              const PopupMenuItem(value: 'rename', child: Text('Renombrar')),
+              const PopupMenuItem(value: 'rename', child: Text('Rename')),
               const PopupMenuItem(
                 value: 'sync_up',
-                child: Text('Subir a cloud'),
+                child: Text('Upload to cloud'),
               ),
               if (showDownload)
                 const PopupMenuItem(
                   value: 'sync_down',
-                  child: Text('Bajar de cloud'),
+                  child: Text('Download from cloud'),
                 ),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'archive', child: Text('Archivar')),
-              const PopupMenuItem(value: 'delete', child: Text('Eliminar')),
+              const PopupMenuItem(value: 'archive', child: Text('Archive')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
             ];
           },
         ),

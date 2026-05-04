@@ -226,7 +226,7 @@ class SupabaseManager extends ChangeNotifier {
           );
         }
         _authed = false;
-        _authError = 'Faltan credenciales de acceso a cloud.';
+        _authError = 'Missing cloud access credentials.';
         notifyListeners();
         return;
       }
@@ -257,12 +257,12 @@ class SupabaseManager extends ChangeNotifier {
             password: _authPassword,
           );
           ok = res.user != null;
-          _authError = ok ? null : 'No se pudo iniciar sesion en Supabase.';
+          _authError = ok ? null : 'Could not sign in to Supabase.';
         } catch (e) {
           if (kDebugMode) {
             debugPrint('[supabase] signInWithPassword error: $e');
           }
-          _authError = 'Credenciales invalidas o acceso no permitido.';
+          _authError = 'Invalid credentials or access not allowed.';
         }
       } else {
         _authError = null;
