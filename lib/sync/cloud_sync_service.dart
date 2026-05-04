@@ -60,6 +60,7 @@ class CloudSyncService {
   bool _supportsArchivedColumnLines = true;
   bool _supportsSubtitleLinesActiveView = true;
   final Map<String, _DirtyCacheEntry> _dirtyCache = {};
+  String? _lastSettingsPayloadPath;
   Map<String, String> _fileEnv = const {};
   bool _fileEnvLoaded = false;
   Future<void>? _fileEnvLoading;
@@ -604,6 +605,8 @@ class CloudSyncService {
       final localDeletedRaw =
           (local['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
+      final localOpenAiKey = (local['openai_key'] as String? ?? '').trim();
+      final remoteOpenAiKey = (remote['openai_key'] as String? ?? '').trim();
       final remoteDeleted = remoteDeletedRaw.map(
         (k, v) => MapEntry(k, (v as int?) ?? 0),
       );
@@ -655,11 +658,15 @@ class CloudSyncService {
       }
 
       final shouldUpload =
+          _lastSettingsPayloadPath == _legacySettingsStoragePath ||
           remoteUpdated < localUpdated ||
           remoteFoldersUpdated < localFoldersUpdated ||
           !_sameDeletedMap(mergedDeleted, remoteDeleted);
       if (shouldUpload) {
         final merged = settings.exportSyncPayload();
+        merged['openai_key'] = localOpenAiKey.isNotEmpty
+            ? localOpenAiKey
+            : remoteOpenAiKey;
         if (useRemoteFolders) {
           merged['manual_folders'] = remoteFolders;
           merged['manual_folders_updated_at_ms'] = remoteFoldersUpdated;
@@ -1327,38 +1334,46 @@ class CloudSyncService {
   }
 
   Future<Map<String, dynamic>?> _downloadSettingsPayload() async {
-    try {
-      final bytes = await _client.storage
-          .from(_bucket)
-          .download('prefs/settings.json');
-      final txt = utf8.decode(bytes);
-      return jsonDecode(txt) as Map<String, dynamic>;
-    } on StorageException catch (e) {
-      if (e.statusCode == '404' || e.statusCode == '400') {
-        // Primer uso: el payload puede no existir todavía.
-        return null;
-      }
-      throw _mapCloudError(
-        e,
-        action: 'descargar ajustes de cloud',
-        debugContext: '_downloadSettingsPayload',
-      );
-    } catch (e) {
-      throw _mapCloudError(
-        e,
-        action: 'descargar ajustes de cloud',
-        debugContext: '_downloadSettingsPayload',
-      );
+    final ownerId = _ownerUserId;
+    if (ownerId == null || ownerId.isEmpty) {
+      return null;
     }
+
+    for (final path in <String>[
+      _settingsStoragePath(ownerId),
+      _legacySettingsStoragePath,
+    ]) {
+      final payload = await _downloadSettingsPayloadFromPath(path);
+      if (payload == null) continue;
+      final payloadOwner = (payload['owner_user_id'] as String? ?? '').trim();
+      if (payloadOwner.isNotEmpty && payloadOwner != ownerId) {
+        continue;
+      }
+      _lastSettingsPayloadPath = path;
+      return payload;
+    }
+
+    _lastSettingsPayloadPath = null;
+    return null;
   }
 
   Future<void> _uploadSettingsPayload(Map<String, dynamic> payload) async {
+    final ownerId = _ownerUserId;
+    if (ownerId == null || ownerId.isEmpty) {
+      throw _mapCloudError(
+        StateError('missing owner user id'),
+        action: 'subir ajustes de cloud',
+        debugContext: '_uploadSettingsPayload',
+      );
+    }
     try {
-      final data = utf8.encode(jsonEncode(payload));
+      final data = utf8.encode(
+        jsonEncode({...payload, 'owner_user_id': ownerId}),
+      );
       await _client.storage
           .from(_bucket)
           .uploadBinary(
-            'prefs/settings.json',
+            _settingsStoragePath(ownerId),
             data,
             fileOptions: const FileOptions(
               contentType: 'application/json',
@@ -1373,6 +1388,36 @@ class CloudSyncService {
       );
     }
   }
+
+  Future<Map<String, dynamic>?> _downloadSettingsPayloadFromPath(
+    String path,
+  ) async {
+    try {
+      final bytes = await _client.storage.from(_bucket).download(path);
+      final txt = utf8.decode(bytes);
+      return jsonDecode(txt) as Map<String, dynamic>;
+    } on StorageException catch (e) {
+      if (e.statusCode == '404' || e.statusCode == '400') {
+        return null;
+      }
+      throw _mapCloudError(
+        e,
+        action: 'descargar ajustes de cloud',
+        debugContext: '_downloadSettingsPayloadFromPath($path)',
+      );
+    } catch (e) {
+      throw _mapCloudError(
+        e,
+        action: 'descargar ajustes de cloud',
+        debugContext: '_downloadSettingsPayloadFromPath($path)',
+      );
+    }
+  }
+
+  String _settingsStoragePath(String ownerUserId) =>
+      'prefs/users/$ownerUserId/settings.json';
+
+  String get _legacySettingsStoragePath => 'prefs/settings.json';
 
   Future<Map<String, dynamic>?> _downloadProjectMeta(String projectId) async {
     try {

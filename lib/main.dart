@@ -9,6 +9,7 @@ import 'db/app_db.dart';
 import 'projects/projects_page.dart';
 import 'settings/settings_page.dart';
 import 'settings/settings_service.dart';
+import 'sync/cloud_sync_service.dart';
 import 'sync/supabase_manager.dart';
 import 'utils/app_version.dart';
 
@@ -41,6 +42,8 @@ class VoiceXApp extends StatefulWidget {
 class _VoiceXAppState extends State<VoiceXApp> {
   late final AppDatabase _db = AppDatabase();
   final SupabaseManager _supabase = SupabaseManager.instance;
+  bool _settingsSyncCompleted = false;
+  Future<void>? _settingsSyncInFlight;
   int _tab = 0;
   late bool _showSplash = widget.showSplash;
   ThemeMode _themeMode = ThemeMode.dark;
@@ -48,6 +51,7 @@ class _VoiceXAppState extends State<VoiceXApp> {
   @override
   void initState() {
     super.initState();
+    _supabase.addListener(_handleSupabaseChange);
     if (widget.showSplash) {
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
@@ -55,12 +59,52 @@ class _VoiceXAppState extends State<VoiceXApp> {
         }
       });
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_syncCloudSettingsIfReady());
+    });
   }
 
   @override
   void dispose() {
+    _supabase.removeListener(_handleSupabaseChange);
     _db.close();
     super.dispose();
+  }
+
+  void _handleSupabaseChange() {
+    if (_supabase.isReady) {
+      unawaited(_syncCloudSettingsIfReady());
+    }
+  }
+
+  Future<void> _syncCloudSettingsIfReady() async {
+    if (_settingsSyncCompleted ||
+        !_supabase.hasCloudConfig ||
+        !_supabase.isReady) {
+      return;
+    }
+    if (_settingsSyncInFlight != null) {
+      await _settingsSyncInFlight;
+      return;
+    }
+
+    _settingsSyncInFlight = () async {
+      try {
+        final cloud = CloudSyncService(_db);
+        await cloud.ensureInit();
+        if (!mounted || !_supabase.isReady) return;
+        await cloud.syncSettingsOnly();
+        _settingsSyncCompleted = true;
+      } catch (e) {
+        debugPrint('[settings-sync] error: $e');
+      }
+    }();
+
+    try {
+      await _settingsSyncInFlight;
+    } finally {
+      _settingsSyncInFlight = null;
+    }
   }
 
   @override

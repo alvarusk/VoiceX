@@ -71,7 +71,7 @@ create table if not exists selection_events (
 );
 
 -- Storage bucket (settings/meta/files)
--- prefs/settings.json guarda manual_folders + manual_folders_updated_at_ms
+-- prefs/users/<owner_user_id>/settings.json guarda ajustes por usuario
 insert into storage.buckets (id, name, public)
 values ('voicex', 'voicex', false)
 on conflict (id) do nothing;

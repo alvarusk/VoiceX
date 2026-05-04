@@ -158,6 +158,49 @@ class _ReviewPageState extends State<ReviewPage> {
     }
   }
 
+  Duration get _reviewTimerValue {
+    if (!_reviewTimerRunning || _reviewTimerStartedAt == null) {
+      return _reviewTimerElapsed;
+    }
+    return _reviewTimerElapsed +
+        DateTime.now().difference(_reviewTimerStartedAt!);
+  }
+
+  void _toggleReviewTimer() {
+    setState(() {
+      if (_reviewTimerRunning) {
+        if (_reviewTimerStartedAt != null) {
+          _reviewTimerElapsed += DateTime.now().difference(
+            _reviewTimerStartedAt!,
+          );
+        }
+        _reviewTimerStartedAt = null;
+        _reviewTimerRunning = false;
+        _reviewTimerTicker?.cancel();
+        _reviewTimerTicker = null;
+      } else {
+        _reviewTimerStartedAt = DateTime.now();
+        _reviewTimerRunning = true;
+        _reviewTimerTicker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+          if (mounted && _reviewTimerRunning) {
+            setState(() {});
+          }
+        });
+      }
+    });
+  }
+
+  void _resetReviewTimer() {
+    setState(() {
+      _reviewTimerElapsed = Duration.zero;
+      _reviewTimerStartedAt = _reviewTimerRunning ? DateTime.now() : null;
+      if (!_reviewTimerRunning) {
+        _reviewTimerTicker?.cancel();
+        _reviewTimerTicker = null;
+      }
+    });
+  }
+
   PageController? _pageController;
   VideoPlayerController? _videoController;
   Future<void>? _videoInit;
@@ -173,6 +216,11 @@ class _ReviewPageState extends State<ReviewPage> {
   bool showClaude = true;
   bool showGemini = true;
   bool showDeepseek = true;
+
+  Timer? _reviewTimerTicker;
+  Duration _reviewTimerElapsed = Duration.zero;
+  DateTime? _reviewTimerStartedAt;
+  bool _reviewTimerRunning = false;
 
   // Navegación
   bool skipReviewedOnAdvance = false;
@@ -855,6 +903,7 @@ Si dudas, prioriza estas grafías tal cual.
   @override
   void dispose() {
     _endSession();
+    _reviewTimerTicker?.cancel();
     _pageController?.dispose();
     _videoController?.dispose();
     _speech.stop();
@@ -895,14 +944,17 @@ Si dudas, prioriza estas grafías tal cual.
           },
           child: Scaffold(
             appBar: AppBar(
-              title: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
+              title: Tooltip(
+                message: project.folder.trim().isNotEmpty
+                    ? '${project.folder.trim()} > ${project.title}'
+                    : project.title,
+                waitDuration: const Duration(milliseconds: 400),
                 child: Text(
                   project.folder.trim().isNotEmpty
                       ? '${project.folder.trim()} > ${project.title}'
                       : project.title,
                   maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               actions: [
@@ -987,356 +1039,393 @@ Si dudas, prioriza estas grafías tal cual.
                   future: timingsFuture,
                   builder: (context, linesSnap) {
                     final timings = linesSnap.data ?? _lineTimings;
-                    final content = Column(
-                      children: [
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final useStackedLayout =
-                                defaultTargetPlatform ==
-                                    TargetPlatform.android ||
-                                constraints.maxWidth < 720;
+                    return LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobilePlatform =
+                            defaultTargetPlatform == TargetPlatform.android ||
+                            defaultTargetPlatform == TargetPlatform.iOS;
+                        final useStackedLayout =
+                            isMobilePlatform || constraints.maxWidth < 720;
 
-                            if (useStackedLayout) {
-                              final mobilePromptHeight =
-                                  constraints.maxHeight.isFinite
-                                  ? (constraints.maxHeight * 0.24)
-                                        .clamp(120.0, 200.0)
-                                        .toDouble()
-                                  : 168.0;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      8,
-                                      12,
-                                      0,
-                                    ),
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        FilterChip(
-                                          selected: _showVideoPanel,
-                                          label: const Text('Video'),
-                                          avatar: const Icon(
-                                            Icons.video_file,
-                                            size: 18,
-                                          ),
-                                          onSelected: (selected) {
-                                            setState(() {
-                                              _showVideoPanel = selected;
-                                            });
-                                          },
-                                        ),
-                                        FilterChip(
-                                          selected: _showPromptPanel,
-                                          label: const Text('Prompt'),
-                                          avatar: const Icon(
-                                            Icons.notes,
-                                            size: 18,
-                                          ),
-                                          onSelected: (selected) {
-                                            setState(() {
-                                              _showPromptPanel = selected;
-                                            });
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (_showVideoPanel)
-                                    _VideoPanel(
-                                      controller: _videoController,
-                                      initFuture: _videoInit,
-                                      error: _videoError,
-                                      videoPath: _videoPath,
-                                      subtitle: _currentSubtitleText(
-                                        _currentLine,
-                                      ),
-                                      lineTimings: timings,
-                                      getLineText: _textFromTiming,
-                                      subtitleStartMs: _currentLine?.startMs,
-                                      subtitleEndMs: _currentLine?.endMs,
-                                      height: _videoHeight,
-                                      onDragResize: (delta) {
-                                        final next =
-                                            (_videoHeight + delta * 0.8).clamp(
-                                              180,
-                                              520,
-                                            );
-                                        setState(
-                                          () => _videoHeight = next.toDouble(),
-                                        );
-                                      },
-                                      onBack: () => _nudgeVideo(
-                                        const Duration(seconds: -5),
-                                      ),
-                                      onPlayPause: _togglePlayPause,
-                                      onPlaySegment: () {
-                                        final line = _currentLine;
-                                        if (line != null) {
-                                          _playSegment(line);
-                                        }
-                                      },
-                                      onForward: () => _nudgeVideo(
-                                        const Duration(seconds: 5),
-                                      ),
-                                      onPrevLine: () => _gotoPrevious(project),
-                                      onNextLine: () =>
-                                          _gotoNext(project, total),
-                                      onHeightChanged: (h) =>
-                                          setState(() => _videoHeight = h),
-                                    ),
-                                  if (_showPromptPanel)
-                                    _TranscriberPromptPanel(
-                                      promptText: _currentPromptText(
-                                        _currentLine,
-                                      ),
-                                      maxHeight: mobilePromptHeight,
-                                      margin: const EdgeInsets.fromLTRB(
-                                        12,
-                                        0,
+                        if (useStackedLayout) {
+                          final screenHeight = MediaQuery.sizeOf(
+                            context,
+                          ).height;
+                          final pageHeight = math
+                              .max(520.0, screenHeight * 0.72)
+                              .toDouble();
+                          final mobilePromptHeight = screenHeight * 0.24 < 120
+                              ? 120.0
+                              : math.min(220.0, screenHeight * 0.24).toDouble();
+
+                          return Stack(
+                            children: [
+                              SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  0,
+                                  0,
+                                  0,
+                                  104,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
                                         12,
                                         8,
+                                        12,
+                                        0,
                                       ),
-                                    ),
-                                ],
-                              );
-                            }
-
-                            const splitterWidth = 14.0;
-                            final availableWidth = math.max(
-                              0.0,
-                              constraints.maxWidth - splitterWidth,
-                            );
-                            final minPaneWidth = availableWidth < 520
-                                ? math.max(120.0, availableWidth * 0.28)
-                                : 220.0;
-                            final leftWidth = (availableWidth * _topPaneRatio)
-                                .clamp(
-                                  minPaneWidth,
-                                  math.max(
-                                    minPaneWidth,
-                                    availableWidth - minPaneWidth,
-                                  ),
-                                )
-                                .toDouble();
-                            final rightWidth = math.max(
-                              minPaneWidth,
-                              availableWidth - leftWidth,
-                            );
-
-                            return IntrinsicHeight(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  SizedBox(
-                                    width: leftWidth,
-                                    child: _VideoPanel(
-                                      controller: _videoController,
-                                      initFuture: _videoInit,
-                                      error: _videoError,
-                                      videoPath: _videoPath,
-                                      subtitle: _currentSubtitleText(
-                                        _currentLine,
-                                      ),
-                                      lineTimings: timings,
-                                      getLineText: _textFromTiming,
-                                      subtitleStartMs: _currentLine?.startMs,
-                                      subtitleEndMs: _currentLine?.endMs,
-                                      height: _videoHeight,
-                                      onDragResize: (delta) {
-                                        final next =
-                                            (_videoHeight + delta * 0.8).clamp(
-                                              140,
-                                              520,
-                                            );
-                                        setState(
-                                          () => _videoHeight = next.toDouble(),
-                                        );
-                                      },
-                                      onBack: () => _nudgeVideo(
-                                        const Duration(seconds: -5),
-                                      ),
-                                      onPlayPause: _togglePlayPause,
-                                      onPlaySegment: () {
-                                        final line = _currentLine;
-                                        if (line != null) {
-                                          _playSegment(line);
-                                        }
-                                      },
-                                      onForward: () => _nudgeVideo(
-                                        const Duration(seconds: 5),
-                                      ),
-                                      onPrevLine: () => _gotoPrevious(project),
-                                      onNextLine: () =>
-                                          _gotoNext(project, total),
-                                      onHeightChanged: (h) =>
-                                          setState(() => _videoHeight = h),
-                                    ),
-                                  ),
-                                  MouseRegion(
-                                    cursor: SystemMouseCursors.resizeLeftRight,
-                                    child: GestureDetector(
-                                      behavior: HitTestBehavior.translucent,
-                                      onHorizontalDragUpdate: (details) {
-                                        if (availableWidth <= 0) return;
-                                        final next =
-                                            ((leftWidth + details.delta.dx) /
-                                                    availableWidth)
-                                                .clamp(
-                                                  minPaneWidth / availableWidth,
-                                                  (availableWidth -
-                                                          minPaneWidth) /
-                                                      availableWidth,
-                                                );
-                                        setState(() {
-                                          _topPaneRatio = next.toDouble();
-                                        });
-                                      },
-                                      child: SizedBox(
-                                        width: splitterWidth,
-                                        child: Center(
-                                          child: Container(
-                                            width: 6,
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.outlineVariant,
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
+                                      child: Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          FilterChip(
+                                            selected: _showVideoPanel,
+                                            label: const Text('Video'),
+                                            avatar: const Icon(
+                                              Icons.video_file,
+                                              size: 18,
                                             ),
-                                            child: const Center(
-                                              child: RotatedBox(
-                                                quarterTurns: 1,
-                                                child: Icon(
-                                                  Icons.drag_handle,
-                                                  size: 16,
+                                            onSelected: (selected) {
+                                              setState(() {
+                                                _showVideoPanel = selected;
+                                              });
+                                            },
+                                          ),
+                                          FilterChip(
+                                            selected: _showPromptPanel,
+                                            label: const Text('Prompt'),
+                                            avatar: const Icon(
+                                              Icons.notes,
+                                              size: 18,
+                                            ),
+                                            onSelected: (selected) {
+                                              setState(() {
+                                                _showPromptPanel = selected;
+                                              });
+                                            },
+                                          ),
+                                          _ReviewTimerControl(
+                                            elapsed: _reviewTimerValue,
+                                            running: _reviewTimerRunning,
+                                            onToggle: _toggleReviewTimer,
+                                            onReset: _resetReviewTimer,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (_showVideoPanel)
+                                      _VideoPanel(
+                                        controller: _videoController,
+                                        initFuture: _videoInit,
+                                        error: _videoError,
+                                        videoPath: _videoPath,
+                                        subtitle: _currentSubtitleText(
+                                          _currentLine,
+                                        ),
+                                        lineTimings: timings,
+                                        getLineText: _textFromTiming,
+                                        subtitleStartMs: _currentLine?.startMs,
+                                        subtitleEndMs: _currentLine?.endMs,
+                                        height: _videoHeight,
+                                        onDragResize: (delta) {
+                                          final next =
+                                              (_videoHeight + delta * 0.8)
+                                                  .clamp(180, 520);
+                                          setState(
+                                            () =>
+                                                _videoHeight = next.toDouble(),
+                                          );
+                                        },
+                                        onBack: () => _nudgeVideo(
+                                          const Duration(seconds: -5),
+                                        ),
+                                        onPlayPause: _togglePlayPause,
+                                        onPlaySegment: () {
+                                          final line = _currentLine;
+                                          if (line != null) {
+                                            _playSegment(line);
+                                          }
+                                        },
+                                        onForward: () => _nudgeVideo(
+                                          const Duration(seconds: 5),
+                                        ),
+                                        onPrevLine: () =>
+                                            _gotoPrevious(project),
+                                        onNextLine: () =>
+                                            _gotoNext(project, total),
+                                        onHeightChanged: (h) =>
+                                            setState(() => _videoHeight = h),
+                                      ),
+                                    if (_showPromptPanel)
+                                      _TranscriberPromptPanel(
+                                        promptText: _currentPromptText(
+                                          _currentLine,
+                                        ),
+                                        maxHeight: mobilePromptHeight,
+                                        margin: const EdgeInsets.fromLTRB(
+                                          12,
+                                          0,
+                                          12,
+                                          8,
+                                        ),
+                                      ),
+                                    SizedBox(
+                                      height: pageHeight,
+                                      child: PageView.builder(
+                                        controller: _pageController,
+                                        onPageChanged: (idx) {
+                                          _svc.setCurrentIndex(
+                                            project.projectId,
+                                            idx,
+                                          );
+                                          _seekVideoForIndex(
+                                            project.projectId,
+                                            idx,
+                                          );
+                                        },
+                                        itemCount: total,
+                                        itemBuilder: (context, idx) {
+                                          return StreamBuilder<SubtitleLine>(
+                                            stream: _svc.watchLine(
+                                              project.projectId,
+                                              idx,
+                                            ),
+                                            builder: (context, snapLine) {
+                                              final line = snapLine.data;
+                                              if (line == null) {
+                                                return const Center(
+                                                  child:
+                                                      CircularProgressIndicator(),
+                                                );
+                                              }
+                                              _currentLine = line;
+                                              _cacheLineText(line);
+
+                                              final voiceMode = SettingsService
+                                                  .instance
+                                                  .voiceInputMode;
+                                              final sttAvailable =
+                                                  _speech.available.value;
+                                              final statusText =
+                                                  voiceMode ==
+                                                      VoiceInputMode.openai
+                                                  ? (_recBusy
+                                                        ? 'Procesando grabacion...'
+                                                        : (_isRecording
+                                                              ? 'Grabando para OpenAI...'
+                                                              : 'Listo para grabar.'))
+                                                  : (!sttAvailable
+                                                        ? 'STT local no disponible (Windows beta).'
+                                                        : (_speech.isListening
+                                                              ? 'Escuchando...'
+                                                              : 'Listo para dictar.'));
+
+                                              return _LineCard(
+                                                project: project,
+                                                line: line,
+                                                showGpt: showGpt,
+                                                showClaude: showClaude,
+                                                showGemini: showGemini,
+                                                showDeepseek: showDeepseek,
+                                                isLocalListening:
+                                                    _speech.isListening,
+                                                isOpenAiRecording: _isRecording,
+                                                openAiBusy: _recBusy,
+                                                statusText: statusText,
+                                                onSaveActor: (actor) =>
+                                                    _svc.setActorName(
+                                                      line.lineId,
+                                                      actor,
+                                                    ),
+                                                onEditCandidate:
+                                                    (src, current) =>
+                                                        _editCandidateText(
+                                                          line,
+                                                          src,
+                                                          current,
+                                                        ),
+                                                onPlaySegment: () =>
+                                                    _playSegment(line),
+                                                onTapCandidate:
+                                                    (src, txt, method) =>
+                                                        _pickCandidate(
+                                                          project: project,
+                                                          line: line,
+                                                          source: src,
+                                                          text: txt,
+                                                          method: method,
+                                                        ),
+                                                onToggleDoubt: () =>
+                                                    _toggleDoubt(line),
+                                                onMic: () => _toggleVoiceInput(
+                                                  project,
+                                                  line,
+                                                  total,
                                                 ),
-                                              ),
+                                                onRefine: () =>
+                                                    _refineVoiceWithOpenAi(
+                                                      project,
+                                                      line,
+                                                    ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Positioned(
+                                left: 16,
+                                bottom: 16,
+                                child: SafeArea(
+                                  minimum: const EdgeInsets.only(bottom: 8),
+                                  child: Opacity(
+                                    opacity: 0.65,
+                                    child: FloatingActionButton(
+                                      heroTag: 'review-mic',
+                                      onPressed:
+                                          _currentLine == null || _recBusy
+                                          ? null
+                                          : () => _toggleVoiceInput(
+                                              project,
+                                              _currentLine!,
+                                              total,
+                                            ),
+                                      child: const Icon(Icons.mic),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+
+                        const splitterWidth = 14.0;
+                        final availableWidth = math.max(
+                          0.0,
+                          constraints.maxWidth - splitterWidth,
+                        );
+                        final minPaneWidth = availableWidth < 520
+                            ? math.max(120.0, availableWidth * 0.28)
+                            : 220.0;
+                        final leftWidth = (availableWidth * _topPaneRatio)
+                            .clamp(
+                              minPaneWidth,
+                              math.max(
+                                minPaneWidth,
+                                availableWidth - minPaneWidth,
+                              ),
+                            )
+                            .toDouble();
+                        final rightWidth = math.max(
+                          minPaneWidth,
+                          availableWidth - leftWidth,
+                        );
+
+                        return IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              SizedBox(
+                                width: leftWidth,
+                                child: _VideoPanel(
+                                  controller: _videoController,
+                                  initFuture: _videoInit,
+                                  error: _videoError,
+                                  videoPath: _videoPath,
+                                  subtitle: _currentSubtitleText(_currentLine),
+                                  lineTimings: timings,
+                                  getLineText: _textFromTiming,
+                                  subtitleStartMs: _currentLine?.startMs,
+                                  subtitleEndMs: _currentLine?.endMs,
+                                  height: _videoHeight,
+                                  onDragResize: (delta) {
+                                    final next = (_videoHeight + delta * 0.8)
+                                        .clamp(140, 520);
+                                    setState(
+                                      () => _videoHeight = next.toDouble(),
+                                    );
+                                  },
+                                  onBack: () =>
+                                      _nudgeVideo(const Duration(seconds: -5)),
+                                  onPlayPause: _togglePlayPause,
+                                  onPlaySegment: () {
+                                    final line = _currentLine;
+                                    if (line != null) {
+                                      _playSegment(line);
+                                    }
+                                  },
+                                  onForward: () =>
+                                      _nudgeVideo(const Duration(seconds: 5)),
+                                  onPrevLine: () => _gotoPrevious(project),
+                                  onNextLine: () => _gotoNext(project, total),
+                                  onHeightChanged: (h) =>
+                                      setState(() => _videoHeight = h),
+                                ),
+                              ),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.resizeLeftRight,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onHorizontalDragUpdate: (details) {
+                                    if (availableWidth <= 0) return;
+                                    final next =
+                                        ((leftWidth + details.delta.dx) /
+                                                availableWidth)
+                                            .clamp(
+                                              minPaneWidth / availableWidth,
+                                              (availableWidth - minPaneWidth) /
+                                                  availableWidth,
+                                            );
+                                    setState(() {
+                                      _topPaneRatio = next.toDouble();
+                                    });
+                                  },
+                                  child: SizedBox(
+                                    width: splitterWidth,
+                                    child: Center(
+                                      child: Container(
+                                        width: 6,
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
+                                        child: const Center(
+                                          child: RotatedBox(
+                                            quarterTurns: 1,
+                                            child: Icon(
+                                              Icons.drag_handle,
+                                              size: 16,
                                             ),
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                  SizedBox(
-                                    width: rightWidth,
-                                    child: _TranscriberPromptPanel(
-                                      promptText: _currentPromptText(
-                                        _currentLine,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                        Expanded(
-                          child: PageView.builder(
-                            controller: _pageController,
-                            onPageChanged: (idx) {
-                              _svc.setCurrentIndex(project.projectId, idx);
-                              _seekVideoForIndex(project.projectId, idx);
-                            },
-                            itemCount: total,
-                            itemBuilder: (context, idx) {
-                              return StreamBuilder<SubtitleLine>(
-                                stream: _svc.watchLine(project.projectId, idx),
-                                builder: (context, snapLine) {
-                                  final line = snapLine.data;
-                                  if (line == null) {
-                                    return const Center(
-                                      child: CircularProgressIndicator(),
-                                    );
-                                  }
-                                  _currentLine = line;
-                                  _cacheLineText(line);
-
-                                  final voiceMode =
-                                      SettingsService.instance.voiceInputMode;
-                                  final sttAvailable = _speech.available.value;
-                                  final statusText =
-                                      voiceMode == VoiceInputMode.openai
-                                      ? (_recBusy
-                                            ? 'Procesando grabacion...'
-                                            : (_isRecording
-                                                  ? 'Grabando para OpenAI...'
-                                                  : 'Listo para grabar.'))
-                                      : (!sttAvailable
-                                            ? 'STT local no disponible (Windows beta).'
-                                            : (_speech.isListening
-                                                  ? 'Escuchando...'
-                                                  : 'Listo para dictar.'));
-
-                                  return _LineCard(
-                                    project: project,
-                                    line: line,
-                                    showGpt: showGpt,
-                                    showClaude: showClaude,
-                                    showGemini: showGemini,
-                                    showDeepseek: showDeepseek,
-                                    isLocalListening: _speech.isListening,
-                                    isOpenAiRecording: _isRecording,
-                                    openAiBusy: _recBusy,
-                                    statusText: statusText,
-                                    onSaveActor: (actor) =>
-                                        _svc.setActorName(line.lineId, actor),
-                                    onEditCandidate: (src, current) =>
-                                        _editCandidateText(line, src, current),
-                                    onPlaySegment: () => _playSegment(line),
-                                    onTapCandidate: (src, txt, method) =>
-                                        _pickCandidate(
-                                          project: project,
-                                          line: line,
-                                          source: src,
-                                          text: txt,
-                                          method: method,
-                                        ),
-                                    onToggleDoubt: () => _toggleDoubt(line),
-                                    onMic: () =>
-                                        _toggleVoiceInput(project, line, total),
-                                    onRefine: () =>
-                                        _refineVoiceWithOpenAi(project, line),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    );
-                    final isAndroid =
-                        defaultTargetPlatform == TargetPlatform.android;
-                    final currentLine = _currentLine;
-
-                    return Stack(
-                      children: [
-                        content,
-                        if (isAndroid)
-                          Positioned.fill(
-                            child: Align(
-                              alignment: Alignment.center,
-                              child: Opacity(
-                                opacity: 0.5,
-                                child: FloatingActionButton(
-                                  heroTag: 'review-mic',
-                                  onPressed: currentLine == null || _recBusy
-                                      ? null
-                                      : () => _toggleVoiceInput(
-                                          project,
-                                          currentLine,
-                                          total,
-                                        ),
-                                  child: const Icon(Icons.mic),
                                 ),
                               ),
-                            ),
+                              SizedBox(
+                                width: rightWidth,
+                                child: _TranscriberPromptPanel(
+                                  promptText: _currentPromptText(_currentLine),
+                                ),
+                              ),
+                            ],
                           ),
-                      ],
+                        );
+                      },
                     );
                   },
                 );
@@ -2732,6 +2821,73 @@ class _VoiceTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ReviewTimerControl extends StatelessWidget {
+  const _ReviewTimerControl({
+    required this.elapsed,
+    required this.running,
+    required this.onToggle,
+    required this.onReset,
+  });
+
+  final Duration elapsed;
+  final bool running;
+  final VoidCallback onToggle;
+  final VoidCallback onReset;
+
+  String _format(Duration duration) {
+    final totalSeconds = duration.inSeconds;
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds ~/ 60) % 60;
+    final seconds = totalSeconds % 60;
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(hours)}:${two(minutes)}:${two(seconds)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withAlpha(
+          (0.45 * 255).round(),
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withAlpha((0.7 * 255).round()),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer_outlined, size: 18, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            _format(elapsed),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          IconButton(
+            tooltip: running ? 'Pausar temporizador' : 'Iniciar temporizador',
+            icon: Icon(running ? Icons.pause : Icons.play_arrow),
+            onPressed: onToggle,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            iconSize: 20,
+          ),
+          IconButton(
+            tooltip: 'Reiniciar temporizador',
+            icon: const Icon(Icons.replay),
+            onPressed: elapsed == Duration.zero ? null : onReset,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            iconSize: 20,
+          ),
+        ],
       ),
     );
   }

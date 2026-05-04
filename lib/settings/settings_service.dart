@@ -279,10 +279,10 @@ class SettingsService {
     if (remoteUpdated <= _updatedAtMs) return false;
 
     final prefs = _prefs!;
-    await prefs.setString(
-      'openai_key',
-      (payload['openai_key'] as String? ?? '').trim(),
-    );
+    final incomingOpenAiKey = (payload['openai_key'] as String? ?? '').trim();
+    if (incomingOpenAiKey.isNotEmpty || openAiKey.isEmpty) {
+      await prefs.setString('openai_key', incomingOpenAiKey);
+    }
     await prefs.setString(
       'openai_text_model',
       (payload['openai_text_model'] as String? ?? '').trim(),
