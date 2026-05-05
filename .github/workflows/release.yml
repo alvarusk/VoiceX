@@ -636,6 +636,23 @@ jobs:
           path.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
           print(path)
           PY
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("macos/Runner/.env")
+          path.write_text(
+              "\n".join(
+                  [
+                      f"SUPABASE_URL={os.environ['SUPABASE_URL']}",
+                      f"SUPABASE_ANON_KEY={os.environ['SUPABASE_ANON_KEY']}",
+                      "",
+                  ]
+              ),
+              encoding="utf-8",
+          )
+          print(path)
+          PY
           echo "APPLE_DART_DEFINES_FILE=$DEFINES_PATH" >> "$GITHUB_ENV"
 
       - name: Resolve Apple release notes

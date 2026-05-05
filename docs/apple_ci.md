@@ -80,6 +80,25 @@ Apple signing/upload secrets:
   - optional
   - only needed if `fastlane deliver` requires explicit submission information
 
+## macOS cloud login file
+
+The macOS Runner target copies a generated file from:
+
+- `macos/Runner/.env`
+
+into the app bundle as:
+
+- `VoiceX.app/Contents/Resources/.env`
+
+The file only needs the Supabase values required for the forced login screen:
+
+```env
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
+```
+
+The GitHub Actions workflow generates that file automatically before the macOS build, so Apple only needs to open the app and sign in.
+
 ## One-time Apple portal setup
 
 ### 1. App Store Connect API key

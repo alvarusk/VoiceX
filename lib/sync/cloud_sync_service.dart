@@ -1748,6 +1748,12 @@ class CloudSyncService {
     }
     _fileEnvLoading = () async {
       final candidates = <String>{'.env'};
+      if (defaultTargetPlatform == TargetPlatform.macOS) {
+        try {
+          final exeDir = File(Platform.resolvedExecutable).parent.path;
+          candidates.add(p.normalize(p.join(exeDir, '..', 'Resources', '.env')));
+        } catch (_) {}
+      }
       try {
         final exeDir = File(Platform.resolvedExecutable).parent.path;
         candidates.add(p.join(exeDir, '.env'));

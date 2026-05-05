@@ -239,6 +239,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				A13D5C4B6E7F8091A2B3C4D5 /* Copy CI Supabase env */,
 				3212011263AE02F3AB479ED4 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
@@ -356,6 +357,25 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "echo \"$PRODUCT_NAME.app\" > \"$PROJECT_DIR\"/Flutter/ephemeral/.app_filename && \"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh embed\n";
+		};
+		A13D5C4B6E7F8091A2B3C4D5 /* Copy CI Supabase env */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e; SOURCE_ENV=\"${PROJECT_DIR}/Runner/.env\"; DEST_ENV=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"; if [ -f \"$SOURCE_ENV\" ]; then mkdir -p \"$(dirname \"$DEST_ENV\")\"; cp \"$SOURCE_ENV\" \"$DEST_ENV\"; else rm -f \"$DEST_ENV\"; fi";
+			showEnvVarsInLog = 0;
 		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
