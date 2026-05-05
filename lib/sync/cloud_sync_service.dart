@@ -1867,7 +1867,11 @@ class CloudSyncService {
   Map<String, String> _parseEnv(List<String> lines) {
     final map = <String, String>{};
     for (final rawLine in lines) {
-      final line = rawLine.trim();
+      var line = rawLine;
+      if (line.isNotEmpty && line.codeUnitAt(0) == 0xFEFF) {
+        line = line.substring(1);
+      }
+      line = line.trim();
       if (line.isEmpty || line.startsWith('#')) continue;
       final idx = line.indexOf('=');
       if (idx <= 0) continue;
