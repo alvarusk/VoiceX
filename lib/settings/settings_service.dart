@@ -230,6 +230,19 @@ class SettingsService {
   Map<String, int> get deletedProjects => Map.unmodifiable(_deletedProjects);
   int get deletedProjectsUpdatedAtMs => _deletedProjectsUpdatedAtMs;
 
+  String get activeCloudUserId =>
+      _prefs?.getString('active_cloud_user_id') ?? '';
+
+  Future<void> setActiveCloudUserId(String? userId) async {
+    await init();
+    final normalized = (userId ?? '').trim();
+    if (normalized.isEmpty) {
+      await _prefs?.remove('active_cloud_user_id');
+    } else {
+      await _prefs?.setString('active_cloud_user_id', normalized);
+    }
+  }
+
   Future<void> setManualFolders(Iterable<String> folders) async {
     await init();
     final deduped = {for (final f in folders) f.trim()}
@@ -385,5 +398,31 @@ class SettingsService {
       'deleted_projects_updated_at_ms',
       _deletedProjectsUpdatedAtMs,
     );
+  }
+
+  Future<void> clearCloudScopedState() async {
+    await init();
+    final prefs = _prefs!;
+    _glossaryByFolder = {};
+    _projectExportDirs = {};
+    _projectExportNames = {};
+    _manualFolders = [];
+    _manualFoldersUpdatedAtMs = 0;
+    _deletedProjects = {};
+    _deletedProjectsUpdatedAtMs = 0;
+    _updatedAtMs = 0;
+
+    await prefs.remove('openai_key');
+    await prefs.remove('openai_text_model');
+    await prefs.remove('openai_stt_model');
+    await prefs.remove('voice_input_mode');
+    await prefs.remove('stt_glossary_by_folder');
+    await prefs.remove('manual_folders');
+    await prefs.remove('manual_folders_updated_at_ms');
+    await prefs.remove('project_export_dirs');
+    await prefs.remove('project_export_names');
+    await prefs.remove('deleted_projects');
+    await prefs.remove('deleted_projects_updated_at_ms');
+    await prefs.remove('settings_updated_at_ms');
   }
 }

@@ -74,6 +74,31 @@ class CloudSyncService {
   String? get r2PublicBase => _r2Config?.publicBase;
   SupabaseClient get _client => Supabase.instance.client;
   String? get _ownerUserId => _supabase.userId;
+  bool get _hasOwnerScope => _ownerUserId?.trim().isNotEmpty == true;
+
+  dynamic _scopeProjectQuery(dynamic query) {
+    final ownerId = _ownerUserId?.trim() ?? '';
+    if (_supportsOwnerColumnProjects && ownerId.isNotEmpty) {
+      return query.eq('owner_user_id', ownerId);
+    }
+    return query;
+  }
+
+  dynamic _scopeProjectFilesQuery(dynamic query) {
+    final ownerId = _ownerUserId?.trim() ?? '';
+    if (_supportsOwnerColumnFiles && ownerId.isNotEmpty) {
+      return query.eq('owner_user_id', ownerId);
+    }
+    return query;
+  }
+
+  dynamic _scopeSubtitleLinesQuery(dynamic query) {
+    final ownerId = _ownerUserId?.trim() ?? '';
+    if (_supportsOwnerColumnLines && ownerId.isNotEmpty) {
+      return query.eq('owner_user_id', ownerId);
+    }
+    return query;
+  }
 
   Future<void> ensureInit() async {
     await _supabase.init();
@@ -137,7 +162,9 @@ class CloudSyncService {
         'updated_at_ms',
       ];
       final columns = cols.join(',');
-      dynamic query = _client.from('projects').select(columns);
+      dynamic query = _scopeProjectQuery(
+        _client.from('projects').select(columns),
+      );
       if (!includeArchived && withArchived) {
         query = query.eq('archived', false);
       }
@@ -161,9 +188,15 @@ class CloudSyncService {
           (e.code == 'PGRST204' ||
               e.code == '42703' ||
               e.message.contains('archived'));
+      final missingOwner =
+          _supportsOwnerColumnProjects &&
+          (e.code == 'PGRST204' ||
+              e.code == '42703' ||
+              e.message.contains('owner_user_id'));
       if (missingFolder) _supportsFolderColumn = false;
       if (missingArchived) _supportsArchivedColumn = false;
-      if (missingFolder || missingArchived) {
+      if (missingOwner) _supportsOwnerColumnProjects = false;
+      if (missingFolder || missingArchived || missingOwner) {
         try {
           return await selectRemote(
             withFolder: _supportsFolderColumn,
@@ -185,10 +218,11 @@ class CloudSyncService {
   Future<Set<String>> listRemoteArchivedProjectIds() async {
     if (!isReady || !_supportsArchivedColumn) return const <String>{};
     try {
-      final res = await _client
-          .from('projects')
-          .select('project_id')
-          .eq('archived', true);
+      dynamic query = _scopeProjectQuery(
+        _client.from('projects').select('project_id'),
+      );
+      query = query.eq('archived', true);
+      final res = await query;
       return (res as List)
           .cast<Map<String, dynamic>>()
           .map((m) => m['project_id'] as String)
@@ -196,6 +230,10 @@ class CloudSyncService {
     } on PostgrestException catch (e) {
       if (_supportsArchivedColumn && _isMissingColumn(e, 'archived')) {
         _supportsArchivedColumn = false;
+      } else if (_supportsOwnerColumnProjects &&
+          _isMissingColumn(e, 'owner_user_id')) {
+        _supportsOwnerColumnProjects = false;
+        return await listRemoteArchivedProjectIds();
       } else {
         debugPrint('listRemoteArchivedProjectIds error: $e');
       }
@@ -209,13 +247,33 @@ class CloudSyncService {
   Future<void> deleteRemoteProject(String projectId) async {
     if (!isReady) return;
     try {
-      await _client
+      final ownerId = _ownerUserId?.trim() ?? '';
+      dynamic selectionDelete = _client
           .from('selection_events')
           .delete()
           .eq('project_id', projectId);
-      await _client.from('subtitle_lines').delete().eq('project_id', projectId);
-      await _client.from('project_files').delete().eq('project_id', projectId);
-      await _client.from('projects').delete().eq('project_id', projectId);
+      dynamic linesDelete = _client
+          .from('subtitle_lines')
+          .delete()
+          .eq('project_id', projectId);
+      dynamic filesDelete = _client
+          .from('project_files')
+          .delete()
+          .eq('project_id', projectId);
+      dynamic projectDelete = _client
+          .from('projects')
+          .delete()
+          .eq('project_id', projectId);
+      if (_hasOwnerScope && ownerId.isNotEmpty) {
+        selectionDelete = selectionDelete.eq('owner_user_id', ownerId);
+        linesDelete = linesDelete.eq('owner_user_id', ownerId);
+        filesDelete = filesDelete.eq('owner_user_id', ownerId);
+        projectDelete = projectDelete.eq('owner_user_id', ownerId);
+      }
+      await selectionDelete;
+      await linesDelete;
+      await filesDelete;
+      await projectDelete;
     } catch (e) {
       debugPrint('deleteRemoteProject error: $e');
     }
@@ -366,15 +424,17 @@ class CloudSyncService {
       final files = await (db.select(
         db.projectFiles,
       )..where((t) => t.projectId.equals(projectId))).get();
-      final Map<String, dynamic>? remoteProject = await _client
-          .from('projects')
-          .select('base_ass_path')
-          .eq('project_id', projectId)
+      dynamic remoteProjectQuery = _scopeProjectQuery(
+        _client.from('projects').select('base_ass_path'),
+      );
+      remoteProjectQuery = remoteProjectQuery.eq('project_id', projectId);
+      final Map<String, dynamic>? remoteProject = await remoteProjectQuery
           .maybeSingle();
-      final remoteFilesRes = await _client
-          .from('project_files')
-          .select('engine,ass_path')
-          .eq('project_id', projectId);
+      dynamic remoteFilesQuery = _scopeProjectFilesQuery(
+        _client.from('project_files').select('engine,ass_path'),
+      );
+      remoteFilesQuery = remoteFilesQuery.eq('project_id', projectId);
+      final remoteFilesRes = await remoteFilesQuery;
       final remoteFilesByEngine = <String, String>{
         for (final m in (remoteFilesRes as List).cast<Map<String, dynamic>>())
           if ((m['engine'] as String?)?.isNotEmpty == true)
@@ -730,16 +790,15 @@ class CloudSyncService {
       )..where((t) => t.projectId.equals(projectId))).get();
       final existingByEngine = {for (final f in existingFiles) f.engine: f};
 
-      final projRes = await _client
-          .from('projects')
-          .select()
-          .eq('project_id', projectId)
-          .maybeSingle();
+      dynamic projQuery = _scopeProjectQuery(_client.from('projects').select());
+      projQuery = projQuery.eq('project_id', projectId);
+      final projRes = await projQuery.maybeSingle();
       onProgress?.call(0.1, 'Project');
-      final filesRes = await _client
-          .from('project_files')
-          .select()
-          .eq('project_id', projectId);
+      dynamic filesQuery = _scopeProjectFilesQuery(
+        _client.from('project_files').select(),
+      );
+      filesQuery = filesQuery.eq('project_id', projectId);
+      final filesRes = await filesQuery;
 
       String? baseLocalPath;
       final filesList = (filesRes as List).cast<Map<String, dynamic>>();
@@ -1051,10 +1110,8 @@ class CloudSyncService {
       String relation, {
       bool filterArchived = false,
     }) async {
-      dynamic query = _client
-          .from(relation)
-          .select()
-          .eq('project_id', projectId);
+      dynamic query = _scopeSubtitleLinesQuery(_client.from(relation).select());
+      query = query.eq('project_id', projectId);
       if (filterArchived) {
         query = query.eq('archived', false);
       }
@@ -1068,6 +1125,10 @@ class CloudSyncService {
       try {
         return await runQuery('subtitle_lines_active');
       } on PostgrestException catch (e) {
+        if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+          _supportsOwnerColumnLines = false;
+          return await runQuery('subtitle_lines_active');
+        }
         _supportsSubtitleLinesActiveView = false;
         debugPrint('subtitle_lines_active fallback: $e');
       }
@@ -1077,6 +1138,10 @@ class CloudSyncService {
       try {
         return await runQuery('subtitle_lines', filterArchived: true);
       } on PostgrestException catch (e) {
+        if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+          _supportsOwnerColumnLines = false;
+          return await runQuery('subtitle_lines', filterArchived: true);
+        }
         if (_isMissingColumn(e, 'archived')) {
           _supportsArchivedColumnLines = false;
         } else {
@@ -1085,7 +1150,15 @@ class CloudSyncService {
       }
     }
 
-    return await runQuery('subtitle_lines');
+    try {
+      return await runQuery('subtitle_lines');
+    } on PostgrestException catch (e) {
+      if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+        _supportsOwnerColumnLines = false;
+        return await runQuery('subtitle_lines');
+      }
+      rethrow;
+    }
   }
 
   Future<String> _uploadFileToCloud(ProjectFile f) async {
@@ -1550,7 +1623,7 @@ class CloudSyncService {
         return CloudSyncException(
           code: 'supabase_permission_error',
           userMessage:
-              'No tienes permisos en Supabase para $action (RLS/policies).',
+              'You do not have permission in Supabase to $action (RLS/policies).',
           debugMessage: '$prefix postgrest code=$code message=${error.message}',
           cause: error,
         );
@@ -1751,7 +1824,9 @@ class CloudSyncService {
       if (defaultTargetPlatform == TargetPlatform.macOS) {
         try {
           final exeDir = File(Platform.resolvedExecutable).parent.path;
-          candidates.add(p.normalize(p.join(exeDir, '..', 'Resources', '.env')));
+          candidates.add(
+            p.normalize(p.join(exeDir, '..', 'Resources', '.env')),
+          );
         } catch (_) {}
       }
       try {

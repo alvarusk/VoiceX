@@ -152,7 +152,7 @@ class SupabaseManager extends ChangeNotifier {
       if (url.isEmpty || key.isEmpty) {
         if (kDebugMode) {
           debugPrint(
-            '[supabase] Faltan SUPABASE_URL o SUPABASE_ANON_KEY. Candidatos: '
+            '[supabase] Missing SUPABASE_URL or SUPABASE_ANON_KEY. Candidates: '
             'envUrl=$envUrlPresent, envKey=$envKeyPresent, '
             'platformUrl=$platformUrlPresent, '
             'platformKey=$platformKeyPresent',

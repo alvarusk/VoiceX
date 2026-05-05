@@ -18,8 +18,7 @@ class Projects extends Table {
 
   TextColumn get exportMode =>
       text().withDefault(const Constant('CLEAN_TRANSLATION_ONLY'))();
-  BoolColumn get strictExport =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get strictExport => boolean().withDefault(const Constant(true))();
   IntColumn get currentIndex => integer().withDefault(const Constant(0))();
 
   @override
@@ -44,8 +43,8 @@ class ProjectFiles extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {projectId, engine},
-      ];
+    {projectId, engine},
+  ];
 }
 
 class SubtitleLines extends Table {
@@ -67,7 +66,8 @@ class SubtitleLines extends Table {
   TextColumn get gloss => text().nullable()();
 
   // Para export fiel
-  TextColumn get dialoguePrefix => text()(); // incluye la coma justo antes del Text
+  TextColumn get dialoguePrefix =>
+      text()(); // incluye la coma justo antes del Text
   TextColumn get leadingTags => text().withDefault(const Constant(''))();
   BoolColumn get hasVectorDrawing =>
       boolean().withDefault(const Constant(false))();
@@ -115,30 +115,31 @@ class SessionLogs extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
-@DriftDatabase(tables: [Projects, ProjectFiles, SubtitleLines, SelectionEvents, SessionLogs])
+@DriftDatabase(
+  tables: [Projects, ProjectFiles, SubtitleLines, SelectionEvents, SessionLogs],
+)
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor])
-      : super(executor ?? _openConnection());
+  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
   int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onUpgrade: (m, from, to) async {
-          if (from <= 1) {
-            await _safeAddColumn(m, projects, projects.folder);
-            from = 2;
-          }
-          if (from == 2) {
-            await _safeCreateTable(m, sessionLogs);
-            from = 3;
-          }
-          if (from == 3) {
-            await _safeAddColumn(m, projects, projects.archived);
-          }
-        },
-      );
+    onUpgrade: (m, from, to) async {
+      if (from <= 1) {
+        await _safeAddColumn(m, projects, projects.folder);
+        from = 2;
+      }
+      if (from == 2) {
+        await _safeCreateTable(m, sessionLogs);
+        from = 3;
+      }
+      if (from == 3) {
+        await _safeAddColumn(m, projects, projects.archived);
+      }
+    },
+  );
 
   Future<void> _safeAddColumn(
     Migrator m,
@@ -168,6 +169,16 @@ class AppDatabase extends _$AppDatabase {
         rethrow;
       }
     }
+  }
+
+  Future<void> clearProjectData() async {
+    await transaction(() async {
+      await delete(selectionEvents).go();
+      await delete(subtitleLines).go();
+      await delete(projectFiles).go();
+      await delete(projects).go();
+      await delete(sessionLogs).go();
+    });
   }
 
   static QueryExecutor _openConnection() {

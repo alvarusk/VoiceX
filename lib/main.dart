@@ -10,6 +10,7 @@ import 'projects/projects_page.dart';
 import 'settings/settings_page.dart';
 import 'settings/settings_service.dart';
 import 'sync/cloud_sync_service.dart';
+import 'sync/sync_prefs.dart';
 import 'sync/supabase_manager.dart';
 import 'utils/app_version.dart';
 
@@ -53,6 +54,8 @@ class _VoiceXAppState extends State<VoiceXApp> {
   final SupabaseManager _supabase = SupabaseManager.instance;
   bool _settingsSyncCompleted = false;
   Future<void>? _settingsSyncInFlight;
+  Future<void>? _cloudScopeSyncInFlight;
+  bool _cloudSessionBootstrapping = false;
   int _tab = 0;
   late bool _showSplash = widget.showSplash;
   ThemeMode _themeMode = ThemeMode.dark;
@@ -82,7 +85,60 @@ class _VoiceXAppState extends State<VoiceXApp> {
 
   void _handleSupabaseChange() {
     if (_supabase.isReady) {
-      unawaited(_syncCloudSettingsIfReady());
+      unawaited(_syncCloudAccountAndSettings());
+    }
+  }
+
+  Future<void> _syncCloudAccountAndSettings() async {
+    if (_cloudScopeSyncInFlight != null) {
+      await _cloudScopeSyncInFlight;
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _cloudSessionBootstrapping = true);
+    } else {
+      _cloudSessionBootstrapping = true;
+    }
+    _cloudScopeSyncInFlight = () async {
+      await _ensureCloudAccountScope();
+      await _syncCloudSettingsIfReady();
+    }();
+
+    try {
+      await _cloudScopeSyncInFlight;
+    } finally {
+      _cloudScopeSyncInFlight = null;
+      if (mounted) {
+        setState(() => _cloudSessionBootstrapping = false);
+      } else {
+        _cloudSessionBootstrapping = false;
+      }
+    }
+  }
+
+  Future<void> _ensureCloudAccountScope() async {
+    if (!_supabase.isAuthenticated) return;
+    final userId = _supabase.userId?.trim() ?? '';
+    if (userId.isEmpty) return;
+
+    final settings = SettingsService.instance;
+    await settings.init();
+    final storedUserId = settings.activeCloudUserId.trim();
+    if (storedUserId == userId) return;
+
+    debugPrint(
+      '[cloud] account changed $storedUserId -> $userId, clearing local cloud data',
+    );
+    await _db.clearProjectData();
+    await SyncPrefs().clearAll();
+    await settings.clearCloudScopedState();
+    await settings.setActiveCloudUserId(userId);
+    _settingsSyncCompleted = false;
+    if (mounted) {
+      setState(() {
+        _tab = 0;
+      });
     }
   }
 
@@ -141,6 +197,11 @@ class _VoiceXAppState extends State<VoiceXApp> {
                 if ((requireCloudLogin || _supabase.hasCloudConfig) &&
                     !_supabase.isAuthenticated &&
                     _supabase.isInitializing) {
+                  return const _CloudLoadingScreen();
+                }
+                if ((requireCloudLogin || _supabase.hasCloudConfig) &&
+                    _supabase.isAuthenticated &&
+                    _cloudSessionBootstrapping) {
                   return const _CloudLoadingScreen();
                 }
                 if ((requireCloudLogin || _supabase.hasCloudConfig) &&
