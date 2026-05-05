@@ -29,11 +29,11 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Necesito acceso al micrófono para dictar traducciones.</string>
+	<string>I need microphone access to dictate translations.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>VoiceX needs photo library access only when you explicitly choose media to import or share.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Necesito reconocimiento de voz para dictar traducciones.</string>
+	<string>I need speech recognition to dictate translations.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

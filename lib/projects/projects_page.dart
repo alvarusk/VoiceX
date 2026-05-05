@@ -145,13 +145,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (!mounted) return;
     final versionSuffix = result.currentVersion.isEmpty
         ? ''
-        : ' (tienes v${result.currentVersion})';
+        : ' (you have v${result.currentVersion})';
     final playCode = result.availableVersionCode != null
         ? ' (Play code ${result.availableVersionCode})'
         : '';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-      content: Text('New version available$versionSuffix$playCode'),
+        content: Text('New version available$versionSuffix$playCode'),
         action: SnackBarAction(
           label: 'Google Play',
           onPressed: checker.openPlayStore,
@@ -401,7 +401,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   Future<void> _syncAllProjects() async {
     if (_syncingAll) {
-      _showSnack('Ya hay una sincronizacion en curso.');
+      _showSnack('A sync is already in progress.');
       return;
     }
     final messenger = ScaffoldMessenger.of(context);
@@ -412,9 +412,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     if (!mounted) return;
     if (!_cloud.isReady) {
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Supabase not available (config/auth).'),
-        ),
+        const SnackBar(content: Text('Supabase not available (config/auth).')),
       );
       if (mounted) {
         setState(() => _syncingAll = false);
@@ -441,24 +439,18 @@ class _ProjectsPageState extends State<ProjectsPage> {
       await _loadManualFolders();
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Cloud sync complete.'),
-        ),
+        const SnackBar(content: Text('Cloud sync complete.')),
       );
     } on TimeoutException {
       // El mensaje se muestra en _runWithProgress.
     } on CloudSyncException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
-      debugPrint(
-        'sync button cloud error [${e.code}]: ${e.debugMessage ?? e}',
-      );
+      debugPrint('sync button cloud error [${e.code}]: ${e.debugMessage ?? e}');
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Error syncing with cloud.'),
-        ),
+        const SnackBar(content: Text('Error syncing with cloud.')),
       );
       debugPrint('sync button error: $e');
     } finally {
@@ -555,9 +547,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text(
-                  'No projects yet.\nPress + to import an ASS.',
-                ),
+                child: Text('No projects yet.\nPress + to import an ASS.'),
               ),
             );
           }
@@ -743,8 +733,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   onAcceptWithDetails: (details) async {
                     setState(() => _folderHover[folder] = false);
                     final proj = details.data;
-                    final target = (folder == 'No folder' ? '' : folder)
-                        .trim();
+                    final target = (folder == 'No folder' ? '' : folder).trim();
                     final current = proj.folder.trim();
                     if (current == target) return; // no-op drop, evita ensuciar
                     await svc.setProjectFolder(proj.projectId, target);

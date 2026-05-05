@@ -113,9 +113,9 @@ class _SettingsPageState extends State<SettingsPage> {
       await _cloud.syncSettingsOnly();
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings saved')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Settings saved')));
   }
 
   Future<void> _pickTxtForFolder(String folder) async {
@@ -210,9 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open the update link.'),
-        ),
+        const SnackBar(content: Text('Could not open the update link.')),
       );
     }
   }
@@ -328,7 +326,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: _selectedFolder,
                 items: _folders
                     .map(
-                    (f) => DropdownMenuItem(
+                      (f) => DropdownMenuItem(
                         value: f,
                         child: Text(f.trim().isEmpty ? 'No folder' : f),
                       ),
@@ -433,7 +431,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 16),
             if (Platform.isWindows) ...[
               const Text(
-                'Actualizaciones',
+                'Updates',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),

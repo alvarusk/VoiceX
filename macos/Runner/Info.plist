@@ -24,6 +24,10 @@
 	<string>public.app-category.productivity</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>I need microphone access to dictate translations.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>I need speech recognition to dictate translations.</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>

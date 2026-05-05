@@ -488,7 +488,7 @@ class _ReviewPageState extends State<ReviewPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.skip_next),
-                title: const Text('Ir a siguiente sin revisar'),
+                title: const Text('Go to next unreviewed line'),
                 onTap: () {
                   Navigator.pop(context);
                   _gotoNextUnreviewed(project);
@@ -504,7 +504,7 @@ class _ReviewPageState extends State<ReviewPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.video_file),
-                title: const Text('Asignar o cambiar video'),
+                title: const Text('Assign or change video'),
                 onTap: () {
                   Navigator.pop(context);
                   _pickAndAttachVideo(project);
@@ -512,22 +512,22 @@ class _ReviewPageState extends State<ReviewPage> {
               ),
               const Divider(),
               SwitchListTile(
-                title: const Text('Mostrar GPT'),
+                title: const Text('Show GPT'),
                 value: showGpt,
                 onChanged: (v) => setState(() => showGpt = v),
               ),
               SwitchListTile(
-                title: const Text('Mostrar Claude'),
+                title: const Text('Show Claude'),
                 value: showClaude,
                 onChanged: (v) => setState(() => showClaude = v),
               ),
               SwitchListTile(
-                title: const Text('Mostrar Gemini'),
+                title: const Text('Show Gemini'),
                 value: showGemini,
                 onChanged: (v) => setState(() => showGemini = v),
               ),
               SwitchListTile(
-                title: const Text('Mostrar DeepSeek'),
+                title: const Text('Show DeepSeek'),
                 value: showDeepseek,
                 onChanged: (v) => setState(() => showDeepseek = v),
               ),
@@ -540,7 +540,7 @@ class _ReviewPageState extends State<ReviewPage> {
 
   Future<void> _pickAndAttachVideo(Project project) async {
     if (kIsWeb) {
-      _showSnack('Asignar video no disponible en Web.');
+      _showSnack('Assigning video is not available on Web.');
       return;
     }
     final res = await FilePicker.platform.pickFiles(
@@ -1449,7 +1449,7 @@ If in doubt, prefer these spellings as-is.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Supabase no disponible (config/auth).'),
+            content: Text('Supabase not available (config/auth).'),
           ),
         );
       }
@@ -1460,7 +1460,7 @@ If in doubt, prefer these spellings as-is.
 
     if (!mounted) return;
 
-    final notifier = ValueNotifier<String>('Guardando...');
+    final notifier = ValueNotifier<String>('Saving...');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -2071,7 +2071,7 @@ class _LineCard extends StatelessWidget {
         (line.candClaude ?? '').isNotEmpty ||
         (line.candGemini ?? '').isNotEmpty ||
         (line.candDeepseek ?? '').isNotEmpty;
-    final gptLabel = hasOtherCand ? 'GPT' : 'ES script';
+    final gptLabel = hasOtherCand ? 'GPT' : 'Base script';
     final romajiTag =
         _firstTag(line.sourceText ?? '') ?? _firstTag(line.originalText);
     final displayRomanization = (line.romanization ?? '').trim().isNotEmpty

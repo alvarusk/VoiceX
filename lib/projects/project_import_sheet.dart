@@ -271,7 +271,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
             OutlinedButton.icon(
               onPressed: _busy ? null : _pickEngines,
               icon: const Icon(Icons.layers),
-              label: const Text('Select engines (multi)'),
+              label: const Text('Select engine files (multiple)'),
             ),
             if (_engineFiles.isNotEmpty)
               Padding(
@@ -300,7 +300,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
             if (_scriptFile != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('ES script: ${_scriptFile!.name}'),
+                child: Text('Spanish script: ${_scriptFile!.name}'),
               ),
             const SizedBox(height: 16),
             FilledButton.icon(

@@ -1,43 +1,60 @@
 import 'dart:collection';
 
-/// Normaliza frases de voz y las mapea a acciones conocidas.
+/// Normalizes spoken phrases and maps them to known actions.
 ///
-/// Si el texto coincide con un comando (ej. "siguiente", "anterior",
-/// "aceptar"), devolvemos la accion; si no, se trata como texto libre.
+/// If the text matches a command (for example "next", "previous",
+/// "accept"), we return the action; otherwise, the text is treated as free
+/// text.
 class CommandRouter {
   CommandRouter._();
   static final CommandRouter instance = CommandRouter._();
 
   final Map<String, CommandAction> _map = UnmodifiableMapView({
-    // Navegacion
+    // Navigation
     'siguiente': CommandAction.next,
     'adelante': CommandAction.next,
     'next': CommandAction.next,
     'avanzar': CommandAction.next,
+    'forward': CommandAction.next,
+    'advance': CommandAction.next,
     'anterior': CommandAction.previous,
     'atras': CommandAction.previous,
     'previo': CommandAction.previous,
     'previous': CommandAction.previous,
+    'back': CommandAction.previous,
 
-    // Estado/duda
+    // Doubt state
     'duda': CommandAction.toggleDoubt,
     'marcar duda': CommandAction.toggleDoubt,
     'quitar duda': CommandAction.toggleDoubt,
+    'doubt': CommandAction.toggleDoubt,
+    'mark doubt': CommandAction.toggleDoubt,
+    'clear doubt': CommandAction.toggleDoubt,
     'flag': CommandAction.toggleDoubt,
 
-    // Voz
+    // Voice
     'aceptar': CommandAction.acceptVoice,
     'usar': CommandAction.acceptVoice,
     'usar voz': CommandAction.acceptVoice,
     'confirmar': CommandAction.acceptVoice,
+    'accept': CommandAction.acceptVoice,
+    'use': CommandAction.acceptVoice,
+    'use voice': CommandAction.acceptVoice,
+    'confirm': CommandAction.acceptVoice,
     'rechazar': CommandAction.clearVoice,
     'borrar': CommandAction.clearVoice,
     'limpiar': CommandAction.clearVoice,
+    'reject': CommandAction.clearVoice,
+    'delete': CommandAction.clearVoice,
+    'clear': CommandAction.clearVoice,
 
     // Control
     'repetir': CommandAction.repeat,
     'otra vez': CommandAction.repeat,
     'escuchar de nuevo': CommandAction.repeat,
+    'repeat': CommandAction.repeat,
+    'again': CommandAction.repeat,
+    'listen again': CommandAction.repeat,
   });
 
   CommandRouteResult route(String raw) {
@@ -64,9 +81,12 @@ class CommandRouter {
   String _normalize(String text) {
     final lower = text.toLowerCase().trim();
     if (lower.isEmpty) return '';
-    final withoutPunctuation = lower.replaceAll(RegExp(r'[.,;:\u00a1!\u00bf?"]'), '');
+    final withoutPunctuation = lower.replaceAll(
+      RegExp(r'[.,;:\u00a1!\u00bf?"]'),
+      '',
+    );
     final squashedSpaces = withoutPunctuation.replaceAll(RegExp(r'\s+'), ' ');
-    // Reemplazo basico de acentos para coincidencias mas sencillas.
+    // Basic accent folding for simpler matching.
     return squashedSpaces
         .replaceAll(RegExp('[\\u00e1\\u00e0\\u00e4\\u00e2]'), 'a')
         .replaceAll(RegExp('[\\u00e9\\u00e8\\u00eb\\u00ea]'), 'e')
@@ -95,9 +115,9 @@ class CommandRouteResult {
   });
 
   CommandRouteResult.raw({required this.raw, this.normalized})
-      : matched = null,
-        action = null,
-        payload = null;
+    : matched = null,
+      action = null,
+      payload = null;
 
   final String raw;
   final String? normalized;
