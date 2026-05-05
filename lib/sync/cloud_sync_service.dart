@@ -1827,6 +1827,11 @@ class CloudSyncService {
           candidates.add(
             p.normalize(p.join(exeDir, '..', 'Resources', '.env')),
           );
+          candidates.add(
+            p.normalize(
+              p.join(exeDir, '..', '..', '..', '..', '..', '..', '..', '.env'),
+            ),
+          );
         } catch (_) {}
       }
       try {

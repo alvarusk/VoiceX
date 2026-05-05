@@ -381,6 +381,11 @@ Future<Map<String, String>> _readEnvFromCandidates() async {
     try {
       final exeDir = File(Platform.resolvedExecutable).parent.path;
       candidates.add(p.normalize(p.join(exeDir, '..', 'Resources', '.env')));
+      candidates.add(
+        p.normalize(
+          p.join(exeDir, '..', '..', '..', '..', '..', '..', '..', '.env'),
+        ),
+      );
     } catch (_) {}
   }
   try {
