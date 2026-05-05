@@ -77,7 +77,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
   }
 
   Future<void> _pickBase() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['ass'],
       withData: kIsWeb,
@@ -89,7 +89,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
   }
 
   Future<void> _pickEngines() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['ass'],
       allowMultiple: true,
@@ -100,7 +100,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
   }
 
   Future<void> _pickVideo() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: _allowedVideoExtensions,
       withData: false,
@@ -115,7 +115,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
       : const ['mp4', 'mkv', 'mov'];
 
   Future<void> _pickScriptEs() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['ass'],
       withData: false,

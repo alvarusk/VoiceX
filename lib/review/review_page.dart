@@ -543,7 +543,7 @@ class _ReviewPageState extends State<ReviewPage> {
       _showSnack('Assigning video is not available on Web.');
       return;
     }
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: _allowedVideoExtensions,
       withData: false,

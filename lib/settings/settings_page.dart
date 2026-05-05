@@ -119,7 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickTxtForFolder(String folder) async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['txt'],
       withData: true,

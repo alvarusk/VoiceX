@@ -330,13 +330,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -482,7 +478,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.voicex.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/voicex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/voicex";
@@ -497,7 +493,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.voicex.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/voicex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/voicex";
@@ -512,7 +508,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex.RunnerTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.voicex.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/voicex.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/voicex";
@@ -580,12 +576,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
+				INFOPLIST_KEY_CFBundleDisplayName = VoiceX;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -718,12 +716,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
+				INFOPLIST_KEY_CFBundleDisplayName = VoiceX;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -744,12 +744,14 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = R24Q9H7VFW;
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "VoiceX";
+				INFOPLIST_KEY_CFBundleDisplayName = VoiceX;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Necesito acceso al micrófono para dictar traducciones.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Necesito reconocimiento de voz para dictar traducciones.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kingdomm.voicex;
 				PROVISIONING_PROFILE_SPECIFIER = "";
