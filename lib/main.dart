@@ -16,7 +16,7 @@ import 'utils/app_version.dart';
 
 const bool _forceMacCloudLogin = bool.fromEnvironment(
   'VOICEX_FORCE_MACOS_CLOUD_LOGIN',
-  defaultValue: true,
+  defaultValue: kReleaseMode,
 );
 const String _macCloudLoginEmail = String.fromEnvironment(
   'VOICEX_MACOS_CLOUD_LOGIN_EMAIL',

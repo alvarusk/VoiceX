@@ -374,7 +374,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e; SOURCE_ENV=\"${PROJECT_DIR}/Runner/.env\"; DEST_ENV=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"; if [ -f \"$SOURCE_ENV\" ]; then mkdir -p \"$(dirname \"$DEST_ENV\")\"; cp \"$SOURCE_ENV\" \"$DEST_ENV\"; else rm -f \"$DEST_ENV\"; fi";
+			shellScript = "set -e; SOURCE_ENV=\"${PROJECT_DIR}/Runner/.env\"; FALLBACK_ENV=\"${PROJECT_DIR}/../.env\"; DEST_ENV=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"; if [ -f \"$SOURCE_ENV\" ]; then mkdir -p \"$(dirname \"$DEST_ENV\")\"; cp \"$SOURCE_ENV\" \"$DEST_ENV\"; elif [ -f \"$FALLBACK_ENV\" ]; then mkdir -p \"$(dirname \"$DEST_ENV\")\"; cp \"$FALLBACK_ENV\" \"$DEST_ENV\"; else rm -f \"$DEST_ENV\"; fi";
 			showEnvVarsInLog = 0;
 		};
 		33CC111E2044C6BF0003C045 /* ShellScript */ = {
