@@ -275,8 +275,11 @@ jobs:
           else
             BUILD_NUMBER="0"
           fi
-          if [ -n "${GITHUB_RUN_NUMBER:-}" ] && [ "$GITHUB_RUN_NUMBER" -gt "$BUILD_NUMBER" ]; then
-            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          RUN_NUMBER="${GITHUB_RUN_NUMBER:-0}"
+          RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
+          CI_BUILD_NUMBER="${RUN_NUMBER}${RUN_ATTEMPT}"
+          if [ "$CI_BUILD_NUMBER" -gt "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$CI_BUILD_NUMBER"
           fi
           echo "APP_VERSION_NAME=$BUILD_NAME" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$BUILD_NUMBER" >> "$GITHUB_ENV"
@@ -427,8 +430,11 @@ jobs:
           else
             BUILD_NUMBER="0"
           fi
-          if [ -n "${GITHUB_RUN_NUMBER:-}" ] && [ "$GITHUB_RUN_NUMBER" -gt "$BUILD_NUMBER" ]; then
-            BUILD_NUMBER="$GITHUB_RUN_NUMBER"
+          RUN_NUMBER="${GITHUB_RUN_NUMBER:-0}"
+          RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
+          CI_BUILD_NUMBER="${RUN_NUMBER}${RUN_ATTEMPT}"
+          if [ "$CI_BUILD_NUMBER" -gt "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$CI_BUILD_NUMBER"
           fi
 
           RELEASE_TRACK="testflight"

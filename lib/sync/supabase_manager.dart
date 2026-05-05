@@ -16,6 +16,9 @@ class SupabaseManager extends ChangeNotifier {
   SupabaseManager._();
   static final SupabaseManager instance = SupabaseManager._();
 
+  final bool _forceInteractiveMacLogin =
+      defaultTargetPlatform == TargetPlatform.macOS;
+
   bool _configPresent = false;
   bool _ready = false;
   bool _authed = false;
@@ -33,8 +36,7 @@ class SupabaseManager extends ChangeNotifier {
   bool get isReady => _ready && _authed;
   bool get isAuthenticated => _authed;
   bool get initAttempted => _initAttempted;
-  bool get isInitializing =>
-      _coreInitInFlight != null || _authInFlight != null;
+  bool get isInitializing => _coreInitInFlight != null || _authInFlight != null;
   String? get authError => _authError;
   String? get currentUserEmail =>
       _authed ? Supabase.instance.client.auth.currentUser?.email : null;
@@ -47,7 +49,6 @@ class SupabaseManager extends ChangeNotifier {
 
     final fileEnv = await _loadFileEnv();
     final platformEnv = Platform.environment;
-
     String readEnv(String key) {
       return _readDefine(key)
           .ifEmpty(() => platformEnv[key] ?? '')
@@ -65,15 +66,20 @@ class SupabaseManager extends ChangeNotifier {
       _configPresent = configPresent;
       notifyListeners();
     }
-    _authEmail = readEnv('SUPABASE_USER_EMAIL');
-    _authPassword = readEnv('SUPABASE_USER_PASSWORD').ifEmpty(
-      () => _readBase64Secret(
-        _readDefine('SUPABASE_USER_PASSWORD_B64')
-            .ifEmpty(() => platformEnv['SUPABASE_USER_PASSWORD_B64'] ?? '')
-            .ifEmpty(() => _readDotenv('SUPABASE_USER_PASSWORD_B64'))
-            .ifEmpty(() => fileEnv['SUPABASE_USER_PASSWORD_B64'] ?? ''),
-      ),
-    );
+    if (_forceInteractiveMacLogin) {
+      _authEmail = '';
+      _authPassword = '';
+    } else {
+      _authEmail = readEnv('SUPABASE_USER_EMAIL');
+      _authPassword = readEnv('SUPABASE_USER_PASSWORD').ifEmpty(
+        () => _readBase64Secret(
+          _readDefine('SUPABASE_USER_PASSWORD_B64')
+              .ifEmpty(() => platformEnv['SUPABASE_USER_PASSWORD_B64'] ?? '')
+              .ifEmpty(() => _readDotenv('SUPABASE_USER_PASSWORD_B64'))
+              .ifEmpty(() => fileEnv['SUPABASE_USER_PASSWORD_B64'] ?? ''),
+        ),
+      );
+    }
 
     await _ensureCoreInitialized(
       url: url,
@@ -210,6 +216,23 @@ class SupabaseManager extends ChangeNotifier {
     _authInFlight = () async {
       final auth = Supabase.instance.client.auth;
       final current = auth.currentUser;
+      if (_forceInteractiveMacLogin) {
+        if (current != null) {
+          try {
+            await auth.signOut();
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('[supabase] signOut error: $e');
+            }
+          }
+        }
+        if (!force) {
+          _authed = false;
+          _authError = null;
+          notifyListeners();
+          return;
+        }
+      }
       final hasAnyPasswordAuth =
           _authEmail.isNotEmpty || _authPassword.isNotEmpty;
       final wantsPasswordAuth =

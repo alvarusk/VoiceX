@@ -13,6 +13,15 @@ import 'sync/cloud_sync_service.dart';
 import 'sync/supabase_manager.dart';
 import 'utils/app_version.dart';
 
+const bool _forceMacCloudLogin = bool.fromEnvironment(
+  'VOICEX_FORCE_MACOS_CLOUD_LOGIN',
+  defaultValue: true,
+);
+const String _macCloudLoginEmail = String.fromEnvironment(
+  'VOICEX_MACOS_CLOUD_LOGIN_EMAIL',
+  defaultValue: 'tests@localquestlanguages.com',
+);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -109,6 +118,8 @@ class _VoiceXAppState extends State<VoiceXApp> {
 
   @override
   Widget build(BuildContext context) {
+    final isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
+    final requireCloudLogin = isMacOS && _forceMacCloudLogin;
     return MaterialApp(
       title: 'VoiceX',
       themeMode: _themeMode,
@@ -127,15 +138,19 @@ class _VoiceXAppState extends State<VoiceXApp> {
           : AnimatedBuilder(
               animation: _supabase,
               builder: (context, _) {
-                if (_supabase.hasCloudConfig &&
+                if ((requireCloudLogin || _supabase.hasCloudConfig) &&
                     !_supabase.isAuthenticated &&
                     _supabase.isInitializing) {
                   return const _CloudLoadingScreen();
                 }
-                if (_supabase.hasCloudConfig && !_supabase.isAuthenticated) {
+                if ((requireCloudLogin || _supabase.hasCloudConfig) &&
+                    !_supabase.isAuthenticated) {
                   return _CloudLoginScreen(
                     isDark: _themeMode == ThemeMode.dark,
                     onToggleTheme: _toggleTheme,
+                    requiredEmail: requireCloudLogin ? _macCloudLoginEmail : '',
+                    lockEmail: requireCloudLogin,
+                    configReady: _supabase.hasCloudConfig,
                   );
                 }
                 return Scaffold(
@@ -227,33 +242,48 @@ class _CloudLoadingScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Initializing cloud...'),
-              ],
-            ),
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Initializing cloud...'),
+          ],
+        ),
+      ),
     );
   }
 }
 
 class _CloudLoginScreen extends StatefulWidget {
-  const _CloudLoginScreen({required this.isDark, required this.onToggleTheme});
+  const _CloudLoginScreen({
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.requiredEmail,
+    required this.lockEmail,
+    required this.configReady,
+  });
 
   final bool isDark;
   final VoidCallback onToggleTheme;
+  final String requiredEmail;
+  final bool lockEmail;
+  final bool configReady;
 
   @override
   State<_CloudLoginScreen> createState() => _CloudLoginScreenState();
 }
 
 class _CloudLoginScreenState extends State<_CloudLoginScreen> {
-  final _emailCtrl = TextEditingController();
+  late final TextEditingController _emailCtrl;
   final _passwordCtrl = TextEditingController();
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailCtrl = TextEditingController(text: widget.requiredEmail);
+  }
 
   @override
   void dispose() {
@@ -273,23 +303,25 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
     if (!mounted) return;
     setState(() => _submitting = false);
     if (!ok) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              SupabaseManager.instance.authError ??
-                'Could not sign in to cloud.',
-            ),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            SupabaseManager.instance.authError ?? 'Could not sign in to cloud.',
           ),
-        );
-      }
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final manager = SupabaseManager.instance;
+    final cloudReadyHint = widget.configReady
+        ? 'Cloud access required for this build.'
+        : 'Cloud access is not configured yet. This build cannot continue without it.';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cloud Access'),
+        title: const Text('Required Sign-In'),
         actions: [
           IconButton(
             tooltip: widget.isDark ? 'Light mode' : 'Dark mode',
@@ -308,12 +340,20 @@ class _CloudLoginScreenState extends State<_CloudLoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Sign in to load your cloud projects.',
+                  cloudReadyHint,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (widget.requiredEmail.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Use: ${widget.requiredEmail}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextField(
                   controller: _emailCtrl,
+                  readOnly: widget.lockEmail,
                   keyboardType: TextInputType.emailAddress,
                   autofillHints: const [AutofillHints.username],
                   decoration: const InputDecoration(

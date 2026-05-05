@@ -34,9 +34,10 @@ The workflow checks that the tag version matches the `version:` name in `pubspec
 Apple build numbers are generated in CI. The workflow uses:
 
 - version name from `pubspec.yaml`
-- build number = `max(pubspec build number, GITHUB_RUN_NUMBER)`
+- build number = `max(pubspec build number, GITHUB_RUN_NUMBER concatenated with GITHUB_RUN_ATTEMPT)`
 
 That means you no longer need to bump the iOS/macOS build manually in Xcode for every release.
+It also means re-running the same GitHub Actions job will produce a distinct build number instead of colliding with a previous upload.
 
 ## Required GitHub configuration
 
