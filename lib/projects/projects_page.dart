@@ -41,6 +41,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   final Map<String, bool> _folderHover = {}; // folder -> drag hover
   List<String> _folderNamesCache = [];
   bool _updateChecked = false;
+  String? _folderScopeOwnerId;
 
   void _showSnack(String msg) {
     if (!mounted) return;
@@ -71,6 +72,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   Future<void> _loadManualFolders() async {
     await _settings.init();
+    final ownerId = SupabaseManager.instance.userId;
+    if (_folderScopeOwnerId != ownerId) {
+      _folderScopeOwnerId = ownerId;
+      _manualFolders.clear();
+      _collapsed.clear();
+      _folderHover.clear();
+      _folderNamesCache = [];
+    }
     setState(() {
       _manualFolders
         ..clear()
@@ -541,6 +550,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
         stream: svc.watchProjectSummaries(),
         builder: (context, snap) {
           final items = snap.data ?? const [];
+          final visibleFolders = items
+              .map(
+                (p) => p.folder.trim().isEmpty ? 'No folder' : p.folder.trim(),
+              )
+              .toSet();
           if (items.isEmpty &&
               _manualFolders.isEmpty &&
               _folderNamesCache.isEmpty) {
@@ -560,10 +574,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
             (grouped[folder] ??= []).add(p);
           }
           for (final f in _manualFolders) {
-            grouped.putIfAbsent(f, () => []);
+            if (visibleFolders.contains(f) || f == 'No folder') {
+              grouped.putIfAbsent(f, () => []);
+            }
           }
           for (final f in _folderNamesCache) {
-            grouped.putIfAbsent(f, () => []);
+            if (visibleFolders.contains(f) || f == 'No folder') {
+              grouped.putIfAbsent(f, () => []);
+            }
           }
           final folderNames = grouped.keys.toList()
             ..sort((a, b) {

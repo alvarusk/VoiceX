@@ -425,4 +425,12 @@ class SettingsService {
     await prefs.remove('deleted_projects_updated_at_ms');
     await prefs.remove('settings_updated_at_ms');
   }
+
+  Future<void> clearManualFolderState() async {
+    await init();
+    _manualFolders = [];
+    _manualFoldersUpdatedAtMs = 0;
+    await _prefs?.remove('manual_folders');
+    await _prefs?.remove('manual_folders_updated_at_ms');
+  }
 }

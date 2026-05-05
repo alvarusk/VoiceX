@@ -133,6 +133,7 @@ class _VoiceXAppState extends State<VoiceXApp> {
     await _db.clearProjectData();
     await SyncPrefs().clearAll();
     await settings.clearCloudScopedState();
+    await settings.clearManualFolderState();
     await settings.setActiveCloudUserId(userId);
     _settingsSyncCompleted = false;
     if (mounted) {
