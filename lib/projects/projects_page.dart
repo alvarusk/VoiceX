@@ -38,6 +38,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   bool _syncingAll = false;
   final Map<String, bool> _collapsed = {}; // folder -> collapsed
   final Set<String> _manualFolders = {}; // created manually even if vacías
+  final Set<String> _archivedFolders = {}; // hidden from the main screen
   final Map<String, bool> _folderHover = {}; // folder -> drag hover
   List<String> _folderNamesCache = [];
   bool _updateChecked = false;
@@ -61,7 +62,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   @override
   void initState() {
     super.initState();
-    _loadManualFolders();
+    _loadFolderState();
     if (widget.autoSyncOnStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _autoSync());
     }
@@ -70,26 +71,31 @@ class _ProjectsPageState extends State<ProjectsPage> {
     );
   }
 
-  Future<void> _loadManualFolders() async {
+  Future<void> _loadFolderState() async {
     await _settings.init();
     final ownerId = SupabaseManager.instance.userId;
     if (_folderScopeOwnerId != ownerId) {
       _folderScopeOwnerId = ownerId;
       _manualFolders.clear();
+      _archivedFolders.clear();
       _collapsed.clear();
       _folderHover.clear();
       _folderNamesCache = [];
     }
+    final manual = _settings.manualFolders.toSet();
+    final archived = _settings.archivedFolders.toSet();
     setState(() {
       _manualFolders
         ..clear()
-        ..addAll(_settings.manualFolders);
+        ..addAll(manual.difference(archived));
+      _archivedFolders
+        ..clear()
+        ..addAll(archived);
       for (final f in _manualFolders) {
         _collapsed.putIfAbsent(f, () => false);
-        if (!_folderNamesCache.contains(f)) {
-          _folderNamesCache.add(f);
-        }
       }
+      _folderNamesCache = _manualFolders.toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     });
   }
 
@@ -117,7 +123,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
       );
       if (mounted) {
         setState(() {});
-        await _loadManualFolders();
+        await _loadFolderState();
         _showSnack('Initial sync complete.');
       }
     } on CloudSyncException catch (e) {
@@ -249,26 +255,29 @@ class _ProjectsPageState extends State<ProjectsPage> {
     );
   }
 
-  void _ensureFolder(String name) {
+  Future<void> _ensureFolder(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
     setState(() {
       _manualFolders.add(trimmed);
+      _archivedFolders.remove(trimmed);
       _collapsed.putIfAbsent(trimmed, () => false);
       if (!_folderNamesCache.contains(trimmed)) {
         _folderNamesCache.add(trimmed);
+        _folderNamesCache.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       }
     });
-    _settings.setManualFolders(_manualFolders);
+    await _settings.ensureFolderActive(trimmed);
   }
 
   Future<void> _selectFolderForProject(
     ProjectSummary p,
     ReviewService svc,
   ) async {
+    final archivedFolders = _settings.archivedFolders.toSet();
     final folders = <String>{
       'No folder',
-      ..._manualFolders,
+      ..._settings.manualFolders.where((f) => !archivedFolders.contains(f)),
       if (p.folder.trim().isNotEmpty) p.folder.trim(),
     };
     final selected = await showModalBottomSheet<String>(
@@ -335,7 +344,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
     final trimmed = selected.trim();
     if (trimmed == p.folder.trim()) return; // sin cambios
     await svc.setProjectFolder(p.projectId, trimmed);
-    _ensureFolder(trimmed);
+    await _ensureFolder(trimmed);
   }
 
   Future<void> _renameProject(ProjectSummary p, ReviewService svc) async {
@@ -445,7 +454,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
         },
       );
       if (!mounted) return;
-      await _loadManualFolders();
+      await _loadFolderState();
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(content: Text('Cloud sync complete.')),
@@ -506,7 +515,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             onPressed: () async {
               final name = await _promptFolderName(initial: '');
               if (name == null) return;
-              _ensureFolder(name);
+              await _ensureFolder(name);
               if (context.mounted && name.trim().isNotEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -531,7 +540,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                   folderOptions: _folderNamesCache
                       .where((f) => f != 'No folder')
                       .toList(),
-                  onFolderCreated: (f) => _ensureFolder(f),
+                  onFolderCreated: (f) => unawaited(_ensureFolder(f)),
                 ),
               );
               if (projectId == null || !context.mounted) return;
@@ -550,38 +559,31 @@ class _ProjectsPageState extends State<ProjectsPage> {
         stream: svc.watchProjectSummaries(),
         builder: (context, snap) {
           final items = snap.data ?? const [];
+          final archivedFolders = _settings.archivedFolders.toSet();
+          final manualFolders = _settings.manualFolders.toSet();
           final visibleFolders = items
               .map(
                 (p) => p.folder.trim().isEmpty ? 'No folder' : p.folder.trim(),
               )
+              .where((f) => !archivedFolders.contains(f))
               .toSet();
-          if (items.isEmpty &&
-              _manualFolders.isEmpty &&
-              _folderNamesCache.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No projects yet.\nPress + to import an ASS.'),
-              ),
-            );
-          }
-
+          final activeManualFolders = manualFolders
+              .where((f) => !archivedFolders.contains(f))
+              .toSet();
           final grouped = <String, List<ProjectSummary>>{};
           for (final p in items) {
             final folder = p.folder.trim().isEmpty
                 ? 'No folder'
                 : p.folder.trim();
-            (grouped[folder] ??= []).add(p);
-          }
-          for (final f in _manualFolders) {
-            if (visibleFolders.contains(f) || f == 'No folder') {
-              grouped.putIfAbsent(f, () => []);
+            if (!archivedFolders.contains(folder)) {
+              (grouped[folder] ??= []).add(p);
             }
           }
-          for (final f in _folderNamesCache) {
-            if (visibleFolders.contains(f) || f == 'No folder') {
-              grouped.putIfAbsent(f, () => []);
-            }
+          for (final f in activeManualFolders) {
+            grouped.putIfAbsent(f, () => []);
+          }
+          for (final f in visibleFolders) {
+            grouped.putIfAbsent(f, () => []);
           }
           final folderNames = grouped.keys.toList()
             ..sort((a, b) {
@@ -590,6 +592,20 @@ class _ProjectsPageState extends State<ProjectsPage> {
               return a.toLowerCase().compareTo(b.toLowerCase());
             });
           _folderNamesCache = folderNames;
+
+          if (folderNames.isEmpty) {
+            final emptyText = items.isEmpty && archivedFolders.isEmpty
+                ? 'No projects yet.\nPress + to import an ASS.'
+                : 'No active folders yet.\nCreate one or unarchive it from Settings.';
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  emptyText,
+                ),
+              ),
+            );
+          }
 
           return ListView(
             padding: const EdgeInsets.all(12),
@@ -662,9 +678,62 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                               )
                                               .toList();
                                         });
-                                        _settings.setManualFolders(
+                                        await _settings.setManualFolders(
                                           _manualFolders,
                                         );
+                                        await _settings.ensureFolderActive(
+                                          name.trim(),
+                                        );
+                                        await _cloud.ensureInit();
+                                        if (_cloud.isReady) {
+                                          await _cloud.syncSettingsOnly();
+                                        }
+                                      }
+                                    } else if (v == 'archive') {
+                                      final ok = await showDialog<bool>(
+                                        context: context,
+                                        builder: (_) => AlertDialog(
+                                          title: const Text('Archive folder'),
+                                          content: Text(
+                                            'This will hide "$folder" from the main screen without deleting its projects. Continue?',
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, false),
+                                              child: const Text('Cancel'),
+                                            ),
+                                            FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, true),
+                                              child: const Text('Archive'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (ok == true) {
+                                        await _settings.archiveFolder(folder);
+                                        setState(() {
+                                          _manualFolders.remove(folder);
+                                          _archivedFolders.add(folder);
+                                          _folderHover.remove(folder);
+                                          _collapsed.remove(folder);
+                                          _folderNamesCache.remove(folder);
+                                        });
+                                        await _cloud.ensureInit();
+                                        if (_cloud.isReady) {
+                                          await _cloud.syncSettingsOnly();
+                                        }
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Folder "$folder" archived.',
+                                              ),
+                                            ),
+                                          );
+                                        }
                                       }
                                     } else if (v == 'delete') {
                                       final ok = await showDialog<bool>(
@@ -696,9 +765,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                           _collapsed.remove(folder);
                                           _folderNamesCache.remove(folder);
                                         });
-                                        _settings.setManualFolders(
+                                        await _settings.setManualFolders(
                                           _manualFolders,
                                         );
+                                        await _cloud.ensureInit();
+                                        if (_cloud.isReady) {
+                                          await _cloud.syncSettingsOnly();
+                                        }
                                       }
                                     }
                                   },
@@ -706,6 +779,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                     PopupMenuItem(
                                       value: 'rename',
                                       child: Text('Rename folder'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'archive',
+                                      child: Text('Archive folder'),
                                     ),
                                     PopupMenuItem(
                                       value: 'delete',
@@ -755,7 +832,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                     final current = proj.folder.trim();
                     if (current == target) return; // no-op drop, evita ensuciar
                     await svc.setProjectFolder(proj.projectId, target);
-                    _ensureFolder(target);
+                    await _ensureFolder(target);
                   },
                 ),
               ],

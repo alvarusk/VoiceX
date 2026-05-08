@@ -63,7 +63,7 @@ keyPassword=TU_PASSWORD
    Si `key.properties` no existe, el build sigue usando la firma debug para no bloquear builds locales.
 
 ## Project Workflow
-- Create folders from the top bar or when importing a project; folders persist across sessions.
+- Create folders from the top bar or when importing a project; folders persist across sessions and stay visible even when empty.
 - Import a project: base ASS (and optionally engine ASS files, video). Folders appear immediately in selectors.
 - Review: navigate lines, edit candidates, play segments if video is present; navigation works even without video.
 - Glossaries (Settings > Glosarios):
@@ -81,7 +81,7 @@ keyPassword=TU_PASSWORD
 
 ## Notes
 - If no video is imported, line navigation still works (playback buttons are no-ops).
-- Folders are stored in app settings; deleting a folder via UI removes it from cache/persisted list, but deleting projects alone won’t delete the folder.
+- Folders are stored in app settings; archiving a folder hides it from the main screen without deleting its projects, while deleting a folder still moves its projects to "No folder".
 
 ## Versioning
 - App title shows the current version in parentheses, e.g. `VoiceX (v1.0.1+2)`.

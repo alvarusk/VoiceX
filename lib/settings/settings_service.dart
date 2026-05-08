@@ -16,9 +16,19 @@ class SettingsService {
   Map<String, String> _projectExportNames = {};
   List<String> _manualFolders = [];
   int _manualFoldersUpdatedAtMs = 0;
+  List<String> _archivedFolders = [];
+  int _archivedFoldersUpdatedAtMs = 0;
   Map<String, int> _deletedProjects = {};
   int _deletedProjectsUpdatedAtMs = 0;
   int _updatedAtMs = 0;
+
+  List<String> _normalizeFolders(Iterable<String> folders) {
+    final deduped = {for (final f in folders) f.trim()}
+      ..removeWhere((e) => e.isEmpty);
+    final list = deduped.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
 
   Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -45,6 +55,12 @@ class SettingsService {
     _manualFolders = _prefs?.getStringList('manual_folders') ?? [];
     _manualFoldersUpdatedAtMs =
         _prefs?.getInt('manual_folders_updated_at_ms') ?? 0;
+    _archivedFolders = _prefs?.getStringList('archived_folders') ?? [];
+    _archivedFoldersUpdatedAtMs =
+        _prefs?.getInt('archived_folders_updated_at_ms') ?? 0;
+    _manualFolders = _normalizeFolders(_manualFolders);
+    _archivedFolders = _normalizeFolders(_archivedFolders);
+    _manualFolders.removeWhere(_archivedFolders.contains);
     if (_manualFoldersUpdatedAtMs == 0 && _manualFolders.isNotEmpty) {
       _manualFoldersUpdatedAtMs = _updatedAtMs;
       if (_manualFoldersUpdatedAtMs == 0) {
@@ -53,6 +69,16 @@ class SettingsService {
       await _prefs?.setInt(
         'manual_folders_updated_at_ms',
         _manualFoldersUpdatedAtMs,
+      );
+    }
+    if (_archivedFoldersUpdatedAtMs == 0 && _archivedFolders.isNotEmpty) {
+      _archivedFoldersUpdatedAtMs = _updatedAtMs;
+      if (_archivedFoldersUpdatedAtMs == 0) {
+        _archivedFoldersUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
+      }
+      await _prefs?.setInt(
+        'archived_folders_updated_at_ms',
+        _archivedFoldersUpdatedAtMs,
       );
     }
 
@@ -227,8 +253,15 @@ class SettingsService {
 
   List<String> get manualFolders => List.unmodifiable(_manualFolders);
   int get manualFoldersUpdatedAtMs => _manualFoldersUpdatedAtMs;
+  List<String> get archivedFolders => List.unmodifiable(_archivedFolders);
+  int get archivedFoldersUpdatedAtMs => _archivedFoldersUpdatedAtMs;
   Map<String, int> get deletedProjects => Map.unmodifiable(_deletedProjects);
   int get deletedProjectsUpdatedAtMs => _deletedProjectsUpdatedAtMs;
+
+  bool isFolderArchived(String folder) {
+    final trimmed = folder.trim();
+    return trimmed.isNotEmpty && _archivedFolders.contains(trimmed);
+  }
 
   String get activeCloudUserId =>
       _prefs?.getString('active_cloud_user_id') ?? '';
@@ -245,16 +278,101 @@ class SettingsService {
 
   Future<void> setManualFolders(Iterable<String> folders) async {
     await init();
-    final deduped = {for (final f in folders) f.trim()}
-      ..removeWhere((e) => e.isEmpty);
-    _manualFolders = deduped.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _manualFolders = _normalizeFolders(folders);
+    _manualFolders.removeWhere(_archivedFolders.contains);
     await _prefs?.setStringList('manual_folders', _manualFolders);
     _manualFoldersUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
     await _prefs?.setInt(
       'manual_folders_updated_at_ms',
       _manualFoldersUpdatedAtMs,
     );
+  }
+
+  Future<void> setArchivedFolders(Iterable<String> folders) async {
+    await init();
+    _archivedFolders = _normalizeFolders(folders);
+    final beforeManual = List<String>.from(_manualFolders);
+    _manualFolders.removeWhere(_archivedFolders.contains);
+    final changedManual = beforeManual.length != _manualFolders.length ||
+        !_manualFolders.every(beforeManual.contains);
+    await _prefs?.setStringList('archived_folders', _archivedFolders);
+    await _prefs?.setStringList('manual_folders', _manualFolders);
+    _archivedFoldersUpdatedAtMs = DateTime.now().millisecondsSinceEpoch;
+    await _prefs?.setInt(
+      'archived_folders_updated_at_ms',
+      _archivedFoldersUpdatedAtMs,
+    );
+    if (changedManual) {
+      _manualFoldersUpdatedAtMs = _archivedFoldersUpdatedAtMs;
+      await _prefs?.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
+    }
+  }
+
+  Future<void> ensureFolderActive(String folder) async {
+    await init();
+    final trimmed = folder.trim();
+    if (trimmed.isEmpty) return;
+    final changedArchived = _archivedFolders.remove(trimmed);
+    final changedManual = !_manualFolders.contains(trimmed);
+    if (changedManual) {
+      _manualFolders.add(trimmed);
+      _manualFolders = _normalizeFolders(_manualFolders);
+    }
+    if (!changedArchived && !changedManual) return;
+    await _prefs?.setStringList('manual_folders', _manualFolders);
+    await _prefs?.setStringList('archived_folders', _archivedFolders);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (changedManual) {
+      _manualFoldersUpdatedAtMs = now;
+      await _prefs?.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
+    }
+    if (changedArchived) {
+      _archivedFoldersUpdatedAtMs = now;
+      await _prefs?.setInt(
+        'archived_folders_updated_at_ms',
+        _archivedFoldersUpdatedAtMs,
+      );
+    }
+  }
+
+  Future<void> archiveFolder(String folder) async {
+    await init();
+    final trimmed = folder.trim();
+    if (trimmed.isEmpty) return;
+    final changedManual = _manualFolders.remove(trimmed);
+    final changedArchived = !_archivedFolders.contains(trimmed);
+    if (changedArchived) {
+      _archivedFolders.add(trimmed);
+      _archivedFolders = _normalizeFolders(_archivedFolders);
+    }
+    if (!changedManual && !changedArchived) return;
+    await _prefs?.setStringList('manual_folders', _manualFolders);
+    await _prefs?.setStringList('archived_folders', _archivedFolders);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (changedManual) {
+      _manualFoldersUpdatedAtMs = now;
+      await _prefs?.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
+    }
+    if (changedArchived) {
+      _archivedFoldersUpdatedAtMs = now;
+      await _prefs?.setInt(
+        'archived_folders_updated_at_ms',
+        _archivedFoldersUpdatedAtMs,
+      );
+    }
+  }
+
+  Future<void> unarchiveFolder(String folder) async {
+    await ensureFolderActive(folder);
   }
 
   int get settingsUpdatedAtMs => _updatedAtMs;
@@ -277,6 +395,8 @@ class SettingsService {
       'glossary_by_folder': _glossaryByFolder,
       'manual_folders': _manualFolders,
       'manual_folders_updated_at_ms': _manualFoldersUpdatedAtMs,
+      'archived_folders': _archivedFolders,
+      'archived_folders_updated_at_ms': _archivedFoldersUpdatedAtMs,
       'deleted_projects': _deletedProjects,
       'deleted_projects_updated_at_ms': _deletedProjectsUpdatedAtMs,
     };
@@ -285,6 +405,7 @@ class SettingsService {
   Future<bool> importSyncPayload(
     Map<String, dynamic> payload, {
     bool includeManualFolders = true,
+    bool includeArchivedFolders = true,
     bool includeDeletedProjects = true,
   }) async {
     await init();
@@ -325,10 +446,8 @@ class SettingsService {
       final manual =
           (payload['manual_folders'] as List?)?.cast<String>() ??
           const <String>[];
-      _manualFolders = ({
-        for (final f in manual) f.trim(),
-      }..removeWhere((e) => e.isEmpty)).toList();
-      _manualFolders.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      _manualFolders = _normalizeFolders(manual);
+      _manualFolders.removeWhere(_archivedFolders.contains);
       await prefs.setStringList('manual_folders', _manualFolders);
       _manualFoldersUpdatedAtMs =
           payload['manual_folders_updated_at_ms'] as int? ?? remoteUpdated;
@@ -336,6 +455,32 @@ class SettingsService {
         'manual_folders_updated_at_ms',
         _manualFoldersUpdatedAtMs,
       );
+    }
+
+    if (includeArchivedFolders) {
+      final archived =
+          (payload['archived_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+      final beforeManual = List<String>.from(_manualFolders);
+      _archivedFolders = _normalizeFolders(archived);
+      _manualFolders.removeWhere(_archivedFolders.contains);
+      final changedManual = beforeManual.length != _manualFolders.length ||
+          !_manualFolders.every(beforeManual.contains);
+      await prefs.setStringList('archived_folders', _archivedFolders);
+      await prefs.setStringList('manual_folders', _manualFolders);
+      _archivedFoldersUpdatedAtMs =
+          payload['archived_folders_updated_at_ms'] as int? ?? remoteUpdated;
+      await prefs.setInt(
+        'archived_folders_updated_at_ms',
+        _archivedFoldersUpdatedAtMs,
+      );
+      if (changedManual && !includeManualFolders) {
+        _manualFoldersUpdatedAtMs = _archivedFoldersUpdatedAtMs;
+        await prefs.setInt(
+          'manual_folders_updated_at_ms',
+          _manualFoldersUpdatedAtMs,
+        );
+      }
     }
 
     if (includeDeletedProjects) {
@@ -362,16 +507,40 @@ class SettingsService {
     int updatedAtMs,
   ) async {
     await init();
-    final deduped = {for (final f in folders) f.trim()}
-      ..removeWhere((e) => e.isEmpty);
-    _manualFolders = deduped.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _manualFolders = _normalizeFolders(folders);
+    _manualFolders.removeWhere(_archivedFolders.contains);
     _manualFoldersUpdatedAtMs = updatedAtMs;
     await _prefs?.setStringList('manual_folders', _manualFolders);
     await _prefs?.setInt(
       'manual_folders_updated_at_ms',
       _manualFoldersUpdatedAtMs,
     );
+  }
+
+  Future<void> setArchivedFoldersFromSync(
+    Iterable<String> folders,
+    int updatedAtMs,
+  ) async {
+    await init();
+    _archivedFolders = _normalizeFolders(folders);
+    final beforeManual = List<String>.from(_manualFolders);
+    _manualFolders.removeWhere(_archivedFolders.contains);
+    final changedManual = beforeManual.length != _manualFolders.length ||
+        !_manualFolders.every(beforeManual.contains);
+    _archivedFoldersUpdatedAtMs = updatedAtMs;
+    await _prefs?.setStringList('archived_folders', _archivedFolders);
+    await _prefs?.setStringList('manual_folders', _manualFolders);
+    await _prefs?.setInt(
+      'archived_folders_updated_at_ms',
+      _archivedFoldersUpdatedAtMs,
+    );
+    if (changedManual) {
+      _manualFoldersUpdatedAtMs = updatedAtMs;
+      await _prefs?.setInt(
+        'manual_folders_updated_at_ms',
+        _manualFoldersUpdatedAtMs,
+      );
+    }
   }
 
   Future<void> setDeletedProjectsFromSync(
@@ -408,6 +577,8 @@ class SettingsService {
     _projectExportNames = {};
     _manualFolders = [];
     _manualFoldersUpdatedAtMs = 0;
+    _archivedFolders = [];
+    _archivedFoldersUpdatedAtMs = 0;
     _deletedProjects = {};
     _deletedProjectsUpdatedAtMs = 0;
     _updatedAtMs = 0;
@@ -419,6 +590,8 @@ class SettingsService {
     await prefs.remove('stt_glossary_by_folder');
     await prefs.remove('manual_folders');
     await prefs.remove('manual_folders_updated_at_ms');
+    await prefs.remove('archived_folders');
+    await prefs.remove('archived_folders_updated_at_ms');
     await prefs.remove('project_export_dirs');
     await prefs.remove('project_export_names');
     await prefs.remove('deleted_projects');
@@ -430,7 +603,11 @@ class SettingsService {
     await init();
     _manualFolders = [];
     _manualFoldersUpdatedAtMs = 0;
+    _archivedFolders = [];
+    _archivedFoldersUpdatedAtMs = 0;
     await _prefs?.remove('manual_folders');
     await _prefs?.remove('manual_folders_updated_at_ms');
+    await _prefs?.remove('archived_folders');
+    await _prefs?.remove('archived_folders_updated_at_ms');
   }
 }

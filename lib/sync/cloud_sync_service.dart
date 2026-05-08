@@ -649,6 +649,10 @@ class CloudSyncService {
           remote['manual_folders_updated_at_ms'] as int? ?? remoteUpdated;
       final localFoldersUpdated =
           local['manual_folders_updated_at_ms'] as int? ?? localUpdated;
+      final remoteArchivedFoldersUpdated =
+          remote['archived_folders_updated_at_ms'] as int? ?? remoteUpdated;
+      final localArchivedFoldersUpdated =
+          local['archived_folders_updated_at_ms'] as int? ?? localUpdated;
       final remoteDeletedUpdated =
           remote['deleted_projects_updated_at_ms'] as int? ?? remoteUpdated;
       final localDeletedUpdated =
@@ -658,6 +662,12 @@ class CloudSyncService {
           const <String>[];
       final localFolders =
           (local['manual_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+      final remoteArchivedFolders =
+          (remote['archived_folders'] as List?)?.cast<String>() ??
+          const <String>[];
+      final localArchivedFolders =
+          (local['archived_folders'] as List?)?.cast<String>() ??
           const <String>[];
       final remoteDeletedRaw =
           (remote['deleted_projects'] as Map?)?.cast<String, dynamic>() ??
@@ -676,11 +686,14 @@ class CloudSyncService {
 
       final useRemoteGeneral = remoteUpdated > localUpdated;
       final useRemoteFolders = remoteFoldersUpdated > localFoldersUpdated;
+      final useRemoteArchivedFolders =
+          remoteArchivedFoldersUpdated > localArchivedFoldersUpdated;
 
       if (useRemoteGeneral) {
         final applied = await settings.importSyncPayload(
           remote,
           includeManualFolders: useRemoteFolders,
+          includeArchivedFolders: useRemoteArchivedFolders,
           includeDeletedProjects: false,
         );
         if (applied) {
@@ -692,6 +705,14 @@ class CloudSyncService {
           remoteFoldersUpdated,
         );
         onProgress?.call(0.05, 'Folders synced');
+      }
+
+      if (!useRemoteGeneral && useRemoteArchivedFolders) {
+        await settings.setArchivedFoldersFromSync(
+          remoteArchivedFolders,
+          remoteArchivedFoldersUpdated,
+        );
+        onProgress?.call(0.05, 'Archived folders synced');
       }
 
       final mergedDeleted = <String, int>{};
@@ -721,6 +742,7 @@ class CloudSyncService {
           _lastSettingsPayloadPath == _legacySettingsStoragePath ||
           remoteUpdated < localUpdated ||
           remoteFoldersUpdated < localFoldersUpdated ||
+          remoteArchivedFoldersUpdated < localArchivedFoldersUpdated ||
           !_sameDeletedMap(mergedDeleted, remoteDeleted);
       if (shouldUpload) {
         final merged = settings.exportSyncPayload();
@@ -733,6 +755,15 @@ class CloudSyncService {
         } else {
           merged['manual_folders'] = localFolders;
           merged['manual_folders_updated_at_ms'] = localFoldersUpdated;
+        }
+        if (useRemoteArchivedFolders) {
+          merged['archived_folders'] = remoteArchivedFolders;
+          merged['archived_folders_updated_at_ms'] =
+              remoteArchivedFoldersUpdated;
+        } else {
+          merged['archived_folders'] = localArchivedFolders;
+          merged['archived_folders_updated_at_ms'] =
+              localArchivedFoldersUpdated;
         }
         merged['deleted_projects'] = mergedDeleted;
         merged['deleted_projects_updated_at_ms'] = mergedDeletedUpdated;
@@ -821,7 +852,18 @@ class CloudSyncService {
           continue;
         }
         if (engine == 'video' && _looksLikeUrl(remotePath)) {
-          m['ass_path'] = remotePath; // streaming, no se descarga
+          final localVideo = await materializeRemoteVideo(
+            projectId,
+            remotePath,
+            onProgress: (v) =>
+                onProgress?.call(0.1 + v * 0.6, 'Downloading video'),
+          );
+          if (localVideo != null) {
+            m['ass_path'] = localVideo;
+            debugPrint('[cloud] materialized video for $projectId: $localVideo');
+          } else {
+            m['ass_path'] = remotePath; // fallback a streaming
+          }
           await _upsertFileLocal(m);
           continue;
         }
@@ -1390,6 +1432,23 @@ class CloudSyncService {
       debugPrint('download error ($engine): $e');
       return null;
     }
+  }
+
+  Future<String?> materializeRemoteVideo(
+    String projectId,
+    String remoteUrl, {
+    void Function(double value)? onProgress,
+  }) async {
+    if (remoteUrl.isEmpty || !_looksLikeUrl(remoteUrl) || kIsWeb) {
+      return null;
+    }
+    await _ensureR2EnvLoaded();
+    return _materializeFile(
+      projectId,
+      'video',
+      remoteUrl,
+      onProgress: onProgress,
+    );
   }
 
   Future<Directory> _projectDir(String projectId) async {

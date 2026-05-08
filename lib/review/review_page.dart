@@ -337,6 +337,43 @@ class _ReviewPageState extends State<ReviewPage> {
         }
       }
 
+      if (isRemote && !kIsWeb) {
+        final cachedPath = await _cloud.materializeRemoteVideo(
+          project.projectId,
+          resolved,
+        );
+        if (cachedPath != null && cachedPath.isNotEmpty) {
+          final cachedFile = File(cachedPath);
+          if (await cachedFile.exists()) {
+            for (final viewType in _videoViewTypesForCurrentPlatform()) {
+              final ctrl = VideoPlayerController.file(
+                cachedFile,
+                viewType: viewType,
+              );
+              try {
+                await ctrl.initialize();
+                await ctrl.setVolume(1.0);
+                _videoController = ctrl;
+                _videoPath = cachedPath;
+                if (!initCompleter.isCompleted) {
+                  initCompleter.complete();
+                }
+                if (mounted) {
+                  setState(() {});
+                }
+                return;
+              } catch (err) {
+                lastError = err;
+                debugPrint(
+                  'Error al inicializar video cacheado (${viewType.name}) para $cachedPath: $err',
+                );
+                await ctrl.dispose();
+              }
+            }
+          }
+        }
+      }
+
       throw lastError ?? StateError('Could not initialize the video.');
     } catch (e, st) {
       debugPrint('Error al preparar video: $e');

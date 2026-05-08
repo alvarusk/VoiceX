@@ -36,7 +36,9 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _sttModelCtrl;
   final Map<String, TextEditingController> _glossaryCtrls = {};
   List<String> _folders = const [];
+  Set<String> _archivedFolders = const {};
   String _selectedFolder = '';
+  bool _folderRefreshQueued = false;
 
   VoiceInputMode _mode = VoiceInputMode.local;
   bool _saved = false;
@@ -74,13 +76,14 @@ class _SettingsPageState extends State<SettingsPage> {
     final rows = await widget.db
         .customSelect('SELECT DISTINCT folder FROM projects')
         .get();
-    final set = <String>{..._svc.manualFolders};
+    final set = <String>{..._svc.manualFolders, ..._svc.archivedFolders};
     for (final r in rows) {
       set.add(r.data['folder'] as String? ?? '');
     }
     if (set.isEmpty || !set.contains('')) set.add('');
     final list = set.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final archived = _svc.archivedFolders.toSet();
     _glossaryCtrls.clear();
     for (final f in list) {
       final c = TextEditingController(text: _svc.getGlossaryForFolder(f));
@@ -89,6 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     setState(() {
       _folders = list;
+      _archivedFolders = archived;
       _selectedFolder = list.first;
       _dirty = false;
       _saved = false;
@@ -158,6 +162,31 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _unarchiveFolder(String folder) async {
+    await _svc.unarchiveFolder(folder);
+    await _cloud.ensureInit();
+    if (_cloud.isReady) {
+      await _cloud.syncSettingsOnly();
+    }
+    if (!mounted) return;
+    await _loadFolders();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Folder "$folder" restored.')),
+    );
+  }
+
+  void _syncFolderStateIfNeeded() {
+    if (_dirty || _folderRefreshQueued) return;
+    final serviceArchived = _svc.archivedFolders.toSet();
+    if (setEquals(serviceArchived, _archivedFolders)) return;
+    _folderRefreshQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _folderRefreshQueued = false;
+      if (!mounted || _dirty) return;
+      await _loadFolders();
+    });
+  }
+
   void _markDirty() {
     if (_dirty || _suspendDirty) return;
     setState(() {
@@ -220,6 +249,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final disabledOpenAiMode =
         kIsWeb; // MVP: grabación a archivo en web es más delicada
 
+    _syncFolderStateIfNeeded();
     return WillPopScope(
       onWillPop: _confirmExit,
       child: Scaffold(
@@ -328,7 +358,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     .map(
                       (f) => DropdownMenuItem(
                         value: f,
-                        child: Text(f.trim().isEmpty ? 'No folder' : f),
+                        child: Text(
+                          f.trim().isEmpty
+                              ? 'No folder'
+                              : _archivedFolders.contains(f)
+                              ? '$f (archived)'
+                              : f,
+                        ),
                       ),
                     )
                     .toList(),
@@ -362,6 +398,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ],
               ),
+              if (_archivedFolders.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Archived folders',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _archivedFolders
+                      .map(
+                        (folder) => InputChip(
+                          label: Text(folder),
+                          avatar: const Icon(Icons.archive_outlined, size: 18),
+                          onPressed: () => _unarchiveFolder(folder),
+                          onDeleted: () => _unarchiveFolder(folder),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
             ],
             const SizedBox(height: 16),
             const Text(
