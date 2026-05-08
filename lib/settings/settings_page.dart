@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../db/app_db.dart';
 import '../sync/cloud_sync_service.dart';
@@ -163,6 +162,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _unarchiveFolder(String folder) async {
+    final messenger = ScaffoldMessenger.of(context);
     await _svc.unarchiveFolder(folder);
     await _cloud.ensureInit();
     if (_cloud.isReady) {
@@ -170,9 +170,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (!mounted) return;
     await _loadFolders();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Folder "$folder" restored.')),
-    );
+    messenger.showSnackBar(SnackBar(content: Text('Folder "$folder" restored.')));
   }
 
   void _syncFolderStateIfNeeded() {
@@ -232,16 +230,6 @@ class _SettingsPageState extends State<SettingsPage> {
       return true;
     }
     return res != 'cancel';
-  }
-
-  Future<void> _launchUpdater() async {
-    final uri = Uri.parse('https://github.com/alvarusk/VoiceX/releases/latest');
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the update link.')),
-      );
-    }
   }
 
   @override
@@ -454,8 +442,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            const _VoiceCommandsBox(),
-            const SizedBox(height: 16),
             const Text(
               'Video sync across devices (R2)',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
@@ -487,26 +473,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 16),
-            if (Platform.isWindows) ...[
-              const Text(
-                'Updates',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: _launchUpdater,
-                icon: const Icon(Icons.system_update),
-                label: const Text('Update (Windows)'),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Opens the latest version in GitHub Releases and downloads the MSIX.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
             FilledButton.icon(
               onPressed: _save,
               icon: const Icon(Icons.save),

@@ -712,6 +712,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                         ),
                                       );
                                       if (ok == true) {
+                                        final messenger =
+                                            ScaffoldMessenger.of(context);
                                         await _settings.archiveFolder(folder);
                                         setState(() {
                                           _manualFolders.remove(folder);
@@ -725,8 +727,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                           await _cloud.syncSettingsOnly();
                                         }
                                         if (mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
+                                          messenger.showSnackBar(
                                             SnackBar(
                                               content: Text(
                                                 'Folder "$folder" archived.',
