@@ -690,6 +690,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                         }
                                       }
                                     } else if (v == 'archive') {
+                                      final messenger =
+                                          ScaffoldMessenger.of(context);
                                       final ok = await showDialog<bool>(
                                         context: context,
                                         builder: (_) => AlertDialog(
@@ -712,8 +714,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
                                         ),
                                       );
                                       if (ok == true) {
-                                        final messenger =
-                                            ScaffoldMessenger.of(context);
                                         await _settings.archiveFolder(folder);
                                         setState(() {
                                           _manualFolders.remove(folder);

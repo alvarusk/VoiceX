@@ -493,6 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
+// ignore: unused_element
 class _VoiceCommandsBox extends StatelessWidget {
   const _VoiceCommandsBox();
 
