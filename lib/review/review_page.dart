@@ -2114,16 +2114,13 @@ class _LineCard extends StatelessWidget {
     final displayRomanization = (line.romanization ?? '').trim().isNotEmpty
         ? line.romanization!.trim()
         : (romajiTag ?? '');
-    final sourceFirst = (line.sourceText ?? '')
-        .split('\n')
-        .first
-        .split('{')
-        .first
-        .trim();
-    final romanFirst = displayRomanization.split('\n').first.trim();
+    final sourceDialogue = _textBeforeFirstBraceGroup(
+      line.sourceText ?? line.originalText,
+    );
+    final romanDialogue = displayRomanization.trim();
     final originCombined = [
-      if (sourceFirst.isNotEmpty) sourceFirst,
-      if (romanFirst.isNotEmpty) romanFirst,
+      if (sourceDialogue.isNotEmpty) sourceDialogue,
+      if (romanDialogue.isNotEmpty) romanDialogue,
     ].join('\n');
 
     return Padding(
@@ -2254,6 +2251,16 @@ class _LineCard extends StatelessWidget {
     if (end <= start) return null;
     final content = text.substring(start + 1, end).trim();
     return content.isEmpty ? null : content;
+  }
+
+  static String _textBeforeFirstBraceGroup(String? text) {
+    if (text == null || text.isEmpty) return '';
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final firstBrace = normalized.indexOf('{');
+    final visible = firstBrace >= 0
+        ? normalized.substring(0, firstBrace)
+        : normalized;
+    return visible.trim();
   }
 
   static Color? _cpsColor(double cps) {
