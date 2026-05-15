@@ -74,6 +74,7 @@ class ExportService {
     final byEventRow = {for (final l in lines) l.eventsRowIndex: l};
     final useDialogueIndexFallback =
         _countDialogueLines(baseLines) == lines.length;
+    var needsGenItalicsStyle = false;
 
     int dialogueCursor = 0;
     for (int row = firstDialogue; row < baseLines.length; row++) {
@@ -100,11 +101,21 @@ class ExportService {
 
       if (raw.contains(r'\p')) continue;
 
+      final normalizedText = _normalizeSelectedText(selected);
+      final exportStyle = _styleForExport(match.style, normalizedText);
+      if (exportStyle == 'Gen_Italics') {
+        needsGenItalicsStyle = true;
+      }
       baseLines[row] = _replaceTextPreservingTags(
         raw,
-        _normalizeToAssText(selected),
+        normalizedText,
         forcedPrefix: match.dialoguePrefix,
+        forcedStyle: exportStyle,
       );
+    }
+
+    if (needsGenItalicsStyle) {
+      _ensureGenItalicsStyle(baseLines);
     }
 
     final outDir = await _resolveOutputDirectory(preferredDir);
@@ -198,35 +209,92 @@ class ExportService {
     String dialogueLine,
     String newText, {
     String? forcedPrefix,
+    String? forcedStyle,
   }) {
-    final parts = <String>[];
-    int commas = 0;
-    int last = 0;
-    for (int i = 0; i < dialogueLine.length; i++) {
-      if (dialogueLine[i] == ',' && commas < 9) {
-        parts.add(dialogueLine.substring(last, i));
-        last = i + 1;
-        commas++;
-      }
-    }
-    parts.add(dialogueLine.substring(last));
+    final rawParts = _splitAssFields(dialogueLine);
+    if (rawParts.length < 10) return dialogueLine;
 
-    if (parts.length < 10) return dialogueLine;
-
-    final originalText = parts[9];
+    final originalText = rawParts[9];
     final tagPrefix = RegExp(r'^(\{[^}]*\})+').stringMatch(originalText) ?? '';
 
     if (forcedPrefix != null && forcedPrefix.isNotEmpty) {
-      // forcedPrefix ya incluye la coma final antes del texto.
-      return '$forcedPrefix$tagPrefix$newText';
+      final parts = _splitAssFields(forcedPrefix);
+      if (parts.length < 10) return dialogueLine;
+      if (forcedStyle != null && forcedStyle.trim().isNotEmpty) {
+        parts[3] = forcedStyle.trim();
+      }
+      parts[9] = '$tagPrefix$newText';
+      return parts.join(',');
     }
 
+    final parts = rawParts.toList();
+    if (forcedStyle != null && forcedStyle.trim().isNotEmpty) {
+      parts[3] = forcedStyle.trim();
+    }
     parts[9] = '$tagPrefix$newText';
     return parts.join(',');
   }
 
-  String _normalizeToAssText(String s) {
-    return s.replaceAll('\r\n', '\n').replaceAll('\n', r'\N');
+  List<String> _splitAssFields(String line) {
+    final parts = <String>[];
+    int commas = 0;
+    int last = 0;
+    for (int i = 0; i < line.length; i++) {
+      if (line[i] == ',' && commas < 9) {
+        parts.add(line.substring(last, i));
+        last = i + 1;
+        commas++;
+      }
+    }
+    parts.add(line.substring(last));
+    return parts;
+  }
+
+  String _normalizeSelectedText(String s) {
+    return s
+        .replaceAll(RegExp(r'\.{3}'), '\u2026')
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\n', r'\N');
+  }
+
+  String _styleForExport(String? currentStyle, String text) {
+    if (text.contains('(')) {
+      return 'Gen_Italics';
+    }
+    final trimmed = currentStyle?.trim();
+    return trimmed == null || trimmed.isEmpty ? 'Default' : trimmed;
+  }
+
+  bool _hasStyle(List<String> baseLines, String styleName) {
+    final needle = 'Style: $styleName,';
+    for (final raw in baseLines) {
+      if (raw.trimLeft().toLowerCase().startsWith(needle.toLowerCase())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _ensureGenItalicsStyle(List<String> baseLines) {
+    if (_hasStyle(baseLines, 'Gen_Italics')) return;
+
+    const styleLine =
+        'Style: Gen_Italics,Arial,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H64000000,0,1,0,0,100,100,0,0,1,3,0,2,40,40,40,1';
+
+    final eventsStart = baseLines.indexWhere(
+      (l) => l.trim().toLowerCase() == '[events]',
+    );
+    if (eventsStart > 0) {
+      baseLines.insert(eventsStart, styleLine);
+      return;
+    }
+
+    baseLines.add('');
+    baseLines.add('[V4+ Styles]');
+    baseLines.add(
+      'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+    );
+    baseLines.add(styleLine);
   }
 
   String _buildMinimalAss(List<SubtitleLine> lines) {
@@ -244,6 +312,9 @@ class ExportService {
     buf.writeln(
       'Style: Default,Arial,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,3,0,2,40,40,40,1',
     );
+    buf.writeln(
+      'Style: Gen_Italics,Arial,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H64000000,0,1,0,0,100,100,0,0,1,3,0,2,40,40,40,1',
+    );
     buf.writeln('');
     buf.writeln('[Events]');
     buf.writeln(
@@ -255,8 +326,10 @@ class ExportService {
       final start = _assTime(l.startMs);
       final end = _assTime(l.endMs);
       final prefix = (l.doubt == true) ? 'Comment' : 'Dialogue';
+      final normalizedText = _normalizeSelectedText(t);
+      final style = _styleForExport(l.style, normalizedText);
       buf.writeln(
-        '$prefix: 0,$start,$end,${l.style ?? "Default"},${l.name ?? ""},0,0,0,${l.effect ?? ""},${_normalizeToAssText(t)}',
+        '$prefix: 0,$start,$end,$style,${l.name ?? ""},0,0,0,${l.effect ?? ""},$normalizedText',
       );
     }
     return buf.toString();

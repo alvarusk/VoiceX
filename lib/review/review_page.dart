@@ -2237,7 +2237,7 @@ class _LineCard extends StatelessWidget {
   }
 
   static double _calcCps(SubtitleLine l, String text) {
-    final clean = text.trim();
+    final clean = text.trim().replaceAll('\r', '').replaceAll('\n', '');
     if (clean.isEmpty) return 0;
     final durationSec = math.max(0.01, (l.endMs - l.startMs) / 1000);
     return clean.length / durationSec;
@@ -2698,8 +2698,12 @@ class _EditDialogState extends State<_EditDialog> {
     if (mounted) setState(() {});
   }
 
+  int _visibleCharCount(String value) {
+    return value.replaceAll('\r', '').replaceAll('\n', '').length;
+  }
+
   List<int> get _lineCharacterCounts =>
-      _controller.text.split('\n').map((line) => line.length).toList();
+      _controller.text.split('\n').map(_visibleCharCount).toList();
 
   double get _cps => _LineCard._calcCps(widget.line, _controller.text);
 

@@ -38,7 +38,18 @@ class ExportService {
   }
 
   String _normalizeToAssText(String s) {
-    return s.replaceAll('\r\n', '\n').replaceAll('\n', r'\N');
+    return s
+        .replaceAll(RegExp(r'\.{3}'), '\u2026')
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\n', r'\N');
+  }
+
+  String _styleForExport(String? currentStyle, String text) {
+    if (text.contains('(')) {
+      return 'Gen_Italics';
+    }
+    final trimmed = currentStyle?.trim();
+    return trimmed == null || trimmed.isEmpty ? 'Default' : trimmed;
   }
 
   String _buildMinimalAss(List<SubtitleLine> lines) {
@@ -56,6 +67,9 @@ class ExportService {
     buf.writeln(
       'Style: Default,Arial,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,3,0,2,40,40,40,1',
     );
+    buf.writeln(
+      'Style: Gen_Italics,Arial,48,&H00FFFFFF,&H0000FFFF,&H00000000,&H64000000,0,1,0,0,100,100,0,0,1,3,0,2,40,40,40,1',
+    );
     buf.writeln('');
     buf.writeln('[Events]');
     buf.writeln(
@@ -66,8 +80,10 @@ class ExportService {
       if (t.isEmpty) continue;
       final start = _assTime(l.startMs);
       final end = _assTime(l.endMs);
+      final normalizedText = _normalizeToAssText(t);
+      final style = _styleForExport(l.style, normalizedText);
       buf.writeln(
-        'Dialogue: 0,$start,$end,${l.style ?? "Default"},${l.name ?? ""},0,0,0,${l.effect ?? ""},${_normalizeToAssText(t)}',
+        'Dialogue: 0,$start,$end,$style,${l.name ?? ""},0,0,0,${l.effect ?? ""},$normalizedText',
       );
     }
     return buf.toString();
