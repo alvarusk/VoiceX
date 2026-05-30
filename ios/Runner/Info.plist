@@ -28,6 +28,8 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>VoiceX only uses the camera when you choose to capture or attach media for a project.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>I need microphone access to dictate translations.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
