@@ -2391,7 +2391,7 @@ class _LineJumpCounterState extends State<_LineJumpCounter> {
     final theme = Theme.of(context);
     final total = widget.total > 0 ? widget.total.toString() : '--';
     return Tooltip(
-      message: 'Type a number and press Enter to jump to that line.',
+      message: 'Type a number and confirm to jump to that line.',
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest.withAlpha(
@@ -2416,9 +2416,10 @@ class _LineJumpCounterState extends State<_LineJumpCounter> {
                   focusNode: _focusNode,
                   textAlign: TextAlign.right,
                   keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.go,
+                  textInputAction: TextInputAction.done,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   onSubmitted: (_) => _submit(),
+                  onTapOutside: (_) => _focusNode.unfocus(),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                   decoration: const InputDecoration(
                     isDense: true,
@@ -2426,6 +2427,15 @@ class _LineJumpCounterState extends State<_LineJumpCounter> {
                     contentPadding: EdgeInsets.zero,
                   ),
                 ),
+              ),
+              IconButton(
+                tooltip: 'Jump to line',
+                iconSize: 18,
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                onPressed: widget.total <= 0 ? null : _submit,
+                icon: const Icon(Icons.check),
               ),
               const SizedBox(width: 2),
               Text(
