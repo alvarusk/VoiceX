@@ -90,6 +90,7 @@ grant select, insert, update, delete on table public.subtitle_lines to authentic
 grant select, insert, update, delete on table public.selection_events to authenticated;
 
 drop policy if exists "projects_select_own" on public.projects;
+drop policy if exists "projects_select_owner" on public.projects;
 create policy "projects_select_own"
 on public.projects
 for select
@@ -97,6 +98,7 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "projects_insert_own" on public.projects;
+drop policy if exists "projects_insert_owner" on public.projects;
 create policy "projects_insert_own"
 on public.projects
 for insert
@@ -104,6 +106,7 @@ to authenticated
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "projects_update_own" on public.projects;
+drop policy if exists "projects_update_owner" on public.projects;
 create policy "projects_update_own"
 on public.projects
 for update
@@ -112,6 +115,7 @@ using ((select auth.uid()) = owner_user_id)
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "projects_delete_own" on public.projects;
+drop policy if exists "projects_delete_owner" on public.projects;
 create policy "projects_delete_own"
 on public.projects
 for delete
@@ -119,6 +123,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "project_files_select_own" on public.project_files;
+drop policy if exists "project_files_select_owner" on public.project_files;
+drop policy if exists "project_files_select_on_owner" on public.project_files;
 create policy "project_files_select_own"
 on public.project_files
 for select
@@ -126,6 +132,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "project_files_insert_own" on public.project_files;
+drop policy if exists "project_files_insert_owner" on public.project_files;
+drop policy if exists "project_files_insert_on_owner" on public.project_files;
 create policy "project_files_insert_own"
 on public.project_files
 for insert
@@ -133,6 +141,8 @@ to authenticated
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "project_files_update_own" on public.project_files;
+drop policy if exists "project_files_update_owner" on public.project_files;
+drop policy if exists "project_files_update_on_owner" on public.project_files;
 create policy "project_files_update_own"
 on public.project_files
 for update
@@ -141,6 +151,8 @@ using ((select auth.uid()) = owner_user_id)
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "project_files_delete_own" on public.project_files;
+drop policy if exists "project_files_delete_owner" on public.project_files;
+drop policy if exists "project_files_delete_on_owner" on public.project_files;
 create policy "project_files_delete_own"
 on public.project_files
 for delete
@@ -148,6 +160,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "subtitle_lines_select_own" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_select_owner" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_select_on_owner" on public.subtitle_lines;
 create policy "subtitle_lines_select_own"
 on public.subtitle_lines
 for select
@@ -155,6 +169,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "subtitle_lines_insert_own" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_insert_owner" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_insert_on_owner" on public.subtitle_lines;
 create policy "subtitle_lines_insert_own"
 on public.subtitle_lines
 for insert
@@ -162,6 +178,8 @@ to authenticated
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "subtitle_lines_update_own" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_update_owner" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_update_on_owner" on public.subtitle_lines;
 create policy "subtitle_lines_update_own"
 on public.subtitle_lines
 for update
@@ -170,6 +188,8 @@ using ((select auth.uid()) = owner_user_id)
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "subtitle_lines_delete_own" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_delete_owner" on public.subtitle_lines;
+drop policy if exists "subtitle_lines_delete_on_owner" on public.subtitle_lines;
 create policy "subtitle_lines_delete_own"
 on public.subtitle_lines
 for delete
@@ -177,6 +197,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "selection_events_select_own" on public.selection_events;
+drop policy if exists "selection_events_select_owner" on public.selection_events;
+drop policy if exists "selection_events_select_on_owner" on public.selection_events;
 create policy "selection_events_select_own"
 on public.selection_events
 for select
@@ -184,6 +206,8 @@ to authenticated
 using ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "selection_events_insert_own" on public.selection_events;
+drop policy if exists "selection_events_insert_owner" on public.selection_events;
+drop policy if exists "selection_events_insert_on_owner" on public.selection_events;
 create policy "selection_events_insert_own"
 on public.selection_events
 for insert
@@ -191,6 +215,8 @@ to authenticated
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "selection_events_update_own" on public.selection_events;
+drop policy if exists "selection_events_update_owner" on public.selection_events;
+drop policy if exists "selection_events_update_on_owner" on public.selection_events;
 create policy "selection_events_update_own"
 on public.selection_events
 for update
@@ -199,6 +225,8 @@ using ((select auth.uid()) = owner_user_id)
 with check ((select auth.uid()) = owner_user_id);
 
 drop policy if exists "selection_events_delete_own" on public.selection_events;
+drop policy if exists "selection_events_delete_owner" on public.selection_events;
+drop policy if exists "selection_events_delete_on_owner" on public.selection_events;
 create policy "selection_events_delete_own"
 on public.selection_events
 for delete
@@ -209,7 +237,13 @@ using ((select auth.uid()) = owner_user_id);
 -- Uploads use upsert(), so select + update are required in addition to insert.
 grant select, insert, update, delete on table storage.objects to authenticated;
 
+drop policy if exists "voicex authenticated insert" on storage.objects;
+drop policy if exists "voicex authenticated upload" on storage.objects;
+drop policy if exists "voicex insert own" on storage.objects;
+drop policy if exists "voicex write" on storage.objects;
 drop policy if exists "voicex_objects_select_own" on storage.objects;
+drop policy if exists "voicex read" on storage.objects;
+drop policy if exists "voicex read own" on storage.objects;
 create policy "voicex_objects_select_own"
 on storage.objects
 for select
@@ -217,6 +251,7 @@ to authenticated
 using (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
 
 drop policy if exists "voicex_objects_insert_bucket" on storage.objects;
+drop policy if exists "voicex authenticated upload (owned)" on storage.objects;
 create policy "voicex_objects_insert_bucket"
 on storage.objects
 for insert
@@ -224,6 +259,8 @@ to authenticated
 with check (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
 
 drop policy if exists "voicex_objects_update_own" on storage.objects;
+drop policy if exists "voicex update" on storage.objects;
+drop policy if exists "voicex update own" on storage.objects;
 create policy "voicex_objects_update_own"
 on storage.objects
 for update
@@ -232,6 +269,8 @@ using (bucket_id = 'voicex' and owner_id = (select auth.uid()::text))
 with check (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
 
 drop policy if exists "voicex_objects_delete_own" on storage.objects;
+drop policy if exists "voicex delete" on storage.objects;
+drop policy if exists "voicex delete own" on storage.objects;
 create policy "voicex_objects_delete_own"
 on storage.objects
 for delete

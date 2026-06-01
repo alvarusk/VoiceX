@@ -77,6 +77,61 @@ class CloudSyncService {
   String? get _ownerUserId => _supabase.userId;
   bool get _hasOwnerScope => _ownerUserId?.trim().isNotEmpty == true;
 
+  void _logPostgrestException(
+    String action,
+    PostgrestException error, {
+    String? debugContext,
+    StackTrace? stackTrace,
+  }) {
+    final prefix = debugContext == null || debugContext.trim().isEmpty
+        ? ''
+        : '[$debugContext] ';
+    debugPrint(
+      '$prefix$action failed | '
+      'code=${error.code ?? '-'} | '
+      'message=${error.message} | '
+      'details=${error.details ?? '-'} | '
+      'hint=${error.hint ?? '-'}',
+    );
+    if (stackTrace != null) {
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  void _logStorageException(
+    String action,
+    StorageException error, {
+    String? debugContext,
+    StackTrace? stackTrace,
+  }) {
+    final prefix = debugContext == null || debugContext.trim().isEmpty
+        ? ''
+        : '[$debugContext] ';
+    debugPrint(
+      '$prefix$action failed | '
+      'status=${error.statusCode ?? '-'} | '
+      'message=${error.message}',
+    );
+    if (stackTrace != null) {
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  void _logGenericException(
+    String action,
+    Object error, {
+    String? debugContext,
+    StackTrace? stackTrace,
+  }) {
+    final prefix = debugContext == null || debugContext.trim().isEmpty
+        ? ''
+        : '[$debugContext] ';
+    debugPrint('$prefix$action failed | error=$error');
+    if (stackTrace != null) {
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
   dynamic _scopeProjectQuery(dynamic query) {
     final ownerId = _ownerUserId?.trim() ?? '';
     if (_supportsOwnerColumnProjects && ownerId.isNotEmpty) {
@@ -228,10 +283,10 @@ class CloudSyncService {
           );
         } catch (_) {}
       }
-      debugPrint('listRemoteProjects error: $e');
+      _logPostgrestException('listRemoteProjects', e);
       return [];
     } catch (e) {
-      debugPrint('listRemoteProjects error: $e');
+      _logGenericException('listRemoteProjects', e);
       try {
         return await selectRemote(withFolder: false, withArchived: false);
       } catch (_) {}
@@ -259,11 +314,11 @@ class CloudSyncService {
         _supportsOwnerColumnProjects = false;
         return await listRemoteArchivedProjectIds();
       } else {
-        debugPrint('listRemoteArchivedProjectIds error: $e');
+        _logPostgrestException('listRemoteArchivedProjectIds', e);
       }
       return const <String>{};
     } catch (e) {
-      debugPrint('listRemoteArchivedProjectIds error: $e');
+      _logGenericException('listRemoteArchivedProjectIds', e);
       return const <String>{};
     }
   }
@@ -299,7 +354,7 @@ class CloudSyncService {
       await filesDelete;
       await projectDelete;
     } catch (e) {
-      debugPrint('deleteRemoteProject error: $e');
+      _logGenericException('deleteRemoteProject', e);
     }
   }
 
@@ -559,7 +614,11 @@ class CloudSyncService {
       try {
         await _client.from('projects').upsert(projectMap);
       } on PostgrestException catch (e) {
-        debugPrint('upsert projects error: $e');
+        _logPostgrestException(
+          'upsert projects',
+          e,
+          debugContext: 'pushProject.projects',
+        );
         final missingFolder =
             _supportsFolderColumn && _isMissingColumn(e, 'folder');
         final missingArchived =
@@ -606,6 +665,11 @@ class CloudSyncService {
                 .from('project_files')
                 .upsert(mapped, onConflict: 'project_id,engine');
           } on PostgrestException catch (e) {
+            _logPostgrestException(
+              'upsert project_files',
+              e,
+              debugContext: 'pushProject.project_files',
+            );
             if (_supportsOwnerColumnFiles &&
                 _isMissingColumn(e, 'owner_user_id')) {
               _supportsOwnerColumnFiles = false;
@@ -1515,7 +1579,11 @@ class CloudSyncService {
         client.close();
       }
     } catch (e) {
-      debugPrint('download error ($engine): $e');
+      _logGenericException(
+        'download error ($engine)',
+        e,
+        debugContext: '_materializeFile($projectId)',
+      );
       return null;
     }
   }
@@ -1664,7 +1732,11 @@ class CloudSyncService {
             ),
           );
     } catch (e) {
-      debugPrint('upload project meta error: $e');
+      _logGenericException(
+        'upload project meta',
+        e,
+        debugContext: 'pushProject.meta',
+      );
     }
   }
 
@@ -1725,6 +1797,7 @@ class CloudSyncService {
     if (error is StorageException) {
       final status = error.statusCode?.toString() ?? '';
       final msg = (error.message).toLowerCase();
+      _logStorageException(action, error, debugContext: debugContext);
       if (status == '401' || status == '403' || msg.contains('jwt')) {
         return CloudSyncException(
           code: 'storage_auth_error',
@@ -1755,6 +1828,7 @@ class CloudSyncService {
     if (error is PostgrestException) {
       final code = error.code;
       final msg = error.message.toLowerCase();
+      _logPostgrestException(action, error, debugContext: debugContext);
       if (_looksAuthError(code, msg)) {
         return CloudSyncException(
           code: 'supabase_auth_error',
@@ -1782,6 +1856,7 @@ class CloudSyncService {
       );
     }
 
+    _logGenericException(action, error, debugContext: debugContext);
     return CloudSyncException(
       code: 'unknown_cloud_error',
       userMessage: 'Could not $action. Unexpected error.',

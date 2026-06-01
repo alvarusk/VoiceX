@@ -1632,7 +1632,10 @@ If in doubt, prefer these spellings as-is.
         );
       }
     } on CloudSyncException catch (e) {
-      debugPrint('save cloud error [${e.code}]: ${e.debugMessage ?? e}');
+      debugPrint(
+        'save cloud error [${e.code}]: ${e.userMessage} | '
+        'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
+      );
       if (mounted) {
         ScaffoldMessenger.of(
           context,

@@ -127,7 +127,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
         _showSnack('Initial sync complete.');
       }
     } on CloudSyncException catch (e) {
-      debugPrint('autoSync cloud error [${e.code}]: ${e.debugMessage ?? e}');
+      debugPrint(
+        'autoSync cloud error [${e.code}]: ${e.userMessage} | '
+        'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
+      );
       if (mounted) _showSnack(e.userMessage);
     } on TimeoutException {
       // El mensaje ya se muestra en _runWithProgress.
@@ -464,7 +467,10 @@ class _ProjectsPageState extends State<ProjectsPage> {
     } on CloudSyncException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
-      debugPrint('sync button cloud error [${e.code}]: ${e.debugMessage ?? e}');
+      debugPrint(
+        'sync button cloud error [${e.code}]: ${e.userMessage} | '
+        'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
+      );
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -917,7 +923,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
               } on CloudSyncException catch (e) {
                 messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
                 debugPrint(
-                  'sync_up cloud error [${e.code}]: ${e.debugMessage ?? e}',
+                  'sync_up cloud error [${e.code}]: ${e.userMessage} | '
+                  'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
                 );
               } catch (e) {
                 messenger.showSnackBar(
@@ -959,7 +966,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
               } on CloudSyncException catch (e) {
                 messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
                 debugPrint(
-                  'sync_down cloud error [${e.code}]: ${e.debugMessage ?? e}',
+                  'sync_down cloud error [${e.code}]: ${e.userMessage} | '
+                  'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
                 );
               } catch (e) {
                 messenger.showSnackBar(
@@ -1025,7 +1033,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       SnackBar(content: Text(e.userMessage)),
                     );
                     debugPrint(
-                      'archive cloud error [${e.code}]: ${e.debugMessage ?? e}',
+                      'archive cloud error [${e.code}]: ${e.userMessage} | '
+                      'debug=${e.debugMessage ?? '-'} | cause=${e.cause ?? '-'}',
                     );
                   } catch (e) {
                     debugPrint('archive sync error: $e');
