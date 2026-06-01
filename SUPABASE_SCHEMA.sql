@@ -76,3 +76,162 @@ create table if not exists selection_events (
 insert into storage.buckets (id, name, public)
 values ('voicex', 'voicex', false)
 on conflict (id) do nothing;
+
+-- RLS + grants for cloud sync tables.
+-- The app uses the authenticated user's JWT and upserts rows by owner_user_id.
+alter table public.projects enable row level security;
+alter table public.project_files enable row level security;
+alter table public.subtitle_lines enable row level security;
+alter table public.selection_events enable row level security;
+
+grant select, insert, update, delete on table public.projects to authenticated;
+grant select, insert, update, delete on table public.project_files to authenticated;
+grant select, insert, update, delete on table public.subtitle_lines to authenticated;
+grant select, insert, update, delete on table public.selection_events to authenticated;
+
+drop policy if exists "projects_select_own" on public.projects;
+create policy "projects_select_own"
+on public.projects
+for select
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "projects_insert_own" on public.projects;
+create policy "projects_insert_own"
+on public.projects
+for insert
+to authenticated
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "projects_update_own" on public.projects;
+create policy "projects_update_own"
+on public.projects
+for update
+to authenticated
+using ((select auth.uid()) = owner_user_id)
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "projects_delete_own" on public.projects;
+create policy "projects_delete_own"
+on public.projects
+for delete
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "project_files_select_own" on public.project_files;
+create policy "project_files_select_own"
+on public.project_files
+for select
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "project_files_insert_own" on public.project_files;
+create policy "project_files_insert_own"
+on public.project_files
+for insert
+to authenticated
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "project_files_update_own" on public.project_files;
+create policy "project_files_update_own"
+on public.project_files
+for update
+to authenticated
+using ((select auth.uid()) = owner_user_id)
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "project_files_delete_own" on public.project_files;
+create policy "project_files_delete_own"
+on public.project_files
+for delete
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "subtitle_lines_select_own" on public.subtitle_lines;
+create policy "subtitle_lines_select_own"
+on public.subtitle_lines
+for select
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "subtitle_lines_insert_own" on public.subtitle_lines;
+create policy "subtitle_lines_insert_own"
+on public.subtitle_lines
+for insert
+to authenticated
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "subtitle_lines_update_own" on public.subtitle_lines;
+create policy "subtitle_lines_update_own"
+on public.subtitle_lines
+for update
+to authenticated
+using ((select auth.uid()) = owner_user_id)
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "subtitle_lines_delete_own" on public.subtitle_lines;
+create policy "subtitle_lines_delete_own"
+on public.subtitle_lines
+for delete
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "selection_events_select_own" on public.selection_events;
+create policy "selection_events_select_own"
+on public.selection_events
+for select
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "selection_events_insert_own" on public.selection_events;
+create policy "selection_events_insert_own"
+on public.selection_events
+for insert
+to authenticated
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "selection_events_update_own" on public.selection_events;
+create policy "selection_events_update_own"
+on public.selection_events
+for update
+to authenticated
+using ((select auth.uid()) = owner_user_id)
+with check ((select auth.uid()) = owner_user_id);
+
+drop policy if exists "selection_events_delete_own" on public.selection_events;
+create policy "selection_events_delete_own"
+on public.selection_events
+for delete
+to authenticated
+using ((select auth.uid()) = owner_user_id);
+
+-- Storage policies for the private "voicex" bucket.
+-- Uploads use upsert(), so select + update are required in addition to insert.
+drop policy if exists "voicex_objects_select_own" on storage.objects;
+create policy "voicex_objects_select_own"
+on storage.objects
+for select
+to authenticated
+using (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
+
+drop policy if exists "voicex_objects_insert_bucket" on storage.objects;
+create policy "voicex_objects_insert_bucket"
+on storage.objects
+for insert
+to authenticated
+with check (bucket_id = 'voicex');
+
+drop policy if exists "voicex_objects_update_own" on storage.objects;
+create policy "voicex_objects_update_own"
+on storage.objects
+for update
+to authenticated
+using (bucket_id = 'voicex' and owner_id = (select auth.uid()::text))
+with check (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
+
+drop policy if exists "voicex_objects_delete_own" on storage.objects;
+create policy "voicex_objects_delete_own"
+on storage.objects
+for delete
+to authenticated
+using (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));

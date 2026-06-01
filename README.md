@@ -21,12 +21,13 @@ Desktop toolkit (Flutter) to review ASS subtitles, manage series, attach per-fol
 SUPABASE_URL=...
 SUPABASE_ANON_KEY=...
 ```
-2) Optional env (TakoWorks cost logging):
+2) Apply `SUPABASE_SCHEMA.sql` in your Supabase project. It creates the cloud-sync tables, bucket, RLS policies, and grants required for desktop uploads.
+3) Optional env (TakoWorks cost logging):
 ```
 SUPABASE_SERVICE_KEY=...      # if you want to write costs
 SUPABASE_COST_TABLE=voicex_api_costs
 ```
-3) API keys (OpenAI) are stored via the Settings page; you can also prefill them in a local config if desired.
+4) API keys (OpenAI) are stored via the Settings page; you can also prefill them in a local config if desired.
 
 ## Running
 ```
