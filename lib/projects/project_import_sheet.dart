@@ -165,6 +165,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
       if (!mounted) return;
       Navigator.of(context).pop(projectId);
     } catch (e) {
+      debugPrint('[import] error: $e');
       setState(() => _log = 'Error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);

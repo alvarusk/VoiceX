@@ -132,6 +132,23 @@ class CloudSyncService {
     }
   }
 
+  Never _throwCloudSyncException(
+    String action,
+    CloudSyncException error, {
+    String? debugContext,
+  }) {
+    final prefix = debugContext == null || debugContext.trim().isEmpty
+        ? ''
+        : '[$debugContext] ';
+    debugPrint(
+      '$prefix$action failed | '
+      'code=${error.code} | '
+      'userMessage=${error.userMessage} | '
+      'debug=${error.debugMessage ?? '-'}',
+    );
+    throw error;
+  }
+
   dynamic _scopeProjectQuery(dynamic query) {
     final ownerId = _ownerUserId?.trim() ?? '';
     if (_supportsOwnerColumnProjects && ownerId.isNotEmpty) {
@@ -364,9 +381,13 @@ class CloudSyncService {
     bool includeArchived = true,
   }) async {
     if (!isReady) {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'syncAllProjects',
+        CloudSyncException(
         code: 'supabase_not_ready',
         userMessage: 'Supabase is not available (configuration or session).',
+        ),
+        debugContext: 'syncAllProjects',
       );
     }
     try {
@@ -487,9 +508,13 @@ class CloudSyncService {
     void Function(double value, String stage)? onProgress,
   }) async {
     if (!isReady) {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'pushProject',
+        CloudSyncException(
         code: 'supabase_not_ready',
         userMessage: 'Supabase is not available (configuration or session).',
+        ),
+        debugContext: 'pushProject($projectId)',
       );
     }
     await _ensureR2EnvLoaded();
@@ -524,6 +549,12 @@ class CloudSyncService {
       onProgress?.call(0.1, 'Preparing upload');
 
       final remotePaths = <String, String>{}; // fileId -> remote url
+      debugPrint(
+        '[cloud] project upsert context projectId=$projectId '
+        'ownerUserId=${_ownerUserId ?? '-'} '
+        'supportsOwnerColumn=$_supportsOwnerColumnProjects '
+        'supportsAutoPlayLine=$_supportsAutoPlayLineColumn',
+      );
       for (final f in files.where((f) => f.engine == 'video')) {
         // 1) Si hay URL, la reusamos (rebased).
         if (_looksLikeUrl(f.assPath)) {
@@ -600,6 +631,7 @@ class CloudSyncService {
       final baseRemote = remotePaths[_baseFileId(files)];
 
       var projectMap = _mapProject(project, assPathOverride: baseRemote);
+      debugPrint('[cloud] project payload keys=${projectMap.keys.toList()}');
       if (!_supportsFolderColumn) {
         projectMap = Map<String, dynamic>.from(projectMap)..remove('folder');
       }
@@ -643,6 +675,10 @@ class CloudSyncService {
           if (!_supportsArchivedColumn) fallback.remove('archived');
           if (!_supportsAutoPlayLineColumn) fallback.remove('auto_play_line');
           if (!_supportsOwnerColumnProjects) fallback.remove('owner_user_id');
+          debugPrint(
+            '[cloud] project fallback keys=${fallback.keys.toList()} '
+            'ownerUserId=${fallback['owner_user_id'] ?? '-'}',
+          );
           await _client.from('projects').upsert(fallback);
         } else {
           rethrow;
@@ -912,9 +948,13 @@ class CloudSyncService {
     void Function(double value, String stage)? onProgress,
   }) async {
     if (!isReady) {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'pullProject',
+        CloudSyncException(
         code: 'supabase_not_ready',
         userMessage: 'Supabase is not available (configuration or session).',
+        ),
+        debugContext: 'pullProject($projectId)',
       );
     }
     await _ensureR2EnvLoaded();
@@ -1361,11 +1401,15 @@ class CloudSyncService {
     }
     final file = File(path);
     if (!await file.exists()) {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'upload file',
+        CloudSyncException(
         code: 'local_file_missing',
         userMessage:
             'The local file for "${f.engine}" was not found and could not be uploaded.',
         debugMessage: 'missing local file: ${f.assPath}',
+        ),
+        debugContext: '_uploadFileToCloud(${f.engine})',
       );
     }
 
@@ -1378,11 +1422,15 @@ class CloudSyncService {
 
       if (f.engine == 'video') {
         if (!_r2Available) {
-          throw CloudSyncException(
+          _throwCloudSyncException(
+            'upload video to R2',
+            CloudSyncException(
             code: 'r2_missing_config',
             userMessage:
                 'This project has a local video and is missing R2 config for upload (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
             debugMessage: 'R2 required for video upload: $storagePath',
+            ),
+            debugContext: '_uploadFileToCloud(video)',
           );
         }
         final size = await file.length();
@@ -1427,10 +1475,14 @@ class CloudSyncService {
   ) async {
     final cfg = _r2Config;
     if (cfg == null) {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'upload video to R2',
+        CloudSyncException(
         code: 'r2_missing_config',
         userMessage:
             'Missing R2 configuration to upload the video (R2_ACCOUNT_ID, R2_ACCESS_KEY, R2_SECRET_KEY, R2_BUCKET).',
+        ),
+        debugContext: '_uploadVideoToR2($storagePath)',
       );
     }
 
@@ -1487,10 +1539,14 @@ class CloudSyncService {
         await request.sink.addStream(file.openRead()).timeout(uploadTimeout);
       } on TimeoutException {
         await request.sink.close();
-        throw CloudSyncException(
+        _throwCloudSyncException(
+          'upload video to R2',
+          CloudSyncException(
           code: 'video_upload_timeout',
           userMessage: 'The video upload took too long (5 minute timeout).',
           debugMessage: 'R2 upload stream timeout: $storagePath',
+          ),
+          debugContext: '_uploadVideoToR2($storagePath)',
         );
       }
       await request.sink.close();
@@ -1505,21 +1561,29 @@ class CloudSyncService {
             : 'https://${cfg.bucket}.$host';
         return '$base/$storagePath';
       } else {
-        throw CloudSyncException(
+        _throwCloudSyncException(
+          'upload video to R2',
+          CloudSyncException(
           code: 'video_upload_rejected',
           userMessage:
               'R2 rejected the video upload (HTTP ${resp.statusCode}). Check bucket credentials and permissions.',
           debugMessage:
               'R2 upload failed: ${resp.statusCode} ${resp.reasonPhrase} ($storagePath)',
+          ),
+          debugContext: '_uploadVideoToR2($storagePath)',
         );
       }
     } on CloudSyncException {
       rethrow;
     } on TimeoutException {
-      throw CloudSyncException(
+      _throwCloudSyncException(
+        'upload video to R2',
+        CloudSyncException(
         code: 'video_upload_timeout',
         userMessage: 'The video upload took too long (5 minute timeout).',
         debugMessage: 'R2 upload timeout: $storagePath',
+        ),
+        debugContext: '_uploadVideoToR2($storagePath)',
       );
     } catch (e) {
       throw _mapCloudError(
