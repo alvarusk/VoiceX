@@ -125,6 +125,21 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _autoPlayLineMeta = const VerificationMeta(
+    'autoPlayLine',
+  );
+  @override
+  late final GeneratedColumn<bool> autoPlayLine = GeneratedColumn<bool>(
+    'auto_play_line',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_play_line" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     projectId,
@@ -137,6 +152,7 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     exportMode,
     strictExport,
     currentIndex,
+    autoPlayLine,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -235,6 +251,15 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('auto_play_line')) {
+      context.handle(
+        _autoPlayLineMeta,
+        autoPlayLine.isAcceptableOrUnknown(
+          data['auto_play_line']!,
+          _autoPlayLineMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -284,6 +309,10 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.int,
         data['${effectivePrefix}current_index'],
       )!,
+      autoPlayLine: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_play_line'],
+      )!,
     );
   }
 
@@ -304,6 +333,7 @@ class Project extends DataClass implements Insertable<Project> {
   final String exportMode;
   final bool strictExport;
   final int currentIndex;
+  final bool autoPlayLine;
   const Project({
     required this.projectId,
     required this.title,
@@ -315,6 +345,7 @@ class Project extends DataClass implements Insertable<Project> {
     required this.exportMode,
     required this.strictExport,
     required this.currentIndex,
+    required this.autoPlayLine,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -329,6 +360,7 @@ class Project extends DataClass implements Insertable<Project> {
     map['export_mode'] = Variable<String>(exportMode);
     map['strict_export'] = Variable<bool>(strictExport);
     map['current_index'] = Variable<int>(currentIndex);
+    map['auto_play_line'] = Variable<bool>(autoPlayLine);
     return map;
   }
 
@@ -344,6 +376,7 @@ class Project extends DataClass implements Insertable<Project> {
       exportMode: Value(exportMode),
       strictExport: Value(strictExport),
       currentIndex: Value(currentIndex),
+      autoPlayLine: Value(autoPlayLine),
     );
   }
 
@@ -363,6 +396,7 @@ class Project extends DataClass implements Insertable<Project> {
       exportMode: serializer.fromJson<String>(json['exportMode']),
       strictExport: serializer.fromJson<bool>(json['strictExport']),
       currentIndex: serializer.fromJson<int>(json['currentIndex']),
+      autoPlayLine: serializer.fromJson<bool>(json['autoPlayLine']),
     );
   }
   @override
@@ -379,6 +413,7 @@ class Project extends DataClass implements Insertable<Project> {
       'exportMode': serializer.toJson<String>(exportMode),
       'strictExport': serializer.toJson<bool>(strictExport),
       'currentIndex': serializer.toJson<int>(currentIndex),
+      'autoPlayLine': serializer.toJson<bool>(autoPlayLine),
     };
   }
 
@@ -393,6 +428,7 @@ class Project extends DataClass implements Insertable<Project> {
     String? exportMode,
     bool? strictExport,
     int? currentIndex,
+    bool? autoPlayLine,
   }) => Project(
     projectId: projectId ?? this.projectId,
     title: title ?? this.title,
@@ -404,6 +440,7 @@ class Project extends DataClass implements Insertable<Project> {
     exportMode: exportMode ?? this.exportMode,
     strictExport: strictExport ?? this.strictExport,
     currentIndex: currentIndex ?? this.currentIndex,
+    autoPlayLine: autoPlayLine ?? this.autoPlayLine,
   );
   Project copyWithCompanion(ProjectsCompanion data) {
     return Project(
@@ -429,6 +466,9 @@ class Project extends DataClass implements Insertable<Project> {
       currentIndex: data.currentIndex.present
           ? data.currentIndex.value
           : this.currentIndex,
+      autoPlayLine: data.autoPlayLine.present
+          ? data.autoPlayLine.value
+          : this.autoPlayLine,
     );
   }
 
@@ -444,7 +484,8 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('baseAssPath: $baseAssPath, ')
           ..write('exportMode: $exportMode, ')
           ..write('strictExport: $strictExport, ')
-          ..write('currentIndex: $currentIndex')
+          ..write('currentIndex: $currentIndex, ')
+          ..write('autoPlayLine: $autoPlayLine')
           ..write(')'))
         .toString();
   }
@@ -461,6 +502,7 @@ class Project extends DataClass implements Insertable<Project> {
     exportMode,
     strictExport,
     currentIndex,
+    autoPlayLine,
   );
   @override
   bool operator ==(Object other) =>
@@ -475,7 +517,8 @@ class Project extends DataClass implements Insertable<Project> {
           other.baseAssPath == this.baseAssPath &&
           other.exportMode == this.exportMode &&
           other.strictExport == this.strictExport &&
-          other.currentIndex == this.currentIndex);
+          other.currentIndex == this.currentIndex &&
+          other.autoPlayLine == this.autoPlayLine);
 }
 
 class ProjectsCompanion extends UpdateCompanion<Project> {
@@ -489,6 +532,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String> exportMode;
   final Value<bool> strictExport;
   final Value<int> currentIndex;
+  final Value<bool> autoPlayLine;
   final Value<int> rowid;
   const ProjectsCompanion({
     this.projectId = const Value.absent(),
@@ -501,6 +545,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.exportMode = const Value.absent(),
     this.strictExport = const Value.absent(),
     this.currentIndex = const Value.absent(),
+    this.autoPlayLine = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ProjectsCompanion.insert({
@@ -514,6 +559,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.exportMode = const Value.absent(),
     this.strictExport = const Value.absent(),
     this.currentIndex = const Value.absent(),
+    this.autoPlayLine = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : projectId = Value(projectId),
        title = Value(title),
@@ -531,6 +577,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? exportMode,
     Expression<bool>? strictExport,
     Expression<int>? currentIndex,
+    Expression<bool>? autoPlayLine,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -544,6 +591,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (exportMode != null) 'export_mode': exportMode,
       if (strictExport != null) 'strict_export': strictExport,
       if (currentIndex != null) 'current_index': currentIndex,
+      if (autoPlayLine != null) 'auto_play_line': autoPlayLine,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -559,6 +607,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String>? exportMode,
     Value<bool>? strictExport,
     Value<int>? currentIndex,
+    Value<bool>? autoPlayLine,
     Value<int>? rowid,
   }) {
     return ProjectsCompanion(
@@ -572,6 +621,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       exportMode: exportMode ?? this.exportMode,
       strictExport: strictExport ?? this.strictExport,
       currentIndex: currentIndex ?? this.currentIndex,
+      autoPlayLine: autoPlayLine ?? this.autoPlayLine,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -609,6 +659,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     if (currentIndex.present) {
       map['current_index'] = Variable<int>(currentIndex.value);
     }
+    if (autoPlayLine.present) {
+      map['auto_play_line'] = Variable<bool>(autoPlayLine.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -628,6 +681,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('exportMode: $exportMode, ')
           ..write('strictExport: $strictExport, ')
           ..write('currentIndex: $currentIndex, ')
+          ..write('autoPlayLine: $autoPlayLine, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3478,6 +3532,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String> exportMode,
       Value<bool> strictExport,
       Value<int> currentIndex,
+      Value<bool> autoPlayLine,
       Value<int> rowid,
     });
 typedef $$ProjectsTableUpdateCompanionBuilder =
@@ -3492,6 +3547,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> exportMode,
       Value<bool> strictExport,
       Value<int> currentIndex,
+      Value<bool> autoPlayLine,
       Value<int> rowid,
     });
 
@@ -3551,6 +3607,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<int> get currentIndex => $composableBuilder(
     column: $table.currentIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoPlayLine => $composableBuilder(
+    column: $table.autoPlayLine,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3613,6 +3674,11 @@ class $$ProjectsTableOrderingComposer
     column: $table.currentIndex,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get autoPlayLine => $composableBuilder(
+    column: $table.autoPlayLine,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ProjectsTableAnnotationComposer
@@ -3665,6 +3731,11 @@ class $$ProjectsTableAnnotationComposer
     column: $table.currentIndex,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get autoPlayLine => $composableBuilder(
+    column: $table.autoPlayLine,
+    builder: (column) => column,
+  );
 }
 
 class $$ProjectsTableTableManager
@@ -3705,6 +3776,7 @@ class $$ProjectsTableTableManager
                 Value<String> exportMode = const Value.absent(),
                 Value<bool> strictExport = const Value.absent(),
                 Value<int> currentIndex = const Value.absent(),
+                Value<bool> autoPlayLine = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion(
                 projectId: projectId,
@@ -3717,6 +3789,7 @@ class $$ProjectsTableTableManager
                 exportMode: exportMode,
                 strictExport: strictExport,
                 currentIndex: currentIndex,
+                autoPlayLine: autoPlayLine,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3731,6 +3804,7 @@ class $$ProjectsTableTableManager
                 Value<String> exportMode = const Value.absent(),
                 Value<bool> strictExport = const Value.absent(),
                 Value<int> currentIndex = const Value.absent(),
+                Value<bool> autoPlayLine = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion.insert(
                 projectId: projectId,
@@ -3743,6 +3817,7 @@ class $$ProjectsTableTableManager
                 exportMode: exportMode,
                 strictExport: strictExport,
                 currentIndex: currentIndex,
+                autoPlayLine: autoPlayLine,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

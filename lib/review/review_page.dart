@@ -223,6 +223,8 @@ class _ReviewPageState extends State<ReviewPage> {
   Duration _reviewTimerElapsed = Duration.zero;
   DateTime? _reviewTimerStartedAt;
   bool _reviewTimerRunning = false;
+  Timer? _segmentStopTimer;
+  int _lineChangeToken = 0;
 
   // Navegación
   bool skipReviewedOnAdvance = false;
@@ -405,6 +407,13 @@ class _ReviewPageState extends State<ReviewPage> {
     } catch (_) {}
   }
 
+  Future<SubtitleLine?> _lineForIndex(String projectId, int idx) async {
+    try {
+      return await _svc.watchLine(projectId, idx).first;
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _seekVideoTo(int ms) async {
     if (_videoController == null || _videoInit == null) return;
     try {
@@ -450,6 +459,27 @@ class _ReviewPageState extends State<ReviewPage> {
     }
   }
 
+  Future<void> _handleLineChange(
+    Project project,
+    int idx, {
+    required bool autoplay,
+  }) async {
+    final token = ++_lineChangeToken;
+    await _svc.setCurrentIndex(project.projectId, idx);
+    if (token != _lineChangeToken) return;
+
+    final line = await _lineForIndex(project.projectId, idx);
+    if (line == null || token != _lineChangeToken) return;
+
+    _segmentStopTimer?.cancel();
+    await _seekVideoTo(line.startMs);
+    if (token != _lineChangeToken) return;
+
+    if (autoplay) {
+      await _playSegment(line, seekFirst: false);
+    }
+  }
+
   Future<void> _jumpToIndex(Project project, int idx) async {
     if (_pageController?.hasClients == true) {
       await _pageController!.animateToPage(
@@ -457,9 +487,14 @@ class _ReviewPageState extends State<ReviewPage> {
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
       );
+      return;
     }
-    await _svc.setCurrentIndex(project.projectId, idx);
-    await _seekVideoForIndex(project.projectId, idx);
+    if (idx == project.currentIndex) return;
+    await _handleLineChange(
+      project,
+      idx,
+      autoplay: project.autoPlayLine,
+    );
   }
 
   Future<void> _gotoNextUnreviewed(Project project) async {
@@ -514,6 +549,7 @@ class _ReviewPageState extends State<ReviewPage> {
     await showModalBottomSheet(
       context: context,
       builder: (_) {
+        var autoPlayLineEnabled = project.autoPlayLine;
         return SafeArea(
           child: ListView(
             shrinkWrap: true,
@@ -545,6 +581,23 @@ class _ReviewPageState extends State<ReviewPage> {
                 onTap: () {
                   Navigator.pop(context);
                   _pickAndAttachVideo(project);
+                },
+              ),
+              StatefulBuilder(
+                builder: (context, setModalState) {
+                  return SwitchListTile(
+                    title: const Text('Autoplay current line'),
+                    subtitle: const Text(
+                      'Seek and play the line every time you change it.',
+                    ),
+                    value: autoPlayLineEnabled,
+                    onChanged: (v) {
+                      setModalState(() => autoPlayLineEnabled = v);
+                      unawaited(
+                        _svc.setAutoPlayLine(project.projectId, v),
+                      );
+                    },
+                  );
                 },
               ),
               const Divider(),
@@ -663,7 +716,10 @@ class _ReviewPageState extends State<ReviewPage> {
     await _svc.setVoiceText(line.lineId, text);
   }
 
-  Future<void> _playSegment(SubtitleLine line) async {
+  Future<void> _playSegment(
+    SubtitleLine line, {
+    bool seekFirst = true,
+  }) async {
     if (_videoController == null || _videoInit == null) return;
     final start = Duration(milliseconds: line.startMs);
     final end = Duration(milliseconds: line.endMs);
@@ -672,12 +728,18 @@ class _ReviewPageState extends State<ReviewPage> {
 
     try {
       await _videoInit;
-      await _videoController!.seekTo(start);
+      _segmentStopTimer?.cancel();
+      if (seekFirst) {
+        await _videoController!.seekTo(start);
+      }
       await _videoController!.play();
-      Future.delayed(dur, () async {
-        if (!_videoController!.value.isInitialized) return;
-        await _videoController!.pause();
-        setState(() {});
+      _segmentStopTimer = Timer(dur, () async {
+        final controller = _videoController;
+        if (!mounted || controller == null || !controller.value.isInitialized) {
+          return;
+        }
+        await controller.pause();
+        if (mounted) setState(() {});
       });
       setState(() {});
     } catch (_) {}
@@ -944,6 +1006,7 @@ If in doubt, prefer these spellings as-is.
   void dispose() {
     _endSession();
     _reviewTimerTicker?.cancel();
+    _segmentStopTimer?.cancel();
     _pageController?.dispose();
     _videoController?.dispose();
     _speech.stop();
@@ -1015,6 +1078,23 @@ If in doubt, prefer these spellings as-is.
                           : () => _saveToCloud(project),
                     );
                   },
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.playlist_play,
+                    color: project.autoPlayLine
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
+                  ),
+                  tooltip: project.autoPlayLine
+                      ? 'Autoplay line segment: on'
+                      : 'Autoplay line segment: off',
+                  onPressed: () => unawaited(
+                    _svc.setAutoPlayLine(
+                      project.projectId,
+                      !project.autoPlayLine,
+                    ),
+                  ),
                 ),
                 StreamBuilder<int>(
                   stream: _svc.watchTotalLines(widget.projectId),
@@ -1419,8 +1499,13 @@ If in doubt, prefer these spellings as-is.
     return PageView.builder(
       controller: _pageController,
       onPageChanged: (idx) {
-        _svc.setCurrentIndex(project.projectId, idx);
-        _seekVideoForIndex(project.projectId, idx);
+        unawaited(
+          _handleLineChange(
+            project,
+            idx,
+            autoplay: project.autoPlayLine,
+          ),
+        );
       },
       itemCount: total,
       itemBuilder: (context, idx) {

@@ -228,6 +228,17 @@ class ReviewService {
     );
   }
 
+  Future<void> setAutoPlayLine(String projectId, bool enabled) async {
+    await (db.update(
+      db.projects,
+    )..where((t) => t.projectId.equals(projectId))).write(
+      ProjectsCompanion(
+        autoPlayLine: Value(enabled),
+        updatedAtMs: Value(DateTime.now().millisecondsSinceEpoch),
+      ),
+    );
+  }
+
   Future<void> setProjectFolder(String projectId, String folder) async {
     await (db.update(
       db.projects,

@@ -10,7 +10,8 @@ create table if not exists projects (
   base_ass_path text not null,
   export_mode text default 'CLEAN_TRANSLATION_ONLY',
   strict_export boolean default true,
-  current_index int default 0
+  current_index int default 0,
+  auto_play_line boolean default false
 );
 
 -- Project files (base/engines/video)

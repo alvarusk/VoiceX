@@ -20,6 +20,8 @@ class Projects extends Table {
       text().withDefault(const Constant('CLEAN_TRANSLATION_ONLY'))();
   BoolColumn get strictExport => boolean().withDefault(const Constant(true))();
   IntColumn get currentIndex => integer().withDefault(const Constant(0))();
+  BoolColumn get autoPlayLine =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {projectId};
@@ -122,7 +124,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -137,6 +139,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from == 3) {
         await _safeAddColumn(m, projects, projects.archived);
+        from = 4;
+      }
+      if (from == 4) {
+        await _safeAddColumn(m, projects, projects.autoPlayLine);
       }
     },
   );

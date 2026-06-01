@@ -54,6 +54,7 @@ class CloudSyncService {
   final _prefs = SyncPrefs();
   bool _supportsFolderColumn = true;
   bool _supportsArchivedColumn = true;
+  bool _supportsAutoPlayLineColumn = true;
   bool _supportsOwnerColumnProjects = true;
   bool _supportsOwnerColumnFiles = true;
   bool _supportsOwnerColumnLines = true;
@@ -98,6 +99,29 @@ class CloudSyncService {
       return query.eq('owner_user_id', ownerId);
     }
     return query;
+  }
+
+  String _projectColumns({bool includeAutoPlayLine = true}) {
+    final cols = <String>[
+      'project_id',
+      'title',
+      'created_at_ms',
+      'updated_at_ms',
+      'base_ass_path',
+      'export_mode',
+      'strict_export',
+      'current_index',
+    ];
+    if (_supportsFolderColumn) {
+      cols.add('folder');
+    }
+    if (_supportsArchivedColumn) {
+      cols.add('archived');
+    }
+    if (includeAutoPlayLine && _supportsAutoPlayLineColumn) {
+      cols.add('auto_play_line');
+    }
+    return cols.join(',');
   }
 
   Future<void> ensureInit() async {
@@ -524,6 +548,13 @@ class CloudSyncService {
       if (!_supportsFolderColumn) {
         projectMap = Map<String, dynamic>.from(projectMap)..remove('folder');
       }
+      if (!_supportsArchivedColumn) {
+        projectMap = Map<String, dynamic>.from(projectMap)..remove('archived');
+      }
+      if (!_supportsAutoPlayLineColumn) {
+        projectMap = Map<String, dynamic>.from(projectMap)
+          ..remove('auto_play_line');
+      }
 
       try {
         await _client.from('projects').upsert(projectMap);
@@ -533,17 +564,25 @@ class CloudSyncService {
             _supportsFolderColumn && _isMissingColumn(e, 'folder');
         final missingArchived =
             _supportsArchivedColumn && _isMissingColumn(e, 'archived');
+        final missingAutoPlayLine =
+            _supportsAutoPlayLineColumn &&
+            _isMissingColumn(e, 'auto_play_line');
         final missingOwner =
             _supportsOwnerColumnProjects &&
             _isMissingColumn(e, 'owner_user_id');
         if (missingFolder) _supportsFolderColumn = false;
         if (missingArchived) _supportsArchivedColumn = false;
+        if (missingAutoPlayLine) _supportsAutoPlayLineColumn = false;
         if (missingOwner) _supportsOwnerColumnProjects = false;
 
-        if (missingFolder || missingArchived || missingOwner) {
+        if (missingFolder ||
+            missingArchived ||
+            missingAutoPlayLine ||
+            missingOwner) {
           final fallback = Map<String, dynamic>.from(projectMap);
           if (!_supportsFolderColumn) fallback.remove('folder');
           if (!_supportsArchivedColumn) fallback.remove('archived');
+          if (!_supportsAutoPlayLineColumn) fallback.remove('auto_play_line');
           if (!_supportsOwnerColumnProjects) fallback.remove('owner_user_id');
           await _client.from('projects').upsert(fallback);
         } else {
@@ -821,9 +860,42 @@ class CloudSyncService {
       )..where((t) => t.projectId.equals(projectId))).get();
       final existingByEngine = {for (final f in existingFiles) f.engine: f};
 
-      dynamic projQuery = _scopeProjectQuery(_client.from('projects').select());
-      projQuery = projQuery.eq('project_id', projectId);
-      final projRes = await projQuery.maybeSingle();
+      Map<String, dynamic>? projRes;
+      var retriedProjectSelect = false;
+      while (true) {
+        try {
+          dynamic projQuery = _scopeProjectQuery(
+            _client.from('projects').select(_projectColumns()),
+          );
+          projQuery = projQuery.eq('project_id', projectId);
+          projRes = await projQuery.maybeSingle();
+          break;
+        } on PostgrestException catch (e) {
+          final missingFolder =
+              _supportsFolderColumn && _isMissingColumn(e, 'folder');
+          final missingArchived =
+              _supportsArchivedColumn && _isMissingColumn(e, 'archived');
+          final missingAutoPlayLine =
+              _supportsAutoPlayLineColumn &&
+              _isMissingColumn(e, 'auto_play_line');
+          final missingOwner =
+              _supportsOwnerColumnProjects &&
+              _isMissingColumn(e, 'owner_user_id');
+          if (missingFolder) _supportsFolderColumn = false;
+          if (missingArchived) _supportsArchivedColumn = false;
+          if (missingAutoPlayLine) _supportsAutoPlayLineColumn = false;
+          if (missingOwner) _supportsOwnerColumnProjects = false;
+          if (!retriedProjectSelect &&
+              (missingFolder ||
+                  missingArchived ||
+                  missingAutoPlayLine ||
+                  missingOwner)) {
+            retriedProjectSelect = true;
+            continue;
+          }
+          rethrow;
+        }
+      }
       onProgress?.call(0.1, 'Project');
       dynamic filesQuery = _scopeProjectFilesQuery(
         _client.from('project_files').select(),
@@ -885,6 +957,9 @@ class CloudSyncService {
 
       if (projRes != null) {
         final map = Map<String, dynamic>.from(projRes);
+        final localProject = await (db.select(
+          db.projects,
+        )..where((t) => t.projectId.equals(projectId))).getSingleOrNull();
         var folder = (map['folder'] as String? ?? '').trim();
         if (folder.isEmpty) {
           final meta = await _downloadProjectMeta(projectId);
@@ -893,12 +968,21 @@ class CloudSyncService {
             map['folder'] = folder;
           }
         }
+        if (folder.isEmpty && localProject != null) {
+          map['folder'] = localProject.folder;
+        }
         if (baseLocalPath != null) {
           map['base_ass_path'] = baseLocalPath;
         } else {
           final fallback = map['base_ass_path'] as String? ?? '';
           final localBase = await _materializeFile(projectId, 'base', fallback);
           if (localBase != null) map['base_ass_path'] = localBase;
+        }
+        if (!map.containsKey('archived') && localProject != null) {
+          map['archived'] = localProject.archived;
+        }
+        if (!map.containsKey('auto_play_line') && localProject != null) {
+          map['auto_play_line'] = localProject.autoPlayLine;
         }
         await _upsertProjectLocal(map);
       }
@@ -938,6 +1022,7 @@ class CloudSyncService {
       'export_mode': p.exportMode,
       'strict_export': p.strictExport,
       'current_index': p.currentIndex,
+      'auto_play_line': p.autoPlayLine,
     };
     final ownerId = _ownerUserId;
     if (_supportsOwnerColumnProjects && ownerId != null && ownerId.isNotEmpty) {
@@ -1056,6 +1141,7 @@ class CloudSyncService {
             ),
             strictExport: Value(m['strict_export'] as bool? ?? true),
             currentIndex: Value(m['current_index'] as int? ?? 0),
+            autoPlayLine: Value(m['auto_play_line'] as bool? ?? false),
           ),
           mode: InsertMode.insertOrReplace,
         );
