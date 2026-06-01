@@ -207,6 +207,8 @@ using ((select auth.uid()) = owner_user_id);
 
 -- Storage policies for the private "voicex" bucket.
 -- Uploads use upsert(), so select + update are required in addition to insert.
+grant select, insert, update, delete on table storage.objects to authenticated;
+
 drop policy if exists "voicex_objects_select_own" on storage.objects;
 create policy "voicex_objects_select_own"
 on storage.objects
@@ -219,7 +221,7 @@ create policy "voicex_objects_insert_bucket"
 on storage.objects
 for insert
 to authenticated
-with check (bucket_id = 'voicex');
+with check (bucket_id = 'voicex' and owner_id = (select auth.uid()::text));
 
 drop policy if exists "voicex_objects_update_own" on storage.objects;
 create policy "voicex_objects_update_own"
