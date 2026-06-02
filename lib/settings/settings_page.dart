@@ -1,5 +1,3 @@
-// ignore_for_file: deprecated_member_use
-
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -122,16 +120,15 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickTxtForFolder(String folder) async {
-    final res = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['txt'],
-      withData: true,
     );
-    if (res == null) return;
-    final file = res.files.single;
+    if (file == null) return;
     String content = '';
-    if (file.bytes != null) {
-      content = String.fromCharCodes(file.bytes!);
+    final bytes = file.bytes ?? await file.readAsBytes();
+    if (bytes.isNotEmpty) {
+      content = String.fromCharCodes(bytes);
     } else if (file.path != null) {
       content = await File(file.path!).readAsString();
     }

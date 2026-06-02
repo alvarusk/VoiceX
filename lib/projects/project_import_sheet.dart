@@ -77,13 +77,12 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
   }
 
   Future<void> _pickBase() async {
-    final res = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['ass'],
-      withData: kIsWeb,
     );
-    if (res == null || res.files.isEmpty) return;
-    setState(() => _baseFile = res.files.single);
+    if (file == null) return;
+    setState(() => _baseFile = file);
     if (!mounted) return;
     await _promptEpisodeNumber();
   }
@@ -92,21 +91,18 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
     final res = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['ass'],
-      allowMultiple: true,
-      withData: kIsWeb,
     );
     if (res == null) return;
     setState(() => _engineFiles = res.files);
   }
 
   Future<void> _pickVideo() async {
-    final res = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: _allowedVideoExtensions,
-      withData: false,
     );
-    if (res == null || res.files.isEmpty) return;
-    setState(() => _videoFile = res.files.single);
+    if (file == null) return;
+    setState(() => _videoFile = file);
   }
 
   List<String> get _allowedVideoExtensions =>
@@ -115,13 +111,12 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
       : const ['mp4', 'mkv', 'mov'];
 
   Future<void> _pickScriptEs() async {
-    final res = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['ass'],
-      withData: false,
     );
-    if (res == null || res.files.isEmpty) return;
-    setState(() => _scriptFile = res.files.single);
+    if (file == null) return;
+    setState(() => _scriptFile = file);
   }
 
   Future<void> _runImport() async {

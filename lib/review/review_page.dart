@@ -633,13 +633,12 @@ class _ReviewPageState extends State<ReviewPage> {
       _showSnack('Assigning video is not available on Web.');
       return;
     }
-    final res = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: _allowedVideoExtensions,
-      withData: false,
     );
-    if (res == null || res.files.isEmpty) return;
-    final path = res.files.single.path;
+    if (file == null) return;
+    final path = file.path;
     if (path == null || path.isEmpty) {
       _showSnack('Could not read the video file.');
       return;

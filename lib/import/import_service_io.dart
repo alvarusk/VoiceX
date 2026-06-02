@@ -43,33 +43,36 @@ class ImportService {
     await projDir.create(recursive: true);
 
     // Copiar base (respetar nombre original para exportar con mismo nombre)
-    final baseSrcPath = baseAss.path;
-    if (baseSrcPath == null) {
-      throw Exception('baseAss.path es null (FilePicker sin path).');
-    }
     final originalName = (baseAss.name.isNotEmpty ? baseAss.name : 'base.ass')
         .trim();
     final safeName = originalName.isEmpty
         ? 'base.ass'
         : originalName.replaceAll(RegExp(r'[\\\\/:*?"<>|]+'), '_');
-    final baseDst = p.join(projDir.path, safeName);
-    await File(baseSrcPath).copy(baseDst);
+    final baseDst = await _materializePickedFile(
+      targetDir: projDir,
+      file: baseAss,
+      dstFileName: safeName,
+    );
 
     // Copiar motores
     final copiedEnginePaths = <Engine, String>{};
     for (final entry in engineAssFiles.entries) {
-      final src = entry.value.path;
-      if (src == null) continue;
-      final dst = p.join(projDir.path, '${engineToStr(entry.key)}.ass');
-      await File(src).copy(dst);
+      final dst = await _materializePickedFile(
+        targetDir: projDir,
+        file: entry.value,
+        dstFileName: '${engineToStr(entry.key)}.ass',
+      );
       copiedEnginePaths[entry.key] = dst;
     }
 
     String? videoDst;
-    if (videoFile?.path != null) {
-      final ext = p.extension(videoFile!.path!);
-      videoDst = p.join(projDir.path, 'video${ext.isNotEmpty ? ext : '.mp4'}');
-      await File(videoFile.path!).copy(videoDst);
+    if (videoFile != null) {
+      final ext = p.extension(videoFile.path ?? '');
+      videoDst = await _materializePickedFile(
+        targetDir: projDir,
+        file: videoFile,
+        dstFileName: 'video${ext.isNotEmpty ? ext : '.mp4'}',
+      );
     }
 
     // Parse base
@@ -257,6 +260,32 @@ class ImportService {
     );
 
     return projectId;
+  }
+
+  Future<String> _materializePickedFile({
+    required Directory targetDir,
+    required PlatformFile file,
+    required String dstFileName,
+  }) async {
+    final safeName = dstFileName.replaceAll(
+      RegExp(r'[\\\\/:*?"<>|]+'),
+      '_',
+    );
+    final dst = p.join(targetDir.path, safeName);
+
+    final srcPath = file.path?.trim();
+    if (srcPath != null && srcPath.isNotEmpty) {
+      await File(srcPath).copy(dst);
+      return dst;
+    }
+
+    final bytes = file.bytes ?? await file.readAsBytes();
+    if (bytes.isEmpty) {
+      throw Exception('Selected file "${file.name}" could not be read.');
+    }
+
+    await File(dst).writeAsBytes(bytes, flush: true);
+    return dst;
   }
 
   String? _preferredExportDirectory(
