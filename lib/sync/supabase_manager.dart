@@ -168,7 +168,7 @@ class SupabaseManager extends ChangeNotifier {
             '[supabase] inicializando con url length=${url.length}, key length=${key.length}',
           );
         }
-        await Supabase.initialize(url: url, anonKey: key);
+        await Supabase.initialize(url: url, publishableKey: key);
         _attachAuthStateListener();
         _ready = true;
         _authError = null;

@@ -21,17 +21,20 @@ class CloudStorage {
       }
       final client = Supabase.instance.client;
       final data = Uint8List.fromList(bytes);
-      await client.storage.from(bucket).uploadBinary(
+      await client.storage
+          .from(bucket)
+          .uploadBinary(
             path,
             data,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
           );
-      return client.storage.from(bucket).createSignedUrl(
-            path,
-            60 * 60 * 24 * 365,
-          );
+      return await client.storage
+          .from(bucket)
+          .createSignedUrl(path, 60 * 60 * 24 * 365);
     } catch (e) {
-      debugPrint('[import.storage] upload failed bucket=$bucket path=$path error=$e');
+      debugPrint(
+        '[import.storage] upload failed bucket=$bucket path=$path error=$e',
+      );
       rethrow;
     }
   }
