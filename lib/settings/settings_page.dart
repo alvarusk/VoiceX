@@ -41,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _saved = false;
   bool _dirty = false;
   bool _suspendDirty = false;
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -126,7 +127,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (file == null) return;
     String content = '';
-    final bytes = file.bytes ?? await file.readAsBytes();
+    final bytes = await file.readAsBytes();
     if (bytes.isNotEmpty) {
       content = String.fromCharCodes(bytes);
     } else if (file.path != null) {
@@ -235,8 +236,17 @@ class _SettingsPageState extends State<SettingsPage> {
         kIsWeb; // MVP: grabación a archivo en web es más delicada
 
     _syncFolderStateIfNeeded();
-    return WillPopScope(
-      onWillPop: _confirmExit,
+    return PopScope<Object?>(
+      canPop: !_dirty || _allowPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldPop = await _confirmExit();
+        if (!mounted || !shouldPop) return;
+        setState(() => _allowPop = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.of(context).pop();
+        });
+      },
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
@@ -338,7 +348,7 @@ class _SettingsPageState extends State<SettingsPage> {
               )
             else ...[
               DropdownButtonFormField<String>(
-                value: _selectedFolder,
+                initialValue: _selectedFolder,
                 items: _folders
                     .map(
                       (f) => DropdownMenuItem(
@@ -412,30 +422,35 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            RadioListTile<VoiceInputMode>(
-              value: VoiceInputMode.local,
+            RadioGroup<VoiceInputMode>(
               groupValue: _mode,
-              onChanged: (v) => setState(() {
-                _mode = v!;
-                _markDirty();
-              }),
-              title: const Text('Local (speech_to_text)'),
-              subtitle: const Text('Fast, but usually without punctuation.'),
-            ),
-            RadioListTile<VoiceInputMode>(
-              value: VoiceInputMode.openai,
-              groupValue: _mode,
-              onChanged: disabledOpenAiMode
-                  ? null
-                  : (v) => setState(() {
-                      _mode = v!;
-                      _markDirty();
-                    }),
-              title: const Text('OpenAI (recording + transcription)'),
-              subtitle: Text(
-                disabledOpenAiMode
-                    ? 'We will enable this on Web later.'
-                    : 'Better punctuation/capitalization and more stability on PC.',
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() {
+                  _mode = v;
+                  _markDirty();
+                });
+              },
+              child: Column(
+                children: [
+                  RadioListTile<VoiceInputMode>(
+                    value: VoiceInputMode.local,
+                    title: const Text('Local (speech_to_text)'),
+                    subtitle: const Text(
+                      'Fast, but usually without punctuation.',
+                    ),
+                  ),
+                  RadioListTile<VoiceInputMode>(
+                    value: VoiceInputMode.openai,
+                    enabled: !disabledOpenAiMode,
+                    title: const Text('OpenAI (recording + transcription)'),
+                    subtitle: Text(
+                      disabledOpenAiMode
+                          ? 'We will enable this on Web later.'
+                          : 'Better punctuation/capitalization and more stability on PC.',
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),

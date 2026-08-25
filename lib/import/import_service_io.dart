@@ -279,7 +279,7 @@ class ImportService {
       return dst;
     }
 
-    final bytes = file.bytes ?? await file.readAsBytes();
+    final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       throw Exception('Selected file "${file.name}" could not be read.');
     }

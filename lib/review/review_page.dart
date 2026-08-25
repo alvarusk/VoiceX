@@ -490,11 +490,7 @@ class _ReviewPageState extends State<ReviewPage> {
       return;
     }
     if (idx == project.currentIndex) return;
-    await _handleLineChange(
-      project,
-      idx,
-      autoplay: project.autoPlayLine,
-    );
+    await _handleLineChange(project, idx, autoplay: project.autoPlayLine);
   }
 
   Future<void> _gotoNextUnreviewed(Project project) async {
@@ -593,9 +589,7 @@ class _ReviewPageState extends State<ReviewPage> {
                     value: autoPlayLineEnabled,
                     onChanged: (v) {
                       setModalState(() => autoPlayLineEnabled = v);
-                      unawaited(
-                        _svc.setAutoPlayLine(project.projectId, v),
-                      );
+                      unawaited(_svc.setAutoPlayLine(project.projectId, v));
                     },
                   );
                 },
@@ -715,10 +709,7 @@ class _ReviewPageState extends State<ReviewPage> {
     await _svc.setVoiceText(line.lineId, text);
   }
 
-  Future<void> _playSegment(
-    SubtitleLine line, {
-    bool seekFirst = true,
-  }) async {
+  Future<void> _playSegment(SubtitleLine line, {bool seekFirst = true}) async {
     if (_videoController == null || _videoInit == null) return;
     final start = Duration(milliseconds: line.startMs);
     final end = Duration(milliseconds: line.endMs);
@@ -1081,9 +1072,7 @@ If in doubt, prefer these spellings as-is.
                 IconButton(
                   icon: Icon(
                     Icons.playlist_play,
-                    color: project.autoPlayLine
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
+                    color: project.autoPlayLine ? Colors.green : Colors.grey,
                   ),
                   tooltip: project.autoPlayLine
                       ? 'Autoplay line segment: on'
@@ -1499,11 +1488,7 @@ If in doubt, prefer these spellings as-is.
       controller: _pageController,
       onPageChanged: (idx) {
         unawaited(
-          _handleLineChange(
-            project,
-            idx,
-            autoplay: project.autoPlayLine,
-          ),
+          _handleLineChange(project, idx, autoplay: project.autoPlayLine),
         );
       },
       itemCount: total,
@@ -2006,7 +1991,11 @@ class _TranscriberPromptPanel extends StatelessWidget {
               context,
             ).style.copyWith(height: 1.4);
             final text = promptText.isEmpty
-                ? 'No explanation available in the second block {...}.'
+                ? '''Lista de vocabulario:
+• 名詞（めいし） — nombre: persona, lugar, objeto o concepto.
+• 形容詞（けいようし） — adjetivo: describe una cualidad.
+• 副詞（ふくし） — adverbio: modifica un verbo, adjetivo u oración.
+• キーワード（きーわーど） — palabra clave: término importante del diálogo.'''
                 : promptText;
             return Text.rich(
               TextSpan(
@@ -2520,7 +2509,10 @@ class _LineJumpCounterState extends State<_LineJumpCounter> {
                 iconSize: 18,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
-                constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
+                ),
                 onPressed: widget.total <= 0 ? null : _submit,
                 icon: const Icon(Icons.check),
               ),
