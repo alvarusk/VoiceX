@@ -28,6 +28,7 @@ class ImportService {
     String folder = '',
     required PlatformFile baseAss,
     required Map<Engine, PlatformFile> engineAssFiles,
+    PlatformFile? asrAssFile,
     PlatformFile? videoFile,
     String? videoWebUrl,
   }) async {
@@ -63,6 +64,18 @@ class ImportService {
         dstFileName: '${engineToStr(entry.key)}.ass',
       );
       copiedEnginePaths[entry.key] = dst;
+    }
+
+    String? asrDst;
+    if (baseAss.name.toLowerCase().contains('_asr')) {
+      asrDst = baseDst;
+    } else if (asrAssFile != null &&
+        asrAssFile.name.toLowerCase().contains('_asr')) {
+      asrDst = await _materializePickedFile(
+        targetDir: projDir,
+        file: asrAssFile,
+        dstFileName: asrAssFile.name,
+      );
     }
 
     String? videoDst;
@@ -125,6 +138,20 @@ class ImportService {
                 unmatchedCount: const Value(0),
               ),
             );
+      }
+
+      if (asrDst != null) {
+        await db.into(db.projectFiles).insert(
+          ProjectFilesCompanion.insert(
+            fileId: _uuid.v4(),
+            projectId: projectId,
+            engine: 'asr',
+            assPath: asrDst,
+            importedAtMs: now,
+            dialogueCount: const Value(0),
+            unmatchedCount: const Value(0),
+          ),
+        );
       }
 
       // Insert líneas base

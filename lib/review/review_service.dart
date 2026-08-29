@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../db/app_db.dart';
 import '../export/export_service.dart';
+import '../import/ass_parser.dart';
 import '../settings/settings_service.dart';
 import 'package:uuid/uuid.dart';
 
@@ -424,6 +425,36 @@ class ReviewService {
             ))
             .getSingleOrNull();
     return row?.assPath;
+  }
+
+  Future<List<String>> loadAsrPrompts(String projectId) async {
+    final row =
+        await (db.select(db.projectFiles)..where(
+              (t) => t.projectId.equals(projectId) & t.engine.equals('asr'),
+            ))
+            .getSingleOrNull();
+    var path = row?.assPath;
+    if (path == null || path.isEmpty) {
+      final project = await (db.select(db.projects)..where(
+        (t) => t.projectId.equals(projectId),
+      )).getSingleOrNull();
+      path = project?.baseAssPath;
+    }
+    if (path == null || path.isEmpty ||
+        !p.basenameWithoutExtension(path).toLowerCase().contains('_asr')) {
+      return const [];
+    }
+    final file = File(path);
+    if (!await file.exists()) return const [];
+    final dialogues = AssParser.parseAssLines(await file.readAsLines()).dialogues;
+    return dialogues.map((d) {
+      final groups = RegExp(r'\{([^}]*)\}')
+          .allMatches(d.text)
+          .map((m) => (m.group(1) ?? '').trim())
+          .where((value) => value.isNotEmpty)
+          .toList();
+      return groups.length > 1 ? groups[1] : '';
+    }).toList();
   }
 
   Future<void> attachVideo({

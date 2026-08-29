@@ -137,13 +137,20 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
 
     try {
       final engines = <Engine, PlatformFile>{};
+      PlatformFile? asrFile;
       for (final f in _engineFiles) {
+        if (f.name.toLowerCase().contains('_asr')) {
+          asrFile = f;
+          continue;
+        }
         final e = _inferEngineFromName(f.name);
         if (e == null) continue;
         engines[e] = f;
       }
 
-      if (_scriptFile != null && !engines.containsKey(Engine.gpt)) {
+      if (_scriptFile?.name.toLowerCase().contains('_asr') == true) {
+        asrFile ??= _scriptFile;
+      } else if (_scriptFile != null && !engines.containsKey(Engine.gpt)) {
         engines[Engine.gpt] = _scriptFile!;
       }
 
@@ -153,6 +160,7 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
         folder: _folderCtrl.text.trim(),
         baseAss: _baseFile!,
         engineAssFiles: engines,
+        asrAssFile: asrFile,
         videoFile: _videoFile,
       );
 

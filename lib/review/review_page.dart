@@ -57,17 +57,9 @@ class _ReviewPageState extends State<ReviewPage> {
     return noTags.trim();
   }
 
-  String _currentPromptText(SubtitleLine? _) {
-    // El prompt contiene instrucciones, no texto extraído del ASS. Los
-    // grupos entre llaves son tags/metadatos visuales y no forman parte del
-    // contenido que debe ver el transcriptor.
-    return '''Prompt para transcribir y revisar la línea actual:
-
-• Escucha el diálogo y escribe exactamente lo que se dice.
-• Conserva nombres propios, términos técnicos y palabras clave.
-• Usa la puntuación y las mayúsculas naturales del idioma de destino.
-• No describas la imagen ni inventes información que no se escuche.
-• Si una palabra no está clara, márcala para revisarla en lugar de completarla.''';
+  String _currentPromptText(SubtitleLine? line) {
+    if (line == null || line.dialogueIndex >= _asrPrompts.length) return '';
+    return _asrPrompts[line.dialogueIndex];
   }
 
   void _cacheLineText(SubtitleLine line) {
@@ -210,6 +202,8 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<List<LineTiming>>? _timingsFuture;
   List<LineTiming> _lineTimings = const [];
   final Map<String, String> _lineTextCache = {};
+  List<String> _asrPrompts = const [];
+  String? _asrPromptsProjectId;
 
   // Toggles de visibilidad (MVP: en memoria)
   bool showGpt = true;
@@ -402,12 +396,14 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   List<VideoViewType> _videoViewTypesForCurrentPlatform() {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      // `textureView` worked on Android before the regression; keep
-      // `platformView` as a fallback for compatibility with other devices.
-      return const [VideoViewType.textureView, VideoViewType.platformView];
-    }
-    return const [VideoViewType.textureView, VideoViewType.platformView];
+    return const [VideoViewType.textureView];
+  }
+
+  Future<void> _ensureAsrPrompts(Project project) async {
+    if (_asrPromptsProjectId == project.projectId) return;
+    _asrPromptsProjectId = project.projectId;
+    final prompts = await _svc.loadAsrPrompts(project.projectId);
+    if (mounted) setState(() => _asrPrompts = prompts);
   }
 
   Future<void> _seekVideoForIndex(String projectId, int idx) async {
@@ -1032,6 +1028,7 @@ If in doubt, prefer these spellings as-is.
 
         _ensurePageController(project);
         _ensureVideo(project);
+        _ensureAsrPrompts(project);
         _ensureTimingsFuture(project.projectId);
         if (!_initialSeekDone) {
           _initialSeekDone = true;
@@ -2014,13 +2011,7 @@ class _TranscriberPromptPanel extends StatelessWidget {
             final baseStyle = DefaultTextStyle.of(
               context,
             ).style.copyWith(height: 1.4);
-            final text = promptText.isEmpty
-                ? '''Lista de vocabulario:
-• 名詞（めいし） — nombre: persona, lugar, objeto o concepto.
-• 形容詞（けいようし） — adjetivo: describe una cualidad.
-• 副詞（ふくし） — adverbio: modifica un verbo, adjetivo u oración.
-• キーワード（きーわーど） — palabra clave: término importante del diálogo.'''
-                : promptText;
+            final text = promptText;
             return Text.rich(
               TextSpan(
                 style: baseStyle,
