@@ -1249,7 +1249,7 @@ packages:
     dependency: transitive
     description:
       name: video_player_android
-      sha256: "5d18d04084cc0cfc97afde39d0a308d4041e8ae6e9d5255bc086c263998dd1201"
+      sha256: "5d18d04084cc0cfc7afde39d0a308d4041e8ae6e9d5255bc086c263998dd1201"
       url: "https://pub.dev"
     source: hosted
     version: "2.9.6"
