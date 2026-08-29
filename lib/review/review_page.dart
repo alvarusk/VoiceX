@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_player_win/video_player_win.dart';
 import 'package:flutter/services.dart';
 import 'package:record/record.dart';
 import 'package:file_picker/file_picker.dart';
@@ -201,7 +202,7 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   PageController? _pageController;
-  VideoPlayerController? _videoController;
+  dynamic _videoController;
   Future<void>? _videoInit;
   String? _videoPath;
   bool _videoError = false;
@@ -411,7 +412,7 @@ class _ReviewPageState extends State<ReviewPage> {
     return const [VideoViewType.textureView];
   }
 
-  VideoPlayerController _createVideoController(
+  dynamic _createVideoController(
     String resolved,
     File? localFile,
     bool isRemote,
@@ -419,8 +420,8 @@ class _ReviewPageState extends State<ReviewPage> {
   ) {
     if (defaultTargetPlatform == TargetPlatform.windows) {
       return isRemote
-          ? VideoPlayerController.networkUrl(Uri.parse(resolved))
-          : VideoPlayerController.file(localFile!);
+          ? WinVideoPlayerController.networkUrl(Uri.parse(resolved))
+          : WinVideoPlayerController.file(localFile!);
     }
     return isRemote
         ? VideoPlayerController.networkUrl(
@@ -1722,7 +1723,7 @@ class _VideoPanel extends StatelessWidget {
     required this.onHeightChanged,
   });
 
-  final VideoPlayerController? controller;
+  final dynamic controller;
   final Future<void>? initFuture;
   final bool error;
   final String? videoPath;
@@ -1769,8 +1770,8 @@ class _VideoPanel extends StatelessWidget {
             if (controller!.value.hasError) {
               return const Center(child: Text('Could not load the video.'));
             }
-            return ValueListenableBuilder<VideoPlayerValue>(
-              valueListenable: controller!,
+            return ValueListenableBuilder<dynamic>(
+              valueListenable: controller as ValueListenable<dynamic>,
               builder: (context, value, _) {
                 final aspect = value.aspectRatio == 0
                     ? 16 / 9
@@ -1798,7 +1799,10 @@ class _VideoPanel extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      VideoPlayer(controller!),
+                      if (controller is WinVideoPlayerController)
+                        WinVideoPlayer(controller as WinVideoPlayerController)
+                      else
+                        VideoPlayer(controller as VideoPlayerController),
                       if (showSubtitle)
                         Positioned(
                           left: 16,
@@ -1945,8 +1949,8 @@ class _VideoPanel extends StatelessWidget {
       return buildContent('--:--', '--:--');
     }
 
-    return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: controller!,
+    return ValueListenableBuilder<dynamic>(
+      valueListenable: controller as ValueListenable<dynamic>,
       builder: (context, value, _) {
         final positionText = value.isInitialized
             ? _fmt(value.position)
