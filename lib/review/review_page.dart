@@ -82,12 +82,20 @@ class _ReviewPageState extends State<ReviewPage> {
     if (_sessionStarted) return;
     _sessionStarted = true;
     final platform = _platformName();
-    _svc.startSession(projectId, platform);
+    unawaited(
+      _svc.startSession(projectId, platform).catchError((error) {
+        debugPrint('Could not start review session: $error');
+      }),
+    );
   }
 
   void _endSession() {
     if (!_sessionStarted) return;
-    _svc.endSession(widget.projectId);
+    unawaited(
+      _svc.endSession(widget.projectId).catchError((error) {
+        debugPrint('Could not end review session: $error');
+      }),
+    );
     _sessionStarted = false;
   }
 
@@ -1061,10 +1069,13 @@ If in doubt, prefer these spellings as-is.
           _seekVideoForIndex(project.projectId, project.currentIndex);
         }
 
+        final isMobile =
+            defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS;
         return PopScope(
-          canPop: false,
+          canPop: !isMobile,
           onPopInvokedWithResult: (didPop, _) async {
-            if (didPop) return;
+            if (didPop || !isMobile) return;
             if (_handlingPop) return;
             _handlingPop = true;
             try {
