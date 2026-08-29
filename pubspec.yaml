@@ -55,7 +55,7 @@ dependencies:
   package_info_plus: ^10.1.0
   msix: ^3.16.12
   url_launcher: ^6.3.0
-  in_app_update: ^4.2.5
+  in_app_update: ^5.0.0
 
 dev_dependencies:
   flutter_test:

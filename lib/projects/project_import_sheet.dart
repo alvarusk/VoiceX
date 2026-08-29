@@ -92,7 +92,6 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
       type: FileType.custom,
       allowedExtensions: ['ass'],
     );
-    if (res == null) return;
     setState(() => _engineFiles = res);
   }
 
