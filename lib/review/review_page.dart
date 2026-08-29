@@ -39,7 +39,6 @@ class _ReviewPageState extends State<ReviewPage> {
   double _topPaneRatio = 0.6;
   bool _showVideoPanel = true;
   bool _showPromptPanel = true;
-  bool _allowPop = false;
   bool _handlingPop = false;
   bool _sessionStarted = false;
   String _currentSubtitleText(SubtitleLine? line) {
@@ -198,6 +197,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void>? _videoInit;
   String? _videoPath;
   bool _videoError = false;
+  bool _videoDisposed = false;
   SubtitleLine? _currentLine;
   Future<List<LineTiming>>? _timingsFuture;
   List<LineTiming> _lineTimings = const [];
@@ -271,7 +271,7 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _ensureVideo(Project project) async {
-    if (_videoInit != null || _videoError) return;
+    if (!mounted || _videoDisposed || _videoInit != null || _videoError) return;
 
     final path = await _svc.getVideoPath(project.projectId);
     if (path == null || path.isEmpty) {
@@ -308,16 +308,17 @@ class _ReviewPageState extends State<ReviewPage> {
 
       Object? lastError;
       for (final viewType in _videoViewTypesForCurrentPlatform()) {
-        final ctrl = isRemote
-            ? VideoPlayerController.networkUrl(
-                Uri.parse(resolved),
-                viewType: viewType,
-              )
-            : VideoPlayerController.file(localFile!, viewType: viewType);
+        final ctrl = _createVideoController(
+          resolved,
+          localFile,
+          isRemote,
+          viewType,
+        );
         try {
           await ctrl.initialize();
           await ctrl.setVolume(1.0);
-          if (!mounted) {
+          if (!mounted || _videoDisposed) {
+            if (!initCompleter.isCompleted) initCompleter.complete();
             await ctrl.dispose();
             return;
           }
@@ -348,14 +349,17 @@ class _ReviewPageState extends State<ReviewPage> {
           final cachedFile = File(cachedPath);
           if (await cachedFile.exists()) {
             for (final viewType in _videoViewTypesForCurrentPlatform()) {
-              final ctrl = VideoPlayerController.file(
+              final ctrl = _createVideoController(
+                cachedPath,
                 cachedFile,
-                viewType: viewType,
+                false,
+                viewType,
               );
               try {
                 await ctrl.initialize();
                 await ctrl.setVolume(1.0);
-                if (!mounted) {
+                if (!mounted || _videoDisposed) {
+                  if (!initCompleter.isCompleted) initCompleter.complete();
                   await ctrl.dispose();
                   return;
                 }
@@ -397,6 +401,25 @@ class _ReviewPageState extends State<ReviewPage> {
 
   List<VideoViewType> _videoViewTypesForCurrentPlatform() {
     return const [VideoViewType.textureView];
+  }
+
+  VideoPlayerController _createVideoController(
+    String resolved,
+    File? localFile,
+    bool isRemote,
+    VideoViewType viewType,
+  ) {
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return isRemote
+          ? VideoPlayerController.networkUrl(Uri.parse(resolved))
+          : VideoPlayerController.file(localFile!);
+    }
+    return isRemote
+        ? VideoPlayerController.networkUrl(
+            Uri.parse(resolved),
+            viewType: viewType,
+          )
+        : VideoPlayerController.file(localFile!, viewType: viewType);
   }
 
   Future<void> _ensureAsrPrompts(Project project) async {
@@ -1002,11 +1025,14 @@ If in doubt, prefer these spellings as-is.
 
   @override
   void dispose() {
+    _videoDisposed = true;
     _endSession();
     _reviewTimerTicker?.cancel();
     _segmentStopTimer?.cancel();
     _pageController?.dispose();
-    _videoController?.dispose();
+    final controller = _videoController;
+    _videoController = null;
+    controller?.dispose();
     _speech.stop();
     _speech.cancel();
     _rec.dispose();
@@ -1036,20 +1062,14 @@ If in doubt, prefer these spellings as-is.
         }
 
         return PopScope(
-          canPop: _allowPop,
+          canPop: false,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_handlingPop) return;
             _handlingPop = true;
             try {
               final shouldPop = await _confirmExitIfDirty(project);
-              if (shouldPop && context.mounted) {
-                // Permitir el pop real antes de solicitarlo para evitar una
-                // reentrada del callback con canPop=false.
-                setState(() => _allowPop = true);
-                Navigator.of(context).pop();
-                return;
-              }
+              if (shouldPop && context.mounted) Navigator.of(context).pop();
             } catch (e) {
               debugPrint('Error while leaving project: $e');
             } finally {
