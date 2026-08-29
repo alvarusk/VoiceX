@@ -1046,7 +1046,7 @@ If in doubt, prefer these spellings as-is.
             _handlingPop = true;
             try {
               final shouldPop = await _confirmExitIfDirty(project);
-              if (shouldPop && mounted) {
+              if (shouldPop && context.mounted) {
                 // Permitir el pop real antes de solicitarlo para evitar una
                 // reentrada del callback con canPop=false.
                 setState(() => _allowPop = true);

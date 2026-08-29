@@ -28,16 +28,9 @@ class CloudStorage {
             data,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
           );
-<<<<<<< HEAD
-      return await client.storage.from(bucket).createSignedUrl(
-            path,
-            60 * 60 * 24 * 365,
-          );
-=======
       return await client.storage
           .from(bucket)
           .createSignedUrl(path, 60 * 60 * 24 * 365);
->>>>>>> 7fad2e91306943e65df739238313a535ccae2564
     } catch (e) {
       debugPrint(
         '[import.storage] upload failed bucket=$bucket path=$path error=$e',
