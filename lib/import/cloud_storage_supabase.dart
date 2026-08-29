@@ -26,7 +26,7 @@ class CloudStorage {
             data,
             fileOptions: FileOptions(contentType: contentType, upsert: true),
           );
-      return client.storage.from(bucket).createSignedUrl(
+      return await client.storage.from(bucket).createSignedUrl(
             path,
             60 * 60 * 24 * 365,
           );

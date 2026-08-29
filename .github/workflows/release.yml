@@ -595,7 +595,11 @@ jobs:
             local extension="$3"
             local env_name="$4"
 
-            security cms -D -i "$profile_path" > "$decoded_plist"
+            if ! security cms -D -i "$profile_path" > "$decoded_plist"; then
+              echo "Invalid Apple provisioning profile: $profile_path"
+              echo "Refresh the corresponding *_PROFILE_BASE64 GitHub secret with the base64 of the downloaded binary profile (not the .b64 text file)."
+              exit 1
+            fi
             local uuid
             local name
             uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" "$decoded_plist")
@@ -605,11 +609,15 @@ jobs:
           }
 
           IOS_PROFILE_PATH="$RUNNER_TEMP/voiceX-ios-appstore.mobileprovision"
-          printf '%s' "$APPLE_IOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$IOS_PROFILE_PATH"
+          printf '%s' "$APPLE_IOS_APPSTORE_PROFILE_BASE64" \
+            | tr -d '[:space:]' \
+            | base64 -D > "$IOS_PROFILE_PATH"
           install_profile "$IOS_PROFILE_PATH" "$RUNNER_TEMP/voiceX-ios-appstore.plist" "mobileprovision" "IOS_PROFILE_NAME"
 
           MACOS_PROFILE_PATH="$RUNNER_TEMP/voiceX-macos-appstore.provisionprofile"
-          printf '%s' "$APPLE_MACOS_APPSTORE_PROFILE_BASE64" | base64 --decode > "$MACOS_PROFILE_PATH"
+          printf '%s' "$APPLE_MACOS_APPSTORE_PROFILE_BASE64" \
+            | tr -d '[:space:]' \
+            | base64 -D > "$MACOS_PROFILE_PATH"
           install_profile "$MACOS_PROFILE_PATH" "$RUNNER_TEMP/voiceX-macos-appstore.plist" "provisionprofile" "MACOS_PROFILE_NAME"
 
       - name: Create Apple dart-defines file

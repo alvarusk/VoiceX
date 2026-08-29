@@ -39,6 +39,8 @@ class _ReviewPageState extends State<ReviewPage> {
   double _topPaneRatio = 0.6;
   bool _showVideoPanel = true;
   bool _showPromptPanel = true;
+  bool _allowPop = false;
+  bool _handlingPop = false;
   bool _sessionStarted = false;
   String _currentSubtitleText(SubtitleLine? line) {
     if (line == null) return '';
@@ -55,21 +57,17 @@ class _ReviewPageState extends State<ReviewPage> {
     return noTags.trim();
   }
 
-  String _currentPromptText(SubtitleLine? line) {
-    if (line == null) return '';
-    final fromSource = _braceGroupAt(line.sourceText ?? '', 1);
-    if (fromSource.isNotEmpty) return fromSource;
-    return _braceGroupAt(line.originalText, 1);
-  }
+  String _currentPromptText(SubtitleLine? _) {
+    // El prompt contiene instrucciones, no texto extraído del ASS. Los
+    // grupos entre llaves son tags/metadatos visuales y no forman parte del
+    // contenido que debe ver el transcriptor.
+    return '''Prompt para transcribir y revisar la línea actual:
 
-  String _braceGroupAt(String text, int index) {
-    final matches = RegExp(r'\{([^}]*)\}')
-        .allMatches(text)
-        .map((m) => (m.group(1) ?? '').trim())
-        .where((m) => m.isNotEmpty)
-        .toList();
-    if (index < 0 || index >= matches.length) return '';
-    return matches[index];
+• Escucha el diálogo y escribe exactamente lo que se dice.
+• Conserva nombres propios, términos técnicos y palabras clave.
+• Usa la puntuación y las mayúsculas naturales del idioma de destino.
+• No describas la imagen ni inventes información que no se escuche.
+• Si una palabra no está clara, márcala para revisarla en lugar de completarla.''';
   }
 
   void _cacheLineText(SubtitleLine line) {
@@ -283,9 +281,11 @@ class _ReviewPageState extends State<ReviewPage> {
 
     final path = await _svc.getVideoPath(project.projectId);
     if (path == null || path.isEmpty) {
-      setState(() {
-        _videoPath = path;
-      });
+      if (mounted) {
+        setState(() {
+          _videoPath = path;
+        });
+      }
       return;
     }
     final resolved = await _cloud.resolveVideoUrl(path);
@@ -299,10 +299,12 @@ class _ReviewPageState extends State<ReviewPage> {
         localFile = File(resolved);
         if (!await localFile.exists()) {
           debugPrint('Video not found at path: $path');
-          setState(() {
-            _videoPath = '';
-            _videoError = true;
-          });
+          if (mounted) {
+            setState(() {
+              _videoPath = '';
+              _videoError = true;
+            });
+          }
           return;
         }
       }
@@ -321,6 +323,10 @@ class _ReviewPageState extends State<ReviewPage> {
         try {
           await ctrl.initialize();
           await ctrl.setVolume(1.0);
+          if (!mounted) {
+            await ctrl.dispose();
+            return;
+          }
           _videoController = ctrl;
           _videoPath = resolved;
           if (!initCompleter.isCompleted) {
@@ -355,6 +361,10 @@ class _ReviewPageState extends State<ReviewPage> {
               try {
                 await ctrl.initialize();
                 await ctrl.setVolume(1.0);
+                if (!mounted) {
+                  await ctrl.dispose();
+                  return;
+                }
                 _videoController = ctrl;
                 _videoPath = cachedPath;
                 if (!initCompleter.isCompleted) {
@@ -380,12 +390,14 @@ class _ReviewPageState extends State<ReviewPage> {
     } catch (e, st) {
       debugPrint('Error al preparar video: $e');
       debugPrintStack(stackTrace: st);
-      setState(() {
-        _videoController = null;
-        _videoInit = null;
-        _videoError = true;
-        _videoPath = path;
-      });
+      if (mounted) {
+        setState(() {
+          _videoController = null;
+          _videoInit = null;
+          _videoError = true;
+          _videoPath = path;
+        });
+      }
     }
   }
 
@@ -395,7 +407,7 @@ class _ReviewPageState extends State<ReviewPage> {
       // `platformView` as a fallback for compatibility with other devices.
       return const [VideoViewType.textureView, VideoViewType.platformView];
     }
-    return const [VideoViewType.textureView];
+    return const [VideoViewType.textureView, VideoViewType.platformView];
   }
 
   Future<void> _seekVideoForIndex(String projectId, int idx) async {
@@ -1027,12 +1039,24 @@ If in doubt, prefer these spellings as-is.
         }
 
         return PopScope(
-          canPop: false,
+          canPop: _allowPop,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
-            final shouldPop = await _confirmExitIfDirty(project);
-            if (shouldPop && context.mounted) {
-              Navigator.of(context).pop();
+            if (_handlingPop) return;
+            _handlingPop = true;
+            try {
+              final shouldPop = await _confirmExitIfDirty(project);
+              if (shouldPop && mounted) {
+                // Permitir el pop real antes de solicitarlo para evitar una
+                // reentrada del callback con canPop=false.
+                setState(() => _allowPop = true);
+                Navigator.of(context).pop();
+                return;
+              }
+            } catch (e) {
+              debugPrint('Error while leaving project: $e');
+            } finally {
+              _handlingPop = false;
             }
           },
           child: Scaffold(
