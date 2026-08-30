@@ -17,6 +17,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // Disable Impeller on Windows because video_player_win uses external
+  // textures, which are currently unreliable with Impeller on this platform.
+  ::SetEnvironmentVariableW(L"FLUTTER_ENGINE_SWITCHES", L"1");
+  ::SetEnvironmentVariableW(L"FLUTTER_ENGINE_SWITCH_1",
+                            L"enable-impeller=false");
+
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =
