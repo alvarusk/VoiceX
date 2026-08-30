@@ -21,7 +21,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // textures, which are currently unreliable with Impeller on this platform.
   ::SetEnvironmentVariableW(L"FLUTTER_ENGINE_SWITCHES", L"1");
   ::SetEnvironmentVariableW(L"FLUTTER_ENGINE_SWITCH_1",
-                            L"enable-impeller=false");
+                            L"--enable-impeller=false");
 
   flutter::DartProject project(L"data");
 
