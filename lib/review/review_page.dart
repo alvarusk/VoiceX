@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_player_win/video_player_win.dart';
 import 'package:flutter/services.dart';
 import 'package:record/record.dart';
 import 'package:file_picker/file_picker.dart';
@@ -202,7 +201,7 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   PageController? _pageController;
-  dynamic _videoController;
+  VideoPlayerController? _videoController;
   Future<void>? _videoInit;
   String? _videoPath;
   bool _videoError = false;
@@ -317,12 +316,12 @@ class _ReviewPageState extends State<ReviewPage> {
 
       Object? lastError;
       for (final viewType in _videoViewTypesForCurrentPlatform()) {
-        final ctrl = _createVideoController(
-          resolved,
-          localFile,
-          isRemote,
-          viewType,
-        );
+        final ctrl = isRemote
+            ? VideoPlayerController.networkUrl(
+                Uri.parse(resolved),
+                viewType: viewType,
+              )
+            : VideoPlayerController.file(localFile!, viewType: viewType);
         try {
           await ctrl.initialize();
           await ctrl.setVolume(1.0);
@@ -358,11 +357,9 @@ class _ReviewPageState extends State<ReviewPage> {
           final cachedFile = File(cachedPath);
           if (await cachedFile.exists()) {
             for (final viewType in _videoViewTypesForCurrentPlatform()) {
-              final ctrl = _createVideoController(
-                cachedPath,
+              final ctrl = VideoPlayerController.file(
                 cachedFile,
-                false,
-                viewType,
+                viewType: viewType,
               );
               try {
                 await ctrl.initialize();
@@ -409,26 +406,10 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   List<VideoViewType> _videoViewTypesForCurrentPlatform() {
-    return const [VideoViewType.textureView];
-  }
-
-  dynamic _createVideoController(
-    String resolved,
-    File? localFile,
-    bool isRemote,
-    VideoViewType viewType,
-  ) {
-    if (defaultTargetPlatform == TargetPlatform.windows) {
-      return isRemote
-          ? WinVideoPlayerController.networkUrl(Uri.parse(resolved))
-          : WinVideoPlayerController.file(localFile!);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return const [VideoViewType.textureView, VideoViewType.platformView];
     }
-    return isRemote
-        ? VideoPlayerController.networkUrl(
-            Uri.parse(resolved),
-            viewType: viewType,
-          )
-        : VideoPlayerController.file(localFile!, viewType: viewType);
+    return const [VideoViewType.textureView];
   }
 
   Future<void> _ensureAsrPrompts(Project project) async {
@@ -1723,7 +1704,7 @@ class _VideoPanel extends StatelessWidget {
     required this.onHeightChanged,
   });
 
-  final dynamic controller;
+  final VideoPlayerController? controller;
   final Future<void>? initFuture;
   final bool error;
   final String? videoPath;
@@ -1770,8 +1751,8 @@ class _VideoPanel extends StatelessWidget {
             if (controller!.value.hasError) {
               return const Center(child: Text('Could not load the video.'));
             }
-            return ValueListenableBuilder<dynamic>(
-              valueListenable: controller as ValueListenable<dynamic>,
+            return ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: controller!,
               builder: (context, value, _) {
                 final aspect = value.aspectRatio == 0
                     ? 16 / 9
@@ -1799,10 +1780,7 @@ class _VideoPanel extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (controller is WinVideoPlayerController)
-                        WinVideoPlayer(controller as WinVideoPlayerController)
-                      else
-                        VideoPlayer(controller as VideoPlayerController),
+                      VideoPlayer(controller!),
                       if (showSubtitle)
                         Positioned(
                           left: 16,
@@ -1949,8 +1927,8 @@ class _VideoPanel extends StatelessWidget {
       return buildContent('--:--', '--:--');
     }
 
-    return ValueListenableBuilder<dynamic>(
-      valueListenable: controller as ValueListenable<dynamic>,
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller!,
       builder: (context, value, _) {
         final positionText = value.isInitialized
             ? _fmt(value.position)
