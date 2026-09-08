@@ -19,8 +19,7 @@ class ImportService {
   final _uuid = const Uuid();
 
   bool _isCartel(ParsedDialogue d) {
-    final name = (d.name ?? '').toLowerCase();
-    return name.contains('cartel');
+    return AssParser.isCartel(d);
   }
 
   Future<String> importProject({

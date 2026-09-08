@@ -1085,6 +1085,15 @@ If in doubt, prefer these spellings as-is.
                 ),
               ),
               actions: [
+                SizedBox(
+                  width: isMobile
+                      ? MediaQuery.sizeOf(context).width * 0.55
+                      : 600,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                 FutureBuilder<bool>(
                   future: _cloud.isProjectDirty(project.projectId),
                   builder: (context, snapDirty) {
@@ -1162,6 +1171,10 @@ If in doubt, prefer these spellings as-is.
                     projectId: project.projectId,
                   ),
                   tooltip: 'Export final ASS',
+                ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

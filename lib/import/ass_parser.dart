@@ -45,6 +45,15 @@ class ParsedAss {
 }
 
 class AssParser {
+  /// CARTEL lines are metadata/onscreen signs, not subtitle lines to review.
+  /// Different script generators place the marker in different ASS fields.
+  static bool isCartel(ParsedDialogue dialogue) {
+    return [dialogue.name, dialogue.style, dialogue.effect]
+        .whereType<String>()
+        .map((value) => value.trim().toLowerCase())
+        .any((value) => value.contains('cartel'));
+  }
+
   static ParsedAss parseAssLines(List<String> lines) {
     bool inEvents = false;
     List<String> formatFields = const [];

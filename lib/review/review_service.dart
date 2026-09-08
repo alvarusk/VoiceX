@@ -446,7 +446,9 @@ class ReviewService {
     }
     final file = File(path);
     if (!await file.exists()) return const [];
-    final dialogues = AssParser.parseAssLines(await file.readAsLines()).dialogues;
+    final dialogues = AssParser.parseAssLines(await file.readAsLines()).dialogues
+        .where((d) => !AssParser.isCartel(d))
+        .toList();
     return dialogues.map((d) {
       final groups = RegExp(r'\{([^}]*)\}')
           .allMatches(d.text)
