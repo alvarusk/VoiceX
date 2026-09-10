@@ -455,7 +455,14 @@ class ReviewService {
           .map((m) => (m.group(1) ?? '').trim())
           .where((value) => value.isNotEmpty)
           .toList();
-      return groups.length > 1 ? groups[1] : '';
+      if (groups.length <= 1) return '';
+
+      // Los prompts explicativos se generan en una sola línea usando la
+      // secuencia literal ASS "\\N". Flutter solo hace un salto si recibe
+      // el carácter de nueva línea real.
+      return groups[1]
+          .replaceAll(r'\N', '\n')
+          .replaceAll(r'\n', '\n');
     }).toList();
   }
 
