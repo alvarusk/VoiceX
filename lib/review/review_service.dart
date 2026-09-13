@@ -440,8 +440,10 @@ class ReviewService {
       )).getSingleOrNull();
       path = project?.baseAssPath;
     }
-    if (path == null || path.isEmpty ||
-        !p.basenameWithoutExtension(path).toLowerCase().contains('_asr')) {
+    // The file is already identified by its project_files.engine == 'asr'.
+    // CloudSync materializes remote ASR files as `asr.ass`, so requiring the
+    // original `_asr` filename makes all prompts appear empty on mobile.
+    if (path == null || path.isEmpty) {
       return const [];
     }
     final file = File(path);
