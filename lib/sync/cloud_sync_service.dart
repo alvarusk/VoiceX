@@ -201,6 +201,46 @@ class CloudSyncService {
     await _ensureR2EnvLoaded();
   }
 
+  /// Ensures that a project subtitle file is available as a local file.
+  ///
+  /// Mobile clients can receive the cloud URL before the file has been
+  /// materialized. Consumers such as the ASR prompt reader need a stable
+  /// local path because dart:io File cannot read an https URL.
+  Future<String?> materializeProjectFile(
+    String projectId,
+    String engine,
+  ) async {
+    final row =
+        await (db.select(db.projectFiles)..where(
+              (t) =>
+                  t.projectId.equals(projectId) & t.engine.equals(engine),
+            ))
+            .getSingleOrNull();
+    if (row == null || row.assPath.isEmpty) return null;
+
+    final current = File(row.assPath);
+    if (!_looksLikeUrl(row.assPath) && await current.exists()) {
+      return current.path;
+    }
+    if (!_looksLikeUrl(row.assPath)) return null;
+
+    await ensureInit();
+    final localPath = await _materializeFile(projectId, engine, row.assPath);
+    if (localPath == null) return null;
+
+    await (db.update(db.projectFiles)..where(
+          (t) => t.fileId.equals(row.fileId),
+        ))
+        .write(ProjectFilesCompanion(assPath: Value(localPath)));
+    if (engine == 'base') {
+      await (db.update(db.projects)..where(
+            (t) => t.projectId.equals(projectId),
+          ))
+          .write(ProjectsCompanion(baseAssPath: Value(localPath)));
+    }
+    return localPath;
+  }
+
   Future<void> syncSettingsOnly() async {
     if (!isReady) return;
     await _syncSettings();

@@ -212,6 +212,8 @@ class _ReviewPageState extends State<ReviewPage> {
   final Map<String, String> _lineTextCache = {};
   List<String> _asrPrompts = const [];
   String? _asrPromptsProjectId;
+  bool _asrPromptsLoading = false;
+  bool _asrPromptRetryScheduled = false;
 
   // Toggles de visibilidad (MVP: en memoria)
   bool showGpt = true;
@@ -413,10 +415,44 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _ensureAsrPrompts(Project project) async {
-    if (_asrPromptsProjectId == project.projectId) return;
-    _asrPromptsProjectId = project.projectId;
-    final prompts = await _svc.loadAsrPrompts(project.projectId);
-    if (mounted) setState(() => _asrPrompts = prompts);
+    if (_asrPromptsProjectId == project.projectId || _asrPromptsLoading) {
+      return;
+    }
+    _asrPromptRetryScheduled = false;
+    _asrPromptsLoading = true;
+    // On mobile the sync can expose the cloud URL before the ASS has been
+    // downloaded. Materialize it before asking dart:io to parse it.
+    try {
+      try {
+        await _cloud.materializeProjectFile(project.projectId, 'asr');
+        await _cloud.materializeProjectFile(project.projectId, 'base');
+      } catch (error) {
+        debugPrint('Could not materialize ASR prompt file: $error');
+      }
+
+      final prompts = await _svc.loadAsrPrompts(project.projectId);
+      if (!mounted) return;
+
+      _asrPromptsProjectId = project.projectId;
+      if (prompts.isNotEmpty) {
+        _asrPromptRetryScheduled = false;
+        setState(() => _asrPrompts = prompts);
+        return;
+      }
+
+      setState(() => _asrPrompts = const []);
+      if (!_asrPromptRetryScheduled) {
+        _asrPromptRetryScheduled = true;
+        Future<void>.delayed(const Duration(seconds: 2), () {
+          if (!mounted || _asrPromptsProjectId != project.projectId) return;
+          _asrPromptsProjectId = null;
+          _asrPromptRetryScheduled = false;
+          setState(() {});
+        });
+      }
+    } finally {
+      _asrPromptsLoading = false;
+    }
   }
 
   Future<void> _seekVideoForIndex(String projectId, int idx) async {
