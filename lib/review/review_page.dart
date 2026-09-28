@@ -1248,13 +1248,14 @@ If in doubt, prefer these spellings as-is.
                           final mobilePromptHeight = screenHeight * 0.24 < 120
                               ? 120.0
                               : math.min(220.0, screenHeight * 0.24).toDouble();
+                          const reviewControlsHeight = 56.0;
 
                           return Stack(
                             children: [
                               SingleChildScrollView(
                                 padding: const EdgeInsets.fromLTRB(
                                   0,
-                                  0,
+                                  reviewControlsHeight,
                                   0,
                                   104,
                                 ),
@@ -1262,67 +1263,6 @@ If in doubt, prefer these spellings as-is.
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        8,
-                                        12,
-                                        0,
-                                      ),
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            FilterChip(
-                                              selected: _showVideoPanel,
-                                              label: const Text('Video'),
-                                              avatar: const Icon(
-                                                Icons.video_file,
-                                                size: 18,
-                                              ),
-                                              showCheckmark: false,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              materialTapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                              onSelected: (selected) {
-                                                setState(() {
-                                                  _showVideoPanel = selected;
-                                                });
-                                              },
-                                            ),
-                                            FilterChip(
-                                              selected: _showPromptPanel,
-                                              label: const Text('Prompt'),
-                                              avatar: const Icon(
-                                                Icons.notes,
-                                                size: 18,
-                                              ),
-                                              showCheckmark: false,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              materialTapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                              onSelected: (selected) {
-                                                setState(() {
-                                                  _showPromptPanel = selected;
-                                                });
-                                              },
-                                            ),
-                                            _ReviewTimerControl(
-                                              elapsed: _reviewTimerValue,
-                                              running: _reviewTimerRunning,
-                                              onToggle: _toggleReviewTimer,
-                                              onReset: _resetReviewTimer,
-                                              dense: true,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
                                     if (_showVideoPanel)
                                       _VideoPanel(
                                         controller: _videoController,
@@ -1387,6 +1327,81 @@ If in doubt, prefer these spellings as-is.
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                child: Material(
+                                  color: Theme.of(
+                                    context,
+                                  ).scaffoldBackgroundColor,
+                                  elevation: 2,
+                                  child: SizedBox(
+                                    height: reviewControlsHeight,
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        8,
+                                        12,
+                                        0,
+                                      ),
+                                      child: SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FilterChip(
+                                              selected: _showVideoPanel,
+                                              label: const Text('Video'),
+                                              avatar: const Icon(
+                                                Icons.video_file,
+                                                size: 18,
+                                              ),
+                                              showCheckmark: false,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              onSelected: (selected) {
+                                                setState(() {
+                                                  _showVideoPanel = selected;
+                                                });
+                                              },
+                                            ),
+                                            FilterChip(
+                                              selected: _showPromptPanel,
+                                              label: const Text('Prompt'),
+                                              avatar: const Icon(
+                                                Icons.notes,
+                                                size: 18,
+                                              ),
+                                              showCheckmark: false,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              onSelected: (selected) {
+                                                setState(() {
+                                                  _showPromptPanel = selected;
+                                                });
+                                              },
+                                            ),
+                                            _ReviewTimerControl(
+                                              elapsed: _reviewTimerValue,
+                                              running: _reviewTimerRunning,
+                                              onToggle: _toggleReviewTimer,
+                                              onReset: _resetReviewTimer,
+                                              dense: true,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                               Positioned(
