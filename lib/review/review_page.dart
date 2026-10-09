@@ -1348,11 +1348,14 @@ If in doubt, prefer these spellings as-is.
                                         12,
                                         0,
                                       ),
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: SingleChildScrollView(
+                                              scrollDirection: Axis.horizontal,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
                                             FilterChip(
                                               selected: _showVideoPanel,
                                               label: const Text('Video'),
@@ -1398,31 +1401,41 @@ If in doubt, prefer these spellings as-is.
                                               onReset: _resetReviewTimer,
                                               dense: true,
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left: 16,
-                                bottom: 16,
-                                child: SafeArea(
-                                  minimum: const EdgeInsets.only(bottom: 8),
-                                  child: Opacity(
-                                    opacity: 0.65,
-                                    child: FloatingActionButton(
-                                      heroTag: 'review-mic',
-                                      onPressed:
-                                          _currentLine == null || _recBusy
-                                          ? null
-                                          : () => _toggleVoiceInput(
-                                              project,
-                                              _currentLine!,
-                                              total,
+                                                ],
+                                              ),
                                             ),
-                                      child: const Icon(Icons.mic),
+                                          ),
+                                          // Keep the microphone in the fixed
+                                          // mobile toolbar, outside the
+                                          // horizontally scrollable controls.
+                                          IconButton(
+                                            tooltip: _isRecording ||
+                                                    _speech.isListening
+                                                ? 'Stop microphone'
+                                                : 'Speak',
+                                            icon: Icon(
+                                              _isRecording ||
+                                                      _speech.isListening
+                                                  ? Icons.stop_circle
+                                                  : Icons.mic,
+                                            ),
+                                            color: _isRecording ||
+                                                    _speech.isListening
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .error
+                                                : null,
+                                            onPressed: _currentLine == null ||
+                                                    _recBusy
+                                                ? null
+                                                : () => _toggleVoiceInput(
+                                                    project,
+                                                    _currentLine!,
+                                                    total,
+                                                  ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
