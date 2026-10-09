@@ -770,7 +770,8 @@ class _ReviewPageState extends State<ReviewPage> {
     if (_videoController == null || _videoInit == null) return;
     final start = Duration(milliseconds: line.startMs);
     final end = Duration(milliseconds: line.endMs);
-    final dur = end - start;
+    // Give the reviewer one second of context after the subtitle ends.
+    final dur = end - start + const Duration(seconds: 1);
     if (dur <= Duration.zero) return;
 
     try {

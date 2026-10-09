@@ -62,7 +62,7 @@ class ExportService {
 
     int firstDialogue = -1;
     for (int i = eventsStart; i < baseLines.length; i++) {
-      if (baseLines[i].startsWith('Dialogue:')) {
+      if (baseLines[i].trimLeft().startsWith('Dialogue:')) {
         firstDialogue = i;
         break;
       }
@@ -71,7 +71,12 @@ class ExportService {
       throw ExportBlockedException('Base ASS has no Dialogue: lines.');
     }
 
+    // `eventsRowIndex` pertenece al ASS que se importó. Puede dejar de
+    // coincidir con el archivo base si este se reescribe (por ejemplo, al
+    // añadir/quitar comentarios). Conservamos varios índices para que una
+    // traducción seleccionada nunca se pierda por un desplazamiento de filas.
     final byEventRow = {for (final l in lines) l.eventsRowIndex: l};
+    final byDialogueIndex = {for (final l in lines) l.dialogueIndex: l};
     final useDialogueIndexFallback =
         _countDialogueLines(baseLines) == lines.length;
     var needsGenItalicsStyle = false;
@@ -79,15 +84,20 @@ class ExportService {
     int dialogueCursor = 0;
     for (int row = firstDialogue; row < baseLines.length; row++) {
       final raw = baseLines[row];
-      final isDialogue = raw.startsWith('Dialogue:');
-      if (!isDialogue && !raw.startsWith('Comment:')) continue;
+      final normalizedRaw = raw.trimLeft();
+      final isDialogue = normalizedRaw.startsWith('Dialogue:');
+      if (!isDialogue && !normalizedRaw.startsWith('Comment:')) continue;
 
       final absoluteIndex = row;
       final relativeIndex = row - firstDialogue;
       SubtitleLine? match =
           byEventRow[absoluteIndex] ?? byEventRow[relativeIndex];
-      if (match == null && useDialogueIndexFallback && isDialogue) {
-        if (dialogueCursor < lines.length) {
+      if (match == null && isDialogue) {
+        // The dialogue ordinal is stable even when metadata or Comment rows
+        // have been inserted before the event being exported.
+        match = byDialogueIndex[dialogueCursor];
+        if (match == null && useDialogueIndexFallback &&
+            dialogueCursor < lines.length) {
           match = lines[dialogueCursor];
         }
       }
@@ -198,7 +208,7 @@ class ExportService {
       if (line.startsWith('[') && !line.toLowerCase().startsWith('[events]')) {
         break;
       }
-      if (line.startsWith('Dialogue:')) {
+      if (line.trimLeft().startsWith('Dialogue:')) {
         count++;
       }
     }

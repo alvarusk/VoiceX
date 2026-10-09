@@ -266,7 +266,10 @@ class _VoiceXAppState extends State<VoiceXApp> {
 class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final asset = defaultTargetPlatform == TargetPlatform.windows
+    final isDesktop = defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    final asset = isDesktop
         ? 'assets/voicex_splash_pc.png'
         : 'assets/voicex_splash_phone.png';
     return Scaffold(

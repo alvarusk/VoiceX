@@ -47,6 +47,7 @@ These changes were needed for a successful build/archive flow:
   - add user-selected file read/write
   - add network client
 - `macos/Runner/Release.entitlements`
+  - keep JIT, microphone, user-selected files, and network entitlements enabled
   - add audio input
   - add user-selected file read/write
   - add network client
