@@ -57,6 +57,10 @@ dependencies:
   url_launcher: ^6.3.0
   in_app_update: ^5.0.0
 
+dependency_overrides:
+  speech_to_text_windows:
+    path: third_party/speech_to_text_windows
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

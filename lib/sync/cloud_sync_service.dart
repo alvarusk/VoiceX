@@ -49,6 +49,10 @@ class CloudSyncException implements Exception {
 class CloudSyncService {
   CloudSyncService(this.db);
 
+  // A UI timeout does not cancel a Future. Keep the upload shared until it
+  // really finishes so retrying cannot start a competing upload.
+  static final _uploads = Expando<Map<String, Future<bool>>>();
+
   final AppDatabase db;
   final _supabase = SupabaseManager.instance;
   final _prefs = SyncPrefs();
@@ -249,7 +253,7 @@ class CloudSyncService {
   Future<bool> isProjectDirty(String projectId) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final cached = _dirtyCache[projectId];
-    if (cached != null && (now - cached.checkedAtMs) < 5000) {
+    if (cached != null && cached.isDirty && (now - cached.checkedAtMs) < 5000) {
       return cached.isDirty;
     }
 
@@ -547,6 +551,22 @@ class CloudSyncService {
     String projectId, {
     void Function(double value, String stage)? onProgress,
   }) async {
+    final uploads = _uploads[db] ??= <String, Future<bool>>{};
+    final existing = uploads[projectId];
+    if (existing != null) return existing;
+    final upload = _pushProject(projectId, onProgress: onProgress);
+    uploads[projectId] = upload;
+    try {
+      return await upload;
+    } finally {
+      uploads.remove(projectId);
+    }
+  }
+
+  Future<bool> _pushProject(
+    String projectId, {
+    void Function(double value, String stage)? onProgress,
+  }) async {
     if (!isReady) {
       _throwCloudSyncException(
         'pushProject',
@@ -559,6 +579,9 @@ class CloudSyncService {
     }
     await _ensureR2EnvLoaded();
     try {
+      // Only acknowledge the data captured before the upload, never edits
+      // made while files and lines are still being sent.
+      final snapshotAtMs = DateTime.now().millisecondsSinceEpoch - 1;
       final project = await (db.select(
         db.projects,
       )..where((t) => t.projectId.equals(projectId))).getSingle();
@@ -769,15 +792,8 @@ class CloudSyncService {
       await _upsertLinesInBatches(lines);
       onProgress?.call(1.0, 'Completed');
 
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      await _prefs.setLastSynced(projectId, nowMs);
-      await (db.update(db.projects)
-            ..where((t) => t.projectId.equals(projectId)))
-          .write(ProjectsCompanion(updatedAtMs: Value(nowMs)));
-      _dirtyCache[projectId] = _DirtyCacheEntry(
-        checkedAtMs: nowMs,
-        isDirty: false,
-      );
+      await _prefs.setLastSynced(projectId, snapshotAtMs);
+      _dirtyCache.remove(projectId);
       return true;
     } on CloudSyncException {
       rethrow;

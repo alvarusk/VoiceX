@@ -12,13 +12,16 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 /// En Windows, speech_to_text suele no estar implementado -> atrapamos
 /// MissingPluginException y marcamos `available=false`.
 class SpeechService {
-  SpeechService._();
+  SpeechService._() : _speech = stt.SpeechToText();
+  @visibleForTesting
+  SpeechService.forTesting(this._speech);
   static final SpeechService instance = SpeechService._();
 
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  final stt.SpeechToText _speech;
 
   bool _initAttempted = false;
   bool _initializedOk = false;
+  Future<bool>? _initializing;
 
   /// Disponible y permisos OK (según initialize()).
   final ValueNotifier<bool> available = ValueNotifier<bool>(false);
@@ -33,11 +36,13 @@ class SpeechService {
   final ValueNotifier<String> finalText = ValueNotifier<String>('');
 
   List<stt.LocaleName> _locales = const [];
-  String? preferredLocale = 'es-ES';
+  String? _spanishLocale;
 
   bool get isListening => _speech.isListening;
 
-  Future<bool> ensureInitialized() async {
+  Future<bool> ensureInitialized() => _initializing ??= _initialize();
+
+  Future<bool> _initialize() async {
     if (_initAttempted) return _initializedOk;
 
     _initAttempted = true;
@@ -61,22 +66,26 @@ class SpeechService {
       ok = false;
     }
 
-    _initializedOk = ok;
-    available.value = ok;
-
     if (ok) {
       try {
         _locales = await _speech.locales();
-        // Añade override aunque no esté anunciado, para intentar forzar es-ES si el paquete está instalado.
-        if (preferredLocale != null &&
-            !_locales.any((l) => l.localeId.toLowerCase() == preferredLocale!.toLowerCase())) {
-          _locales = List<stt.LocaleName>.from(_locales)
-            ..add(stt.LocaleName(preferredLocale!, preferredLocale!));
+        for (final locale in _locales) {
+          final id = locale.localeId.replaceAll('_', '-').toLowerCase();
+          if (id == 'es' || id.startsWith('es-')) {
+            _spanishLocale ??= locale.localeId;
+            if (id == 'es-es') {
+              _spanishLocale = locale.localeId;
+              break;
+            }
+          }
         }
       } catch (_) {
         _locales = const [];
       }
     }
+    ok = ok && _spanishLocale != null;
+    _initializedOk = ok;
+    available.value = ok;
     return ok;
   }
 
@@ -87,7 +96,6 @@ class SpeechService {
 
   /// Empieza a escuchar y llama a `onResult` cuando el plugin marque finalResult.
   Future<void> listen({
-    String? localeId,
     required FutureOr<void> Function(String text) onResult,
   }) async {
     final ok = await ensureInitialized();
@@ -96,17 +104,9 @@ class SpeechService {
     partial.value = '';
     finalText.value = '';
 
-    String? targetLocale = localeId;
-    final pref = preferredLocale;
-    if ((targetLocale == null || targetLocale.isEmpty) &&
-        pref != null &&
-        _locales.any((l) => l.localeId.toLowerCase() == pref.toLowerCase())) {
-      targetLocale = pref;
-    }
-
     try {
       await _speech.listen(
-        localeId: targetLocale,
+        localeId: _spanishLocale!,
         listenMode: stt.ListenMode.dictation,
         partialResults: true,
         onResult: (res) async {
@@ -118,7 +118,7 @@ class SpeechService {
           }
         },
       );
-      listening.value = true;
+      listening.value = _speech.isListening;
     } on MissingPluginException {
       available.value = false;
       listening.value = false;

@@ -34,7 +34,9 @@ class _ReviewPageState extends State<ReviewPage> {
   late final CloudSyncService _cloud = CloudSyncService(widget.db);
   final ApiCostLogger _costLogger = ApiCostLogger();
   final _speech = SpeechService.instance;
-  String? _localeId;
+  late final Stream<Project> _projectStream;
+  late final Stream<int> _totalLinesStream;
+  final Map<int, Stream<SubtitleLine>> _lineStreams = {};
   double _videoHeight = 260;
   double _topPaneRatio = 0.6;
   bool _showVideoPanel = true;
@@ -134,8 +136,7 @@ class _ReviewPageState extends State<ReviewPage> {
     );
     if (res == 'exit') return true;
     if (res == 'save') {
-      await _saveToCloud(project);
-      return true;
+      return await _saveToCloud(project);
     }
     return false;
   }
@@ -205,6 +206,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Future<void>? _videoInit;
   String? _videoPath;
   bool _videoError = false;
+  bool _videoLoadStarted = false;
   bool _videoDisposed = false;
   SubtitleLine? _currentLine;
   Future<List<LineTiming>>? _timingsFuture;
@@ -213,7 +215,8 @@ class _ReviewPageState extends State<ReviewPage> {
   List<String> _asrPrompts = const [];
   String? _asrPromptsProjectId;
   bool _asrPromptsLoading = false;
-  bool _asrPromptRetryScheduled = false;
+  bool _asrPromptRetryAttempted = false;
+  Timer? _asrPromptRetryTimer;
 
   // Toggles de visibilidad (MVP: en memoria)
   bool showGpt = true;
@@ -241,49 +244,28 @@ class _ReviewPageState extends State<ReviewPage> {
   @override
   void initState() {
     super.initState();
+    _projectStream = _svc.watchProject(widget.projectId);
+    _totalLinesStream = _svc.watchTotalLines(widget.projectId);
     if (defaultTargetPlatform == TargetPlatform.android) {
       _videoHeight = 220;
       _showPromptPanel = false;
     }
-    _initSpeechLocale();
-    _speech.listening.addListener(() {
-      if (mounted) setState(() {});
-    });
-    _speech.available.addListener(() {
-      if (mounted) setState(() {});
-    });
+    _speech.listening.addListener(_onSpeechChanged);
+    _speech.available.addListener(_onSpeechChanged);
+    unawaited(_speech.ensureInitialized());
   }
 
-  Future<void> _initSpeechLocale() async {
-    final ok = await _speech.ensureInitialized();
-    if (!ok) return;
-    final locales = await _speech.locales();
-    if (locales.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'STT: no voice packages are installed on Windows. Add a voice language in Settings.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-    // Preferimos es-ES si existe
-    _localeId = locales
-        .firstWhere(
-          (l) => l.localeId.toLowerCase().startsWith('es'),
-          orElse: () => locales.first,
-        )
-        .localeId;
-    setState(() {});
+  void _onSpeechChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _ensureVideo(Project project) async {
-    if (!mounted || _videoDisposed || _videoInit != null || _videoError) return;
+    if (!mounted || _videoDisposed || _videoLoadStarted) return;
+    // Guard before the first await, including projects without a video.
+    _videoLoadStarted = true;
 
     final path = await _svc.getVideoPath(project.projectId);
+    if (!mounted || _videoDisposed) return;
     if (path == null || path.isEmpty) {
       if (mounted) {
         setState(() {
@@ -418,7 +400,6 @@ class _ReviewPageState extends State<ReviewPage> {
     if (_asrPromptsProjectId == project.projectId || _asrPromptsLoading) {
       return;
     }
-    _asrPromptRetryScheduled = false;
     _asrPromptsLoading = true;
     // On mobile the sync can expose the cloud URL before the ASS has been
     // downloaded. Materialize it before asking dart:io to parse it.
@@ -435,18 +416,16 @@ class _ReviewPageState extends State<ReviewPage> {
 
       _asrPromptsProjectId = project.projectId;
       if (prompts.isNotEmpty) {
-        _asrPromptRetryScheduled = false;
         setState(() => _asrPrompts = prompts);
         return;
       }
 
       setState(() => _asrPrompts = const []);
-      if (!_asrPromptRetryScheduled) {
-        _asrPromptRetryScheduled = true;
-        Future<void>.delayed(const Duration(seconds: 2), () {
+      if (!_asrPromptRetryAttempted) {
+        _asrPromptRetryAttempted = true;
+        _asrPromptRetryTimer = Timer(const Duration(seconds: 2), () {
           if (!mounted || _asrPromptsProjectId != project.projectId) return;
           _asrPromptsProjectId = null;
-          _asrPromptRetryScheduled = false;
           setState(() {});
         });
       }
@@ -507,7 +486,8 @@ class _ReviewPageState extends State<ReviewPage> {
   }
 
   Future<void> _ensureTimingsFuture(String projectId) async {
-    _timingsFuture ??= _svc.fetchLineTimings(projectId);
+    if (_timingsFuture != null) return;
+    _timingsFuture = _svc.fetchLineTimings(projectId);
     final list = await _timingsFuture!;
     if (mounted) {
       setState(() {
@@ -701,6 +681,7 @@ class _ReviewPageState extends State<ReviewPage> {
       _videoController = null;
       _videoInit = null;
       _videoError = false;
+      _videoLoadStarted = false;
       _videoPath = null;
       _initialSeekDone = false;
       await _ensureVideo(project);
@@ -895,12 +876,11 @@ class _ReviewPageState extends State<ReviewPage> {
     int total,
   ) async {
     await _speech.listen(
-      localeId: _localeId,
       onResult: (txt) async {
         await _handleVoiceInputResult(txt, project, line, total);
       },
     );
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _toggleVoiceInput(
@@ -929,7 +909,11 @@ class _ReviewPageState extends State<ReviewPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('speech_to_text is not available on this device.'),
+          content: Text(
+            'El dictado en español no está disponible. Comprueba los permisos '
+            'del micrófono e instala el reconocimiento de voz en español '
+            'en el dispositivo.',
+          ),
         ),
       );
       return;
@@ -987,9 +971,11 @@ class _ReviewPageState extends State<ReviewPage> {
 
       final client = OpenAiService(apiKey: settings.openAiKey);
       final glossary = settings.getGlossaryForFolder(project.folder).trim();
-      String? prompt;
+      var prompt =
+          'Transcribe el dictado en español. El hablante habla español. '
+          'Conserva el español aunque haya audio de fondo en otro idioma.';
       if (glossary.isNotEmpty) {
-        prompt =
+        prompt +=
             '''
 Transcribe into Spanish, preserving these names and terms exactly as written (even if the pronunciation sounds different):
 $glossary
@@ -1052,9 +1038,12 @@ If in doubt, prefer these spellings as-is.
 
   @override
   void dispose() {
+    _speech.listening.removeListener(_onSpeechChanged);
+    _speech.available.removeListener(_onSpeechChanged);
     _videoDisposed = true;
     _endSession();
     _reviewTimerTicker?.cancel();
+    _asrPromptRetryTimer?.cancel();
     _segmentStopTimer?.cancel();
     _pageController?.dispose();
     final controller = _videoController;
@@ -1069,7 +1058,7 @@ If in doubt, prefer these spellings as-is.
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Project>(
-      stream: _svc.watchProject(widget.projectId),
+      stream: _projectStream,
       builder: (context, snapProject) {
         final project = snapProject.data;
         if (project == null) {
@@ -1165,7 +1154,7 @@ If in doubt, prefer these spellings as-is.
                   ),
                 ),
                 StreamBuilder<int>(
-                  stream: _svc.watchTotalLines(widget.projectId),
+                  stream: _totalLinesStream,
                   builder: (context, totalSnap) {
                     final total = totalSnap.data ?? 0;
                     final currentLine = project.currentIndex + 1;
@@ -1216,7 +1205,7 @@ If in doubt, prefer these spellings as-is.
               ],
             ),
             body: StreamBuilder<int>(
-              stream: _svc.watchTotalLines(widget.projectId),
+              stream: _totalLinesStream,
               builder: (context, snapTotal) {
                 final total = snapTotal.data ?? 0;
                 if (total == 0) {
@@ -1606,13 +1595,16 @@ If in doubt, prefer these spellings as-is.
       itemCount: total,
       itemBuilder: (context, idx) {
         return StreamBuilder<SubtitleLine>(
-          stream: _svc.watchLine(project.projectId, idx),
+          stream: _lineStreams.putIfAbsent(
+            idx,
+            () => _svc.watchLine(project.projectId, idx),
+          ),
           builder: (context, snapLine) {
             final line = snapLine.data;
             if (line == null) {
               return const Center(child: CircularProgressIndicator());
             }
-            _currentLine = line;
+            if (idx == project.currentIndex) _currentLine = line;
             _cacheLineText(line);
 
             final voiceMode = SettingsService.instance.voiceInputMode;
@@ -1661,7 +1653,7 @@ If in doubt, prefer these spellings as-is.
     );
   }
 
-  Future<void> _saveToCloud(Project project) async {
+  Future<bool> _saveToCloud(Project project) async {
     await _cloud.ensureInit();
     if (!_cloud.isReady) {
       if (mounted) {
@@ -1671,15 +1663,14 @@ If in doubt, prefer these spellings as-is.
           ),
         );
       }
-      return;
+      return false;
     }
-    if (_savingCloud) return;
+    if (_savingCloud || !mounted) return false;
     setState(() => _savingCloud = true);
 
-    if (!mounted) return;
-
+    var observingProgress = true;
     final notifier = ValueNotifier<String>('Saving...');
-    showDialog(
+    final dialogClosed = showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => PopScope(
@@ -1710,6 +1701,7 @@ If in doubt, prefer these spellings as-is.
           .pushProject(
             project.projectId,
             onProgress: (v, stage) {
+              if (!observingProgress) return;
               final pct = (v * 100).toInt();
               notifier.value = '$stage ($pct %)';
             },
@@ -1723,7 +1715,11 @@ If in doubt, prefer these spellings as-is.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Upload canceled because it took too long.'),
+            content: Text(
+              'La subida está tardando demasiado y puede seguir en curso. '
+              'Tus cambios siguen guardados en este dispositivo; puedes '
+              'volver a comprobar el guardado.',
+            ),
           ),
         );
       }
@@ -1745,7 +1741,10 @@ If in doubt, prefer these spellings as-is.
         ).showSnackBar(const SnackBar(content: Text('Error saving to cloud.')));
       }
     } finally {
+      observingProgress = false;
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      await dialogClosed;
+      notifier.dispose();
     }
 
     if (mounted && ok) {
@@ -1755,6 +1754,7 @@ If in doubt, prefer these spellings as-is.
       setState(() {}); // refresca indicadores de suciedad
     }
     if (mounted) setState(() => _savingCloud = false);
+    return ok;
   }
 }
 
