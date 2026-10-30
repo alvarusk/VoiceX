@@ -435,9 +435,9 @@ class ReviewService {
             .getSingleOrNull();
     var path = row?.assPath;
     if (path == null || path.isEmpty) {
-      final project = await (db.select(db.projects)..where(
-        (t) => t.projectId.equals(projectId),
-      )).getSingleOrNull();
+      final project = await (db.select(
+        db.projects,
+      )..where((t) => t.projectId.equals(projectId))).getSingleOrNull();
       path = project?.baseAssPath;
     }
     // The file is already identified by its project_files.engine == 'asr'.
@@ -448,24 +448,87 @@ class ReviewService {
     }
     final file = File(path);
     if (!await file.exists()) return const [];
-    final dialogues = AssParser.parseAssLines(await file.readAsLines()).dialogues
-        .where((d) => !AssParser.isCartel(d))
-        .toList();
-    return dialogues.map((d) {
+    final dialogues = AssParser.parseAssLines(
+      await file.readAsLines(),
+    ).dialogues.where((d) => !AssParser.isCartel(d)).toList();
+    final lines =
+        await (db.select(db.subtitleLines)
+              ..where((t) => t.projectId.equals(projectId))
+              ..orderBy([(t) => OrderingTerm.asc(t.dialogueIndex)]))
+            .get();
+    if (lines.isEmpty) return const [];
+    final prompts = List.filled(lines.last.dialogueIndex + 1, '');
+    final byTime = <(int, int), List<ParsedDialogue>>{};
+    final linesByTime = <(int, int), List<SubtitleLine>>{};
+    for (final d in dialogues) {
+      (byTime[(d.startMs, d.endMs)] ??= []).add(d);
+    }
+    for (final line in lines) {
+      (linesByTime[(line.startMs, line.endMs)] ??= []).add(line);
+    }
+
+    String source(String text) => text
+        .replaceAll(RegExp(r'\{[^}]*\}'), '')
+        .replaceAll(r'\N', ' ')
+        .replaceAll(r'\n', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    void assign(SubtitleLine line, ParsedDialogue d) {
       final groups = RegExp(r'\{([^}]*)\}')
           .allMatches(d.text)
           .map((m) => (m.group(1) ?? '').trim())
-          .where((value) => value.isNotEmpty)
+          // Formatting overrides are not romanization/prompt annotations.
+          // Keep empty annotation slots so an empty romanization cannot shift
+          // the explanatory prompt into the first slot.
+          .where((value) => !value.startsWith(r'\'))
           .toList();
-      if (groups.length <= 1) return '';
+      if (groups.length <= 1) return;
 
       // Los prompts explicativos se generan en una sola línea usando la
       // secuencia literal ASS "\\N". Flutter solo hace un salto si recibe
       // el carácter de nueva línea real.
-      return groups[1]
+      prompts[line.dialogueIndex] = groups[1]
           .replaceAll(r'\N', '\n')
           .replaceAll(r'\n', '\n');
-    }).toList();
+    }
+
+    for (final entry in linesByTime.entries) {
+      final pending = List.of(entry.value);
+      final candidates = List.of(byTime[entry.key] ?? <ParsedDialogue>[]);
+
+      // Simultaneous subtitles can share both timestamps. Resolve unique text
+      // matches first, then unique speaker/style/effect matches, before using
+      // occurrence order for otherwise indistinguishable, equally sized groups.
+      void matchUnique(
+        Object Function(SubtitleLine) lineKey,
+        Object Function(ParsedDialogue) dialogueKey,
+      ) {
+        for (final line in List.of(pending)) {
+          final key = lineKey(line);
+          if (pending.where((l) => lineKey(l) == key).length != 1) continue;
+          final matches = candidates
+              .where((d) => dialogueKey(d) == key)
+              .toList();
+          if (matches.length != 1) continue;
+          assign(line, matches.single);
+          pending.remove(line);
+          candidates.remove(matches.single);
+        }
+      }
+
+      matchUnique((l) => source(l.originalText), (d) => source(d.text));
+      matchUnique(
+        (l) => (l.style, l.name, l.effect),
+        (d) => (d.style, d.name, d.effect),
+      );
+      if (pending.length == candidates.length) {
+        for (var i = 0; i < pending.length; i++) {
+          assign(pending[i], candidates[i]);
+        }
+      }
+    }
+    return prompts;
   }
 
   Future<void> attachVideo({
