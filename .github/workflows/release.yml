@@ -262,6 +262,12 @@ jobs:
       R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
     steps:
       - uses: actions/checkout@v6
+      # ubuntu-latest can change its default JDK; Gradle 8.14 cannot run on Java 25.
+      - name: Set up Java for Android
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Resolve app version (Linux)
         shell: bash
         run: |
@@ -290,6 +296,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Configure Flutter Java
+        run: flutter config --jdk-dir "$JAVA_HOME"
       - name: Cache Pub (Linux)
         uses: actions/cache@v5
         with:
