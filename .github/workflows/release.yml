@@ -144,7 +144,7 @@ jobs:
           name: msix
           path: build/msix/**/*.msix
       - name: Configure Microsoft Store CLI
-        uses: microsoft/microsoft-store-apppublisher@v1.1
+        uses: microsoft/microsoft-store-apppublisher@v1.4
       - name: Cancel pending Microsoft Store submission (if any)
         shell: pwsh
         env:
@@ -249,7 +249,8 @@ jobs:
           }
 
   build-android:
-    runs-on: ubuntu-latest
+    # Keep the Android build environment stable during ubuntu-latest migrations.
+    runs-on: ubuntu-24.04
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -262,7 +263,7 @@ jobs:
       R2_PUBLIC_BASE: ${{ secrets.R2_PUBLIC_BASE }}
     steps:
       - uses: actions/checkout@v6
-      # ubuntu-latest can change its default JDK; Gradle 8.14 cannot run on Java 25.
+      # Pin the JDK explicitly; Gradle 8.14 cannot run on Java 25.
       - name: Set up Java for Android
         uses: actions/setup-java@v5
         with:
@@ -561,7 +562,7 @@ jobs:
         run: gem install fastlane -N
 
       - name: Import Apple signing certificates
-        uses: apple-actions/import-codesign-certs@v5
+        uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
@@ -569,7 +570,7 @@ jobs:
           keychain-password: ${{ env.APPLE_RUNNER_KEYCHAIN_PASSWORD }}
 
       - name: Import Mac installer signing certificate
-        uses: apple-actions/import-codesign-certs@v5
+        uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_P12_PASSWORD }}
