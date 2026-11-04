@@ -152,7 +152,7 @@ class ExportService {
     }
     // Replace any known language code in the filename with es-es.
     candidate = candidate.replaceAll(
-      RegExp('(en-us|ja-jp|zh-cn)', caseSensitive: false),
+      RegExp('(en-us|ja-jp|zh-cn|fr-fr)', caseSensitive: false),
       'es-es',
     );
     candidate = candidate.replaceAll(

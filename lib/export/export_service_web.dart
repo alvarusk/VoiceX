@@ -119,7 +119,7 @@ class ExportService {
       candidate = '${safe}_voicex_final.ass';
     }
     candidate = candidate.replaceAll(
-      RegExp('(en-us|ja-jp|zh-cn)', caseSensitive: false),
+      RegExp('(en-us|ja-jp|zh-cn|fr-fr)', caseSensitive: false),
       'es-es',
     );
     candidate = candidate.replaceAll(
