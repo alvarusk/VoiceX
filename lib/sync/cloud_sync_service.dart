@@ -845,7 +845,7 @@ class CloudSyncService {
       final localFoldersUpdated =
           local['manual_folders_updated_at_ms'] as int? ?? localUpdated;
       final remoteArchivedFoldersUpdated =
-          remote['archived_folders_updated_at_ms'] as int? ?? remoteUpdated;
+          SettingsService.archivedFoldersTimestamp(remote);
       final localArchivedFoldersUpdated =
           local['archived_folders_updated_at_ms'] as int? ?? localUpdated;
       final remoteDeletedUpdated =

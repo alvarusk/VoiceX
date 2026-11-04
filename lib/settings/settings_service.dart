@@ -293,7 +293,8 @@ class SettingsService {
     _archivedFolders = _normalizeFolders(folders);
     final beforeManual = List<String>.from(_manualFolders);
     _manualFolders.removeWhere(_archivedFolders.contains);
-    final changedManual = beforeManual.length != _manualFolders.length ||
+    final changedManual =
+        beforeManual.length != _manualFolders.length ||
         !_manualFolders.every(beforeManual.contains);
     await _prefs?.setStringList('archived_folders', _archivedFolders);
     await _prefs?.setStringList('manual_folders', _manualFolders);
@@ -402,6 +403,15 @@ class SettingsService {
     };
   }
 
+  // Older clients did not send archive state. Missing data is not an
+  // explicit unarchive, even if their general settings are newer.
+  static int archivedFoldersTimestamp(Map<String, dynamic> payload) {
+    if (payload['archived_folders'] is! List) return 0;
+    return payload['archived_folders_updated_at_ms'] as int? ??
+        payload['updated_at_ms'] as int? ??
+        0;
+  }
+
   Future<bool> importSyncPayload(
     Map<String, dynamic> payload, {
     bool includeManualFolders = true,
@@ -457,19 +467,21 @@ class SettingsService {
       );
     }
 
-    if (includeArchivedFolders) {
+    final incomingArchivedAt = archivedFoldersTimestamp(payload);
+    if (includeArchivedFolders &&
+        incomingArchivedAt > _archivedFoldersUpdatedAtMs) {
       final archived =
           (payload['archived_folders'] as List?)?.cast<String>() ??
           const <String>[];
       final beforeManual = List<String>.from(_manualFolders);
       _archivedFolders = _normalizeFolders(archived);
       _manualFolders.removeWhere(_archivedFolders.contains);
-      final changedManual = beforeManual.length != _manualFolders.length ||
+      final changedManual =
+          beforeManual.length != _manualFolders.length ||
           !_manualFolders.every(beforeManual.contains);
       await prefs.setStringList('archived_folders', _archivedFolders);
       await prefs.setStringList('manual_folders', _manualFolders);
-      _archivedFoldersUpdatedAtMs =
-          payload['archived_folders_updated_at_ms'] as int? ?? remoteUpdated;
+      _archivedFoldersUpdatedAtMs = incomingArchivedAt;
       await prefs.setInt(
         'archived_folders_updated_at_ms',
         _archivedFoldersUpdatedAtMs,
@@ -525,7 +537,8 @@ class SettingsService {
     _archivedFolders = _normalizeFolders(folders);
     final beforeManual = List<String>.from(_manualFolders);
     _manualFolders.removeWhere(_archivedFolders.contains);
-    final changedManual = beforeManual.length != _manualFolders.length ||
+    final changedManual =
+        beforeManual.length != _manualFolders.length ||
         !_manualFolders.every(beforeManual.contains);
     _archivedFoldersUpdatedAtMs = updatedAtMs;
     await _prefs?.setStringList('archived_folders', _archivedFolders);
