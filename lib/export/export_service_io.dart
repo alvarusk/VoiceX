@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../db/app_db.dart';
 import '../settings/settings_service.dart';
+import 'ass_export_matching.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -71,45 +72,29 @@ class ExportService {
       throw ExportBlockedException('Base ASS has no Dialogue: lines.');
     }
 
-    // `eventsRowIndex` pertenece al ASS que se importó. Puede dejar de
-    // coincidir con el archivo base si este se reescribe (por ejemplo, al
-    // añadir/quitar comentarios). Conservamos varios índices para que una
-    // traducción seleccionada nunca se pierda por un desplazamiento de filas.
-    final byEventRow = {for (final l in lines) l.eventsRowIndex: l};
-    final byDialogueIndex = {for (final l in lines) l.dialogueIndex: l};
-    final useDialogueIndexFallback =
-        _countDialogueLines(baseLines) == lines.length;
+    final matches = matchAssExportLines(baseLines, lines);
+    final matchedIds = matches.values.map((line) => line.lineId).toSet();
+    final missing = lines.where(
+      (line) =>
+          (line.selectedText ?? '').trim().isNotEmpty &&
+          !line.hasVectorDrawing &&
+          !matchedIds.contains(line.lineId),
+    );
+    if (missing.isNotEmpty) {
+      throw ExportBlockedException(
+        'Cannot safely match ${missing.length} selected segment(s) to the base ASS. '
+        'No file was written. Restore the original base ASS or recover the selections from Supabase.',
+      );
+    }
     var needsGenItalicsStyle = false;
-
-    int dialogueCursor = 0;
-    for (int row = firstDialogue; row < baseLines.length; row++) {
+    for (final entry in matches.entries) {
+      final row = entry.key;
+      final match = entry.value;
       final raw = baseLines[row];
-      final normalizedRaw = raw.trimLeft();
-      final isDialogue = normalizedRaw.startsWith('Dialogue:');
-      if (!isDialogue && !normalizedRaw.startsWith('Comment:')) continue;
-
-      final absoluteIndex = row;
-      final relativeIndex = row - firstDialogue;
-      SubtitleLine? match =
-          byEventRow[absoluteIndex] ?? byEventRow[relativeIndex];
-      if (match == null && isDialogue) {
-        // The dialogue ordinal is stable even when metadata or Comment rows
-        // have been inserted before the event being exported.
-        match = byDialogueIndex[dialogueCursor];
-        if (match == null && useDialogueIndexFallback &&
-            dialogueCursor < lines.length) {
-          match = lines[dialogueCursor];
-        }
-      }
-      if (isDialogue) {
-        dialogueCursor++;
-      }
-      if (match == null) continue;
-
       final selected = (match.selectedText ?? '').trim();
       if (selected.isEmpty) continue;
 
-      if (raw.contains(r'\p')) continue;
+      if (match.hasVectorDrawing) continue;
 
       final normalizedText = _normalizeSelectedText(selected);
       final exportStyle = _styleForExport(match.style, normalizedText);
@@ -130,12 +115,21 @@ class ExportService {
 
     final outDir = await _resolveOutputDirectory(preferredDir);
 
-    final outPath = p.join(outDir.path, outName);
+    var outPath = p.join(outDir.path, outName);
+    if (p.equals(
+      p.normalize(p.absolute(outPath)),
+      p.normalize(p.absolute(basePath)),
+    )) {
+      outPath = p.join(
+        outDir.path,
+        '${p.basenameWithoutExtension(outName)}_voicex_final.ass',
+      );
+    }
 
     final outFile = File(outPath);
     await outFile.writeAsString(baseLines.join('\n'));
 
-    return XFile(outFile.path, mimeType: 'text/plain', name: outName);
+    return XFile(outFile.path, mimeType: 'text/plain', name: p.basename(outPath));
   }
 
   String _buildOutputName({
@@ -193,26 +187,6 @@ class ExportService {
     } catch (_) {
       return null;
     }
-  }
-
-  int _countDialogueLines(List<String> baseLines) {
-    bool inEvents = false;
-    int count = 0;
-    for (final raw in baseLines) {
-      final line = raw.trimRight();
-      if (line.trim().toLowerCase() == '[events]') {
-        inEvents = true;
-        continue;
-      }
-      if (!inEvents) continue;
-      if (line.startsWith('[') && !line.toLowerCase().startsWith('[events]')) {
-        break;
-      }
-      if (line.trimLeft().startsWith('Dialogue:')) {
-        count++;
-      }
-    }
-    return count;
   }
 
   String _replaceTextPreservingTags(
