@@ -10,7 +10,7 @@ Desktop toolkit (Flutter) to review ASS subtitles, manage series, attach per-fol
 - Voice input modes (local STT or OpenAI), configurable in Settings.
 
 ## Requirements
-- Flutter 3.10+/Dart 3.10+.
+- Flutter 3.47.1 (includes Dart 3.13.1), matching `FLUTTER_VERSION` in `.github/workflows/release.yml`.
 - Supabase project (for sync and cost logging).
 - TakoWorks producing translations and logging costs (optional but recommended).
 - For STT/voice features: microphone access; OpenAI key if using OpenAI mode.
