@@ -219,6 +219,7 @@ class _ReviewPageState extends State<ReviewPage> {
   Timer? _asrPromptRetryTimer;
 
   // Toggles de visibilidad (MVP: en memoria)
+  bool showFinal = true;
   bool showGpt = true;
   bool showClaude = true;
   bool showGemini = true;
@@ -632,6 +633,11 @@ class _ReviewPageState extends State<ReviewPage> {
                 },
               ),
               const Divider(),
+              SwitchListTile(
+                title: const Text('Show FINAL'),
+                value: showFinal,
+                onChanged: (v) => setState(() => showFinal = v),
+              ),
               SwitchListTile(
                 title: const Text('Show GPT'),
                 value: showGpt,
@@ -1624,6 +1630,7 @@ If in doubt, prefer these spellings as-is.
             return _LineCard(
               project: project,
               line: line,
+              showFinal: showFinal,
               showGpt: showGpt,
               showClaude: showClaude,
               showGemini: showGemini,
@@ -2244,6 +2251,7 @@ class _LineCard extends StatelessWidget {
   const _LineCard({
     required this.project,
     required this.line,
+    required this.showFinal,
     required this.showGpt,
     required this.showClaude,
     required this.showGemini,
@@ -2264,6 +2272,7 @@ class _LineCard extends StatelessWidget {
   final Project project;
   final SubtitleLine line;
 
+  final bool showFinal;
   final bool showGpt;
   final bool showClaude;
   final bool showGemini;
@@ -2287,6 +2296,7 @@ class _LineCard extends StatelessWidget {
     final title =
         'Line ${line.dialogueIndex + 1} • ${_fmtTime(line.startMs)} → ${_fmtTime(line.endMs)}';
     final hasOtherCand =
+        (line.candFinal ?? '').isNotEmpty ||
         (line.candClaude ?? '').isNotEmpty ||
         (line.candGemini ?? '').isNotEmpty ||
         (line.candDeepseek ?? '').isNotEmpty;
@@ -2347,6 +2357,17 @@ class _LineCard extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Candidates with CPS
+              if (showFinal && (line.candFinal ?? '').isNotEmpty)
+                _CandidateTile(
+                  label: 'FINAL',
+                  text: line.candFinal!,
+                  cps: _calcCps(line, line.candFinal!),
+                  cpsColor: _cpsColor(_calcCps(line, line.candFinal!)),
+                  isSelected:
+                      (line.selectedSource ?? '').toLowerCase() == 'final',
+                  onTap: () => onTapCandidate('final', line.candFinal!, 'tap'),
+                  onEdit: () => onEditCandidate('final', line.candFinal!),
+                ),
               if (showGpt && (line.candGpt ?? '').isNotEmpty)
                 _CandidateTile(
                   label: gptLabel,

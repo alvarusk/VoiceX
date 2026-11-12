@@ -48,6 +48,7 @@ void main() {
               endMs: 1000,
               dialoguePrefix: 'Dialogue:',
               originalText: 'Original $id',
+              candFinal: const Value('Final candidate'),
               candGpt: const Value('Initial candidate'),
               updatedAtMs: 10,
             ),
@@ -91,6 +92,11 @@ void main() {
       const Duration(seconds: 3),
     );
     expect(find.text('Initial candidate'), findsOneWidget);
+    expect(find.text('FINAL'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Final candidate')).dy,
+      lessThan(tester.getTopLeft(find.text('Initial candidate')).dy),
+    );
     expect(tester.binding.hasScheduledFrame, isFalse);
 
     final edit = ReviewService(

@@ -257,6 +257,9 @@ class ImportService {
                 updatedAtMs: Value(now2),
                 // set dinámico abajo
               ).copyWith(
+                candFinal: col == 'candFinal'
+                    ? Value(u.text)
+                    : const Value.absent(),
                 candGpt: col == 'candGpt'
                     ? Value(u.text)
                     : const Value.absent(),
@@ -387,6 +390,8 @@ class ImportService {
 
   String _candidateColumn(Engine e) {
     switch (e) {
+      case Engine.finalAss:
+        return 'candFinal';
       case Engine.gpt:
         return 'candGpt';
       case Engine.claude:

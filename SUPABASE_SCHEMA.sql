@@ -46,6 +46,7 @@ create table if not exists subtitle_lines (
   leading_tags text default '',
   has_vector_drawing boolean default false,
   original_text text not null,
+  cand_final text,
   cand_gpt text,
   cand_claude text,
   cand_gemini text,
@@ -58,6 +59,9 @@ create table if not exists subtitle_lines (
   updated_at_ms bigint not null,
   unique(project_id, dialogue_index)
 );
+
+-- Upgrade existing installations (CREATE TABLE IF NOT EXISTS does not add columns).
+alter table public.subtitle_lines add column if not exists cand_final text;
 
 -- Selection events (opcional)
 create table if not exists selection_events (

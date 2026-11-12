@@ -67,15 +67,6 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
     );
   }
 
-  Engine? _inferEngineFromName(String name) {
-    final n = name.toLowerCase();
-    if (n.contains('gpt')) return Engine.gpt;
-    if (n.contains('claude')) return Engine.claude;
-    if (n.contains('gemini')) return Engine.gemini;
-    if (n.contains('deepseek') || n.contains('ds')) return Engine.deepseek;
-    return null;
-  }
-
   Future<void> _pickBase() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
@@ -139,16 +130,19 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
       final engines = <Engine, PlatformFile>{};
       PlatformFile? asrFile;
       for (final f in _engineFiles) {
-        if (f.name.toLowerCase().contains('_asr')) {
+        final e = inferEngineFromName(f.name);
+        if (e != Engine.finalAss && f.name.toLowerCase().contains('_asr')) {
           asrFile = f;
           continue;
         }
-        final e = _inferEngineFromName(f.name);
         if (e == null) continue;
         engines[e] = f;
       }
 
-      if (_scriptFile?.name.toLowerCase().contains('_asr') == true) {
+      if (_scriptFile != null &&
+          inferEngineFromName(_scriptFile!.name) == Engine.finalAss) {
+        engines.putIfAbsent(Engine.finalAss, () => _scriptFile!);
+      } else if (_scriptFile?.name.toLowerCase().contains('_asr') == true) {
         asrFile ??= _scriptFile;
       } else if (_scriptFile != null && !engines.containsKey(Engine.gpt)) {
         engines[Engine.gpt] = _scriptFile!;
@@ -274,7 +268,9 @@ class _ProjectImportSheetState extends State<ProjectImportSheet> {
             OutlinedButton.icon(
               onPressed: _busy ? null : _pickEngines,
               icon: const Icon(Icons.layers),
-              label: const Text('Select engine files (multiple)'),
+              label: const Text(
+                'Select engine files (FINAL, GPT, Claude, Gemini, DeepSeek)',
+              ),
             ),
             if (_engineFiles.isNotEmpty)
               Padding(

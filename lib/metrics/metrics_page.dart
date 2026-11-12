@@ -164,6 +164,7 @@ class _MetricsPageState extends State<MetricsPage> {
               ),
               const Divider(),
               const ListTile(title: Text('Engines in this episode')),
+              _sourceRow('FINAL', m.bySource['final'] ?? 0, m.reviewed),
               _sourceRow('GPT', m.bySource['gpt'] ?? 0, m.reviewed),
               _sourceRow('Claude', m.bySource['claude'] ?? 0, m.reviewed),
               _sourceRow('Gemini', m.bySource['gemini'] ?? 0, m.reviewed),
@@ -173,7 +174,14 @@ class _MetricsPageState extends State<MetricsPage> {
               const Divider(),
               ListTile(
                 title: const Text('Historical engines'),
-                subtitle: Text('${m.historicalReviewed} lines reviewed in total'),
+                subtitle: Text(
+                  '${m.historicalReviewed} lines reviewed in total',
+                ),
+              ),
+              _sourceRow(
+                'FINAL',
+                m.historicalBySource['final'] ?? 0,
+                m.historicalReviewed,
               ),
               _sourceRow(
                 'GPT',

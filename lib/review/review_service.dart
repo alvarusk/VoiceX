@@ -369,6 +369,9 @@ class ReviewService {
       updatedAtMs: Value(now),
     );
     switch (source.toLowerCase()) {
+      case 'final':
+        data = data.copyWith(candFinal: Value(trimmed));
+        break;
       case 'gpt':
         data = data.copyWith(candGpt: Value(trimmed));
         break;
@@ -682,7 +685,8 @@ class ReviewService {
           for (final r in rows) {
             final src = (r.read<String?>('src') ?? 'other').toLowerCase();
             final c = r.read<int>('c');
-            if (src == 'gpt' ||
+            if (src == 'final' ||
+                src == 'gpt' ||
                 src == 'claude' ||
                 src == 'gemini' ||
                 src == 'deepseek' ||
@@ -714,7 +718,8 @@ class ReviewService {
             final src = (r.read<String?>('src') ?? 'other').toLowerCase();
             final c = r.read<int>('c');
             totalCount += c;
-            if (src == 'gpt' ||
+            if (src == 'final' ||
+                src == 'gpt' ||
                 src == 'claude' ||
                 src == 'gemini' ||
                 src == 'deepseek' ||

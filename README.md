@@ -1,6 +1,6 @@
 # VoiceX (v1.0.1+2)
 
-Desktop toolkit (Flutter) to review ASS subtitles, manage series, attach per-folder glossaries, and track translation costs logged by TakoWorks. Includes tight Supabase integration, per-engine candidates (GPT, Claude, Gemini, DeepSeek), and handy keyboard shortcuts for fast editing.
+Desktop toolkit (Flutter) to review ASS subtitles, manage series, attach per-folder glossaries, and track translation costs logged by TakoWorks. Includes tight Supabase integration, per-engine candidates (FINAL, GPT, Claude, Gemini, DeepSeek), and handy keyboard shortcuts for fast editing.
 
 ## Features
 - Import projects from base ASS + engine outputs; organize them into folders (per series) with persistent glossaries.
@@ -28,6 +28,19 @@ SUPABASE_SERVICE_KEY=...      # if you want to write costs
 SUPABASE_COST_TABLE=voicex_api_costs
 ```
 4) API keys (OpenAI) are stored via the Settings page; you can also prefill them in a local config if desired.
+
+## Adding FINAL to an existing installation
+
+Before syncing the updated app, run `supabase/migrations/20261112_add_final_candidate.sql`
+in your Supabase project's SQL Editor. It adds the nullable `subtitle_lines.cand_final`
+column and refreshes the API schema cache. Existing row policies and grants still apply;
+`project_files.engine` and `selected_source` already accept text values such as `final`.
+The local SQLite database upgrades automatically on launch without clearing existing data.
+
+When importing a project, include `episode_final.ass` in the engine files. The suffix
+`_final.ass` is case-insensitive and takes precedence over model names in the filename.
+FINAL appears before GPT and can be selected or edited like the other candidates.
+Existing projects keep FINAL empty until imported with the corresponding ASS file.
 
 ## Running
 ```

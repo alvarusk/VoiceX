@@ -31,7 +31,7 @@ class ProjectFiles extends Table {
   TextColumn get fileId => text()();
   TextColumn get projectId => text()();
 
-  // 'base','gpt','claude','gemini','deepseek'
+  // 'base','final','gpt','claude','gemini','deepseek'
   TextColumn get engine => text()();
 
   TextColumn get assPath => text()();
@@ -76,6 +76,7 @@ class SubtitleLines extends Table {
   TextColumn get originalText => text()();
 
   // Candidatos
+  TextColumn get candFinal => text().nullable()();
   TextColumn get candGpt => text().nullable()();
   TextColumn get candClaude => text().nullable()();
   TextColumn get candGemini => text().nullable()();
@@ -124,7 +125,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -143,6 +144,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from == 4) {
         await _safeAddColumn(m, projects, projects.autoPlayLine);
+        from = 5;
+      }
+      if (from == 5) {
+        await _safeAddColumn(m, subtitleLines, subtitleLines.candFinal);
       }
     },
   );

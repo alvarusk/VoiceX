@@ -1343,6 +1343,17 @@ class $SubtitleLinesTable extends SubtitleLines
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _candFinalMeta = const VerificationMeta(
+    'candFinal',
+  );
+  @override
+  late final GeneratedColumn<String> candFinal = GeneratedColumn<String>(
+    'cand_final',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _candGptMeta = const VerificationMeta(
     'candGpt',
   );
@@ -1477,6 +1488,7 @@ class $SubtitleLinesTable extends SubtitleLines
     leadingTags,
     hasVectorDrawing,
     originalText,
+    candFinal,
     candGpt,
     candClaude,
     candGemini,
@@ -1633,6 +1645,12 @@ class $SubtitleLinesTable extends SubtitleLines
     } else if (isInserting) {
       context.missing(_originalTextMeta);
     }
+    if (data.containsKey('cand_final')) {
+      context.handle(
+        _candFinalMeta,
+        candFinal.isAcceptableOrUnknown(data['cand_final']!, _candFinalMeta),
+      );
+    }
     if (data.containsKey('cand_gpt')) {
       context.handle(
         _candGptMeta,
@@ -1780,6 +1798,10 @@ class $SubtitleLinesTable extends SubtitleLines
         DriftSqlType.string,
         data['${effectivePrefix}original_text'],
       )!,
+      candFinal: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cand_final'],
+      ),
       candGpt: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}cand_gpt'],
@@ -1846,6 +1868,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
   final String leadingTags;
   final bool hasVectorDrawing;
   final String originalText;
+  final String? candFinal;
   final String? candGpt;
   final String? candClaude;
   final String? candGemini;
@@ -1873,6 +1896,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     required this.leadingTags,
     required this.hasVectorDrawing,
     required this.originalText,
+    this.candFinal,
     this.candGpt,
     this.candClaude,
     this.candGemini,
@@ -1915,6 +1939,9 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     map['leading_tags'] = Variable<String>(leadingTags);
     map['has_vector_drawing'] = Variable<bool>(hasVectorDrawing);
     map['original_text'] = Variable<String>(originalText);
+    if (!nullToAbsent || candFinal != null) {
+      map['cand_final'] = Variable<String>(candFinal);
+    }
     if (!nullToAbsent || candGpt != null) {
       map['cand_gpt'] = Variable<String>(candGpt);
     }
@@ -1970,6 +1997,9 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       leadingTags: Value(leadingTags),
       hasVectorDrawing: Value(hasVectorDrawing),
       originalText: Value(originalText),
+      candFinal: candFinal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(candFinal),
       candGpt: candGpt == null && nullToAbsent
           ? const Value.absent()
           : Value(candGpt),
@@ -2019,6 +2049,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       leadingTags: serializer.fromJson<String>(json['leadingTags']),
       hasVectorDrawing: serializer.fromJson<bool>(json['hasVectorDrawing']),
       originalText: serializer.fromJson<String>(json['originalText']),
+      candFinal: serializer.fromJson<String?>(json['candFinal']),
       candGpt: serializer.fromJson<String?>(json['candGpt']),
       candClaude: serializer.fromJson<String?>(json['candClaude']),
       candGemini: serializer.fromJson<String?>(json['candGemini']),
@@ -2051,6 +2082,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       'leadingTags': serializer.toJson<String>(leadingTags),
       'hasVectorDrawing': serializer.toJson<bool>(hasVectorDrawing),
       'originalText': serializer.toJson<String>(originalText),
+      'candFinal': serializer.toJson<String?>(candFinal),
       'candGpt': serializer.toJson<String?>(candGpt),
       'candClaude': serializer.toJson<String?>(candClaude),
       'candGemini': serializer.toJson<String?>(candGemini),
@@ -2081,6 +2113,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     String? leadingTags,
     bool? hasVectorDrawing,
     String? originalText,
+    Value<String?> candFinal = const Value.absent(),
     Value<String?> candGpt = const Value.absent(),
     Value<String?> candClaude = const Value.absent(),
     Value<String?> candGemini = const Value.absent(),
@@ -2108,6 +2141,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     leadingTags: leadingTags ?? this.leadingTags,
     hasVectorDrawing: hasVectorDrawing ?? this.hasVectorDrawing,
     originalText: originalText ?? this.originalText,
+    candFinal: candFinal.present ? candFinal.value : this.candFinal,
     candGpt: candGpt.present ? candGpt.value : this.candGpt,
     candClaude: candClaude.present ? candClaude.value : this.candClaude,
     candGemini: candGemini.present ? candGemini.value : this.candGemini,
@@ -2155,6 +2189,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       originalText: data.originalText.present
           ? data.originalText.value
           : this.originalText,
+      candFinal: data.candFinal.present ? data.candFinal.value : this.candFinal,
       candGpt: data.candGpt.present ? data.candGpt.value : this.candGpt,
       candClaude: data.candClaude.present
           ? data.candClaude.value
@@ -2199,6 +2234,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           ..write('leadingTags: $leadingTags, ')
           ..write('hasVectorDrawing: $hasVectorDrawing, ')
           ..write('originalText: $originalText, ')
+          ..write('candFinal: $candFinal, ')
           ..write('candGpt: $candGpt, ')
           ..write('candClaude: $candClaude, ')
           ..write('candGemini: $candGemini, ')
@@ -2231,6 +2267,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     leadingTags,
     hasVectorDrawing,
     originalText,
+    candFinal,
     candGpt,
     candClaude,
     candGemini,
@@ -2262,6 +2299,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           other.leadingTags == this.leadingTags &&
           other.hasVectorDrawing == this.hasVectorDrawing &&
           other.originalText == this.originalText &&
+          other.candFinal == this.candFinal &&
           other.candGpt == this.candGpt &&
           other.candClaude == this.candClaude &&
           other.candGemini == this.candGemini &&
@@ -2291,6 +2329,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
   final Value<String> leadingTags;
   final Value<bool> hasVectorDrawing;
   final Value<String> originalText;
+  final Value<String?> candFinal;
   final Value<String?> candGpt;
   final Value<String?> candClaude;
   final Value<String?> candGemini;
@@ -2319,6 +2358,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     this.leadingTags = const Value.absent(),
     this.hasVectorDrawing = const Value.absent(),
     this.originalText = const Value.absent(),
+    this.candFinal = const Value.absent(),
     this.candGpt = const Value.absent(),
     this.candClaude = const Value.absent(),
     this.candGemini = const Value.absent(),
@@ -2348,6 +2388,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     this.leadingTags = const Value.absent(),
     this.hasVectorDrawing = const Value.absent(),
     required String originalText,
+    this.candFinal = const Value.absent(),
     this.candGpt = const Value.absent(),
     this.candClaude = const Value.absent(),
     this.candGemini = const Value.absent(),
@@ -2385,6 +2426,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     Expression<String>? leadingTags,
     Expression<bool>? hasVectorDrawing,
     Expression<String>? originalText,
+    Expression<String>? candFinal,
     Expression<String>? candGpt,
     Expression<String>? candClaude,
     Expression<String>? candGemini,
@@ -2414,6 +2456,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
       if (leadingTags != null) 'leading_tags': leadingTags,
       if (hasVectorDrawing != null) 'has_vector_drawing': hasVectorDrawing,
       if (originalText != null) 'original_text': originalText,
+      if (candFinal != null) 'cand_final': candFinal,
       if (candGpt != null) 'cand_gpt': candGpt,
       if (candClaude != null) 'cand_claude': candClaude,
       if (candGemini != null) 'cand_gemini': candGemini,
@@ -2445,6 +2488,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     Value<String>? leadingTags,
     Value<bool>? hasVectorDrawing,
     Value<String>? originalText,
+    Value<String?>? candFinal,
     Value<String?>? candGpt,
     Value<String?>? candClaude,
     Value<String?>? candGemini,
@@ -2474,6 +2518,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
       leadingTags: leadingTags ?? this.leadingTags,
       hasVectorDrawing: hasVectorDrawing ?? this.hasVectorDrawing,
       originalText: originalText ?? this.originalText,
+      candFinal: candFinal ?? this.candFinal,
       candGpt: candGpt ?? this.candGpt,
       candClaude: candClaude ?? this.candClaude,
       candGemini: candGemini ?? this.candGemini,
@@ -2539,6 +2584,9 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     if (originalText.present) {
       map['original_text'] = Variable<String>(originalText.value);
     }
+    if (candFinal.present) {
+      map['cand_final'] = Variable<String>(candFinal.value);
+    }
     if (candGpt.present) {
       map['cand_gpt'] = Variable<String>(candGpt.value);
     }
@@ -2594,6 +2642,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
           ..write('leadingTags: $leadingTags, ')
           ..write('hasVectorDrawing: $hasVectorDrawing, ')
           ..write('originalText: $originalText, ')
+          ..write('candFinal: $candFinal, ')
           ..write('candGpt: $candGpt, ')
           ..write('candClaude: $candClaude, ')
           ..write('candGemini: $candGemini, ')
@@ -4104,6 +4153,7 @@ typedef $$SubtitleLinesTableCreateCompanionBuilder =
       Value<String> leadingTags,
       Value<bool> hasVectorDrawing,
       required String originalText,
+      Value<String?> candFinal,
       Value<String?> candGpt,
       Value<String?> candClaude,
       Value<String?> candGemini,
@@ -4134,6 +4184,7 @@ typedef $$SubtitleLinesTableUpdateCompanionBuilder =
       Value<String> leadingTags,
       Value<bool> hasVectorDrawing,
       Value<String> originalText,
+      Value<String?> candFinal,
       Value<String?> candGpt,
       Value<String?> candClaude,
       Value<String?> candGemini,
@@ -4233,6 +4284,11 @@ class $$SubtitleLinesTableFilterComposer
 
   ColumnFilters<String> get originalText => $composableBuilder(
     column: $table.originalText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get candFinal => $composableBuilder(
+    column: $table.candFinal,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4376,6 +4432,11 @@ class $$SubtitleLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get candFinal => $composableBuilder(
+    column: $table.candFinal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get candGpt => $composableBuilder(
     column: $table.candGpt,
     builder: (column) => ColumnOrderings(column),
@@ -4500,6 +4561,9 @@ class $$SubtitleLinesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get candFinal =>
+      $composableBuilder(column: $table.candFinal, builder: (column) => column);
+
   GeneratedColumn<String> get candGpt =>
       $composableBuilder(column: $table.candGpt, builder: (column) => column);
 
@@ -4590,6 +4654,7 @@ class $$SubtitleLinesTableTableManager
                 Value<String> leadingTags = const Value.absent(),
                 Value<bool> hasVectorDrawing = const Value.absent(),
                 Value<String> originalText = const Value.absent(),
+                Value<String?> candFinal = const Value.absent(),
                 Value<String?> candGpt = const Value.absent(),
                 Value<String?> candClaude = const Value.absent(),
                 Value<String?> candGemini = const Value.absent(),
@@ -4618,6 +4683,7 @@ class $$SubtitleLinesTableTableManager
                 leadingTags: leadingTags,
                 hasVectorDrawing: hasVectorDrawing,
                 originalText: originalText,
+                candFinal: candFinal,
                 candGpt: candGpt,
                 candClaude: candClaude,
                 candGemini: candGemini,
@@ -4648,6 +4714,7 @@ class $$SubtitleLinesTableTableManager
                 Value<String> leadingTags = const Value.absent(),
                 Value<bool> hasVectorDrawing = const Value.absent(),
                 required String originalText,
+                Value<String?> candFinal = const Value.absent(),
                 Value<String?> candGpt = const Value.absent(),
                 Value<String?> candClaude = const Value.absent(),
                 Value<String?> candGemini = const Value.absent(),
@@ -4676,6 +4743,7 @@ class $$SubtitleLinesTableTableManager
                 leadingTags: leadingTags,
                 hasVectorDrawing: hasVectorDrawing,
                 originalText: originalText,
+                candFinal: candFinal,
                 candGpt: candGpt,
                 candClaude: candClaude,
                 candGemini: candGemini,
