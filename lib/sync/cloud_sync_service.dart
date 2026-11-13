@@ -1400,7 +1400,12 @@ class CloudSyncService {
       String relation, {
       bool filterArchived = false,
     }) async {
-      dynamic query = _scopeSubtitleLinesQuery(_client.from(relation).select());
+      // PostgreSQL views keep the columns they had when created, even when
+      // defined with SELECT *. Require FINAL explicitly so an older active
+      // view falls back to the table instead of silently dropping candidates.
+      dynamic query = _scopeSubtitleLinesQuery(
+        _client.from(relation).select('*,cand_final'),
+      );
       query = query.eq('project_id', projectId);
       if (filterArchived) {
         query = query.eq('archived', false);
@@ -1411,13 +1416,14 @@ class CloudSyncService {
       return (res as List).cast<Map<String, dynamic>>();
     }
 
-    if (_supportsSubtitleLinesActiveView) {
+    while (_supportsSubtitleLinesActiveView) {
       try {
         return await runQuery('subtitle_lines_active');
       } on PostgrestException catch (e) {
-        if (_supportsOwnerColumnLines && _isMissingColumn(e, 'owner_user_id')) {
+        if (_supportsOwnerColumnLines &&
+            e.message.toLowerCase().contains('owner_user_id')) {
           _supportsOwnerColumnLines = false;
-          return await runQuery('subtitle_lines_active');
+          continue;
         }
         _supportsSubtitleLinesActiveView = false;
         debugPrint('subtitle_lines_active fallback: $e');
