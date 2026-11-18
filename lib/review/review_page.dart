@@ -18,6 +18,7 @@ import '../settings/settings_service.dart';
 import '../stt/speech_service.dart';
 import '../metrics/metrics_page.dart';
 import 'review_service.dart';
+import 'source_review.dart';
 import '../sync/cloud_sync_service.dart';
 
 class ReviewPage extends StatefulWidget {
@@ -37,6 +38,10 @@ class _ReviewPageState extends State<ReviewPage> {
   late final Stream<Project> _projectStream;
   late final Stream<int> _totalLinesStream;
   final Map<int, Stream<SubtitleLine>> _lineStreams = {};
+  late final Stream<bool> _sourceReviewStream = watchSourceReview(
+    widget.db,
+    widget.projectId,
+  );
   double _videoHeight = 260;
   double _topPaneRatio = 0.6;
   bool _showVideoPanel = true;
@@ -1591,6 +1596,26 @@ If in doubt, prefer these spellings as-is.
   }
 
   Widget _buildLinePager({required Project project, required int total}) {
+    return StreamBuilder<bool>(
+      stream: _sourceReviewStream,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _buildSourceAwareLinePager(
+          project: project,
+          total: total,
+          sourceReview: snapshot.data!,
+        );
+      },
+    );
+  }
+
+  Widget _buildSourceAwareLinePager({
+    required Project project,
+    required int total,
+    required bool sourceReview,
+  }) {
     return PageView.builder(
       controller: _pageController,
       onPageChanged: (idx) {
@@ -1630,6 +1655,8 @@ If in doubt, prefer these spellings as-is.
             return _LineCard(
               project: project,
               line: line,
+              sourceReview: sourceReview,
+              onNoteChanged: (note) => _svc.setReviewNote(line.lineId, note),
               showFinal: showFinal,
               showGpt: showGpt,
               showClaude: showClaude,
@@ -2251,6 +2278,8 @@ class _LineCard extends StatelessWidget {
   const _LineCard({
     required this.project,
     required this.line,
+    required this.sourceReview,
+    required this.onNoteChanged,
     required this.showFinal,
     required this.showGpt,
     required this.showClaude,
@@ -2271,6 +2300,8 @@ class _LineCard extends StatelessWidget {
 
   final Project project;
   final SubtitleLine line;
+  final bool sourceReview;
+  final ValueChanged<String> onNoteChanged;
 
   final bool showFinal;
   final bool showGpt;
@@ -2306,10 +2337,14 @@ class _LineCard extends StatelessWidget {
     final displayRomanization = (line.romanization ?? '').trim().isNotEmpty
         ? line.romanization!.trim()
         : (romajiTag ?? '');
-    final sourceDialogue = _textBeforeFirstBraceGroup(
-      line.sourceText ?? line.originalText,
-    );
-    final romanDialogue = displayRomanization.trim();
+    final sourceDialogue = sourceReview
+        ? line.originalText
+              .replaceAll(RegExp(r'\{[^}]*\}'), '')
+              .replaceAll(r'\N', '\n')
+              .replaceAll(r'\n', '\n')
+              .trim()
+        : _textBeforeFirstBraceGroup(line.sourceText ?? line.originalText);
+    final romanDialogue = sourceReview ? '' : displayRomanization.trim();
     final originCombined = [
       if (sourceDialogue.isNotEmpty) sourceDialogue,
       if (romanDialogue.isNotEmpty) romanDialogue,
@@ -2352,6 +2387,21 @@ class _LineCard extends StatelessWidget {
               const SizedBox(height: 8),
               if (originCombined.isNotEmpty)
                 _SourceBlock(label: '', text: originCombined, highlight: true),
+              if (sourceReview)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: TextFormField(
+                    key: ValueKey('review-note-${line.lineId}'),
+                    initialValue: line.reviewNote ?? '',
+                    minLines: 1,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      labelText: 'Note',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: onNoteChanged,
+                  ),
+                ),
               if ((line.gloss ?? '').isNotEmpty)
                 _SourceBlock(label: 'Gloss', text: line.gloss ?? ''),
               const SizedBox(height: 12),
@@ -2417,21 +2467,22 @@ class _LineCard extends StatelessWidget {
                 ),
 
               const SizedBox(height: 12),
-              _VoiceTile(
-                text: line.candVoice ?? '',
-                isSelected:
-                    (line.selectedSource ?? '').toLowerCase() == 'voice',
-                isListening: isLocalListening,
-                isRecordingOpenAi: isOpenAiRecording,
-                openAiBusy: openAiBusy,
-                statusText: statusText,
-                cps: _calcCps(line, line.candVoice ?? ''),
-                cpsColor: _cpsColor(_calcCps(line, line.candVoice ?? '')),
-                onMic: onMic,
-                onRefine: onRefine,
-                onUse: (t) => onTapCandidate('voice', t, 'voice'),
-                onEdit: () => onEditCandidate('voice', line.candVoice ?? ''),
-              ),
+              if (!sourceReview)
+                _VoiceTile(
+                  text: line.candVoice ?? '',
+                  isSelected:
+                      (line.selectedSource ?? '').toLowerCase() == 'voice',
+                  isListening: isLocalListening,
+                  isRecordingOpenAi: isOpenAiRecording,
+                  openAiBusy: openAiBusy,
+                  statusText: statusText,
+                  cps: _calcCps(line, line.candVoice ?? ''),
+                  cpsColor: _cpsColor(_calcCps(line, line.candVoice ?? '')),
+                  onMic: onMic,
+                  onRefine: onRefine,
+                  onUse: (t) => onTapCandidate('voice', t, 'voice'),
+                  onEdit: () => onEditCandidate('voice', line.candVoice ?? ''),
+                ),
             ],
           ),
         ),

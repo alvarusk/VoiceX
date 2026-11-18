@@ -1459,6 +1459,17 @@ class $SubtitleLinesTable extends SubtitleLines
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _reviewNoteMeta = const VerificationMeta(
+    'reviewNote',
+  );
+  @override
+  late final GeneratedColumn<String> reviewNote = GeneratedColumn<String>(
+    'review_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMsMeta = const VerificationMeta(
     'updatedAtMs',
   );
@@ -1498,6 +1509,7 @@ class $SubtitleLinesTable extends SubtitleLines
     selectedText,
     reviewed,
     doubt,
+    reviewNote,
     updatedAtMs,
   ];
   @override
@@ -1714,6 +1726,12 @@ class $SubtitleLinesTable extends SubtitleLines
         doubt.isAcceptableOrUnknown(data['doubt']!, _doubtMeta),
       );
     }
+    if (data.containsKey('review_note')) {
+      context.handle(
+        _reviewNoteMeta,
+        reviewNote.isAcceptableOrUnknown(data['review_note']!, _reviewNoteMeta),
+      );
+    }
     if (data.containsKey('updated_at_ms')) {
       context.handle(
         _updatedAtMsMeta,
@@ -1838,6 +1856,10 @@ class $SubtitleLinesTable extends SubtitleLines
         DriftSqlType.bool,
         data['${effectivePrefix}doubt'],
       )!,
+      reviewNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}review_note'],
+      ),
       updatedAtMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at_ms'],
@@ -1878,6 +1900,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
   final String? selectedText;
   final bool reviewed;
   final bool doubt;
+  final String? reviewNote;
   final int updatedAtMs;
   const SubtitleLine({
     required this.lineId,
@@ -1906,6 +1929,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     this.selectedText,
     required this.reviewed,
     required this.doubt,
+    this.reviewNote,
     required this.updatedAtMs,
   });
   @override
@@ -1965,6 +1989,9 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     }
     map['reviewed'] = Variable<bool>(reviewed);
     map['doubt'] = Variable<bool>(doubt);
+    if (!nullToAbsent || reviewNote != null) {
+      map['review_note'] = Variable<String>(reviewNote);
+    }
     map['updated_at_ms'] = Variable<int>(updatedAtMs);
     return map;
   }
@@ -2023,6 +2050,9 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           : Value(selectedText),
       reviewed: Value(reviewed),
       doubt: Value(doubt),
+      reviewNote: reviewNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reviewNote),
       updatedAtMs: Value(updatedAtMs),
     );
   }
@@ -2059,6 +2089,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       selectedText: serializer.fromJson<String?>(json['selectedText']),
       reviewed: serializer.fromJson<bool>(json['reviewed']),
       doubt: serializer.fromJson<bool>(json['doubt']),
+      reviewNote: serializer.fromJson<String?>(json['reviewNote']),
       updatedAtMs: serializer.fromJson<int>(json['updatedAtMs']),
     );
   }
@@ -2092,6 +2123,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
       'selectedText': serializer.toJson<String?>(selectedText),
       'reviewed': serializer.toJson<bool>(reviewed),
       'doubt': serializer.toJson<bool>(doubt),
+      'reviewNote': serializer.toJson<String?>(reviewNote),
       'updatedAtMs': serializer.toJson<int>(updatedAtMs),
     };
   }
@@ -2123,6 +2155,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     Value<String?> selectedText = const Value.absent(),
     bool? reviewed,
     bool? doubt,
+    Value<String?> reviewNote = const Value.absent(),
     int? updatedAtMs,
   }) => SubtitleLine(
     lineId: lineId ?? this.lineId,
@@ -2153,6 +2186,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     selectedText: selectedText.present ? selectedText.value : this.selectedText,
     reviewed: reviewed ?? this.reviewed,
     doubt: doubt ?? this.doubt,
+    reviewNote: reviewNote.present ? reviewNote.value : this.reviewNote,
     updatedAtMs: updatedAtMs ?? this.updatedAtMs,
   );
   SubtitleLine copyWithCompanion(SubtitleLinesCompanion data) {
@@ -2209,6 +2243,9 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           : this.selectedText,
       reviewed: data.reviewed.present ? data.reviewed.value : this.reviewed,
       doubt: data.doubt.present ? data.doubt.value : this.doubt,
+      reviewNote: data.reviewNote.present
+          ? data.reviewNote.value
+          : this.reviewNote,
       updatedAtMs: data.updatedAtMs.present
           ? data.updatedAtMs.value
           : this.updatedAtMs,
@@ -2244,6 +2281,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           ..write('selectedText: $selectedText, ')
           ..write('reviewed: $reviewed, ')
           ..write('doubt: $doubt, ')
+          ..write('reviewNote: $reviewNote, ')
           ..write('updatedAtMs: $updatedAtMs')
           ..write(')'))
         .toString();
@@ -2277,6 +2315,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
     selectedText,
     reviewed,
     doubt,
+    reviewNote,
     updatedAtMs,
   ]);
   @override
@@ -2309,6 +2348,7 @@ class SubtitleLine extends DataClass implements Insertable<SubtitleLine> {
           other.selectedText == this.selectedText &&
           other.reviewed == this.reviewed &&
           other.doubt == this.doubt &&
+          other.reviewNote == this.reviewNote &&
           other.updatedAtMs == this.updatedAtMs);
 }
 
@@ -2339,6 +2379,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
   final Value<String?> selectedText;
   final Value<bool> reviewed;
   final Value<bool> doubt;
+  final Value<String?> reviewNote;
   final Value<int> updatedAtMs;
   final Value<int> rowid;
   const SubtitleLinesCompanion({
@@ -2368,6 +2409,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     this.selectedText = const Value.absent(),
     this.reviewed = const Value.absent(),
     this.doubt = const Value.absent(),
+    this.reviewNote = const Value.absent(),
     this.updatedAtMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2398,6 +2440,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     this.selectedText = const Value.absent(),
     this.reviewed = const Value.absent(),
     this.doubt = const Value.absent(),
+    this.reviewNote = const Value.absent(),
     required int updatedAtMs,
     this.rowid = const Value.absent(),
   }) : lineId = Value(lineId),
@@ -2436,6 +2479,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     Expression<String>? selectedText,
     Expression<bool>? reviewed,
     Expression<bool>? doubt,
+    Expression<String>? reviewNote,
     Expression<int>? updatedAtMs,
     Expression<int>? rowid,
   }) {
@@ -2466,6 +2510,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
       if (selectedText != null) 'selected_text': selectedText,
       if (reviewed != null) 'reviewed': reviewed,
       if (doubt != null) 'doubt': doubt,
+      if (reviewNote != null) 'review_note': reviewNote,
       if (updatedAtMs != null) 'updated_at_ms': updatedAtMs,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2498,6 +2543,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     Value<String?>? selectedText,
     Value<bool>? reviewed,
     Value<bool>? doubt,
+    Value<String?>? reviewNote,
     Value<int>? updatedAtMs,
     Value<int>? rowid,
   }) {
@@ -2528,6 +2574,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
       selectedText: selectedText ?? this.selectedText,
       reviewed: reviewed ?? this.reviewed,
       doubt: doubt ?? this.doubt,
+      reviewNote: reviewNote ?? this.reviewNote,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
       rowid: rowid ?? this.rowid,
     );
@@ -2614,6 +2661,9 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
     if (doubt.present) {
       map['doubt'] = Variable<bool>(doubt.value);
     }
+    if (reviewNote.present) {
+      map['review_note'] = Variable<String>(reviewNote.value);
+    }
     if (updatedAtMs.present) {
       map['updated_at_ms'] = Variable<int>(updatedAtMs.value);
     }
@@ -2652,6 +2702,7 @@ class SubtitleLinesCompanion extends UpdateCompanion<SubtitleLine> {
           ..write('selectedText: $selectedText, ')
           ..write('reviewed: $reviewed, ')
           ..write('doubt: $doubt, ')
+          ..write('reviewNote: $reviewNote, ')
           ..write('updatedAtMs: $updatedAtMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -4163,6 +4214,7 @@ typedef $$SubtitleLinesTableCreateCompanionBuilder =
       Value<String?> selectedText,
       Value<bool> reviewed,
       Value<bool> doubt,
+      Value<String?> reviewNote,
       required int updatedAtMs,
       Value<int> rowid,
     });
@@ -4194,6 +4246,7 @@ typedef $$SubtitleLinesTableUpdateCompanionBuilder =
       Value<String?> selectedText,
       Value<bool> reviewed,
       Value<bool> doubt,
+      Value<String?> reviewNote,
       Value<int> updatedAtMs,
       Value<int> rowid,
     });
@@ -4334,6 +4387,11 @@ class $$SubtitleLinesTableFilterComposer
 
   ColumnFilters<bool> get doubt => $composableBuilder(
     column: $table.doubt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reviewNote => $composableBuilder(
+    column: $table.reviewNote,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4482,6 +4540,11 @@ class $$SubtitleLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get reviewNote => $composableBuilder(
+    column: $table.reviewNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => ColumnOrderings(column),
@@ -4601,6 +4664,11 @@ class $$SubtitleLinesTableAnnotationComposer
   GeneratedColumn<bool> get doubt =>
       $composableBuilder(column: $table.doubt, builder: (column) => column);
 
+  GeneratedColumn<String> get reviewNote => $composableBuilder(
+    column: $table.reviewNote,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get updatedAtMs => $composableBuilder(
     column: $table.updatedAtMs,
     builder: (column) => column,
@@ -4664,6 +4732,7 @@ class $$SubtitleLinesTableTableManager
                 Value<String?> selectedText = const Value.absent(),
                 Value<bool> reviewed = const Value.absent(),
                 Value<bool> doubt = const Value.absent(),
+                Value<String?> reviewNote = const Value.absent(),
                 Value<int> updatedAtMs = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SubtitleLinesCompanion(
@@ -4693,6 +4762,7 @@ class $$SubtitleLinesTableTableManager
                 selectedText: selectedText,
                 reviewed: reviewed,
                 doubt: doubt,
+                reviewNote: reviewNote,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),
@@ -4724,6 +4794,7 @@ class $$SubtitleLinesTableTableManager
                 Value<String?> selectedText = const Value.absent(),
                 Value<bool> reviewed = const Value.absent(),
                 Value<bool> doubt = const Value.absent(),
+                Value<String?> reviewNote = const Value.absent(),
                 required int updatedAtMs,
                 Value<int> rowid = const Value.absent(),
               }) => SubtitleLinesCompanion.insert(
@@ -4753,6 +4824,7 @@ class $$SubtitleLinesTableTableManager
                 selectedText: selectedText,
                 reviewed: reviewed,
                 doubt: doubt,
+                reviewNote: reviewNote,
                 updatedAtMs: updatedAtMs,
                 rowid: rowid,
               ),

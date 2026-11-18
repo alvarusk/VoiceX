@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../db/app_db.dart';
 import '../settings/settings_service.dart';
 import 'ass_export_matching.dart';
+import '../review/source_review.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -26,6 +27,7 @@ class ExportService {
             .get();
 
     final basePath = project.baseAssPath;
+    final sourceReview = await watchSourceReview(db, projectId).first;
     await SettingsService.instance.init();
     final preferredName =
         SettingsService.instance.getProjectExportName(projectId) ?? basePath;
@@ -39,7 +41,7 @@ class ExportService {
     );
 
     if (basePath.startsWith('web://')) {
-      final text = _buildMinimalAss(lines);
+      final text = _buildMinimalAss(lines, sourceReview: sourceReview);
       return XFile.fromData(
         Uint8List.fromList(utf8.encode(text)),
         mimeType: 'text/plain',
@@ -76,7 +78,7 @@ class ExportService {
     final matchedIds = matches.values.map((line) => line.lineId).toSet();
     final missing = lines.where(
       (line) =>
-          (line.selectedText ?? '').trim().isNotEmpty &&
+          (sourceReview || (line.selectedText ?? '').trim().isNotEmpty) &&
           !line.hasVectorDrawing &&
           !matchedIds.contains(line.lineId),
     );
@@ -91,6 +93,10 @@ class ExportService {
       final row = entry.key;
       final match = entry.value;
       final raw = baseLines[row];
+      if (sourceReview) {
+        baseLines[row] = sourceReviewEvent(match);
+        continue;
+      }
       final selected = (match.selectedText ?? '').trim();
       if (selected.isEmpty) continue;
 
@@ -113,6 +119,18 @@ class ExportService {
       _ensureGenItalicsStyle(baseLines);
     }
 
+    if (sourceReview) {
+      // Also clean untouched signs and existing comments, preserving metadata.
+      for (var i = eventsStart + 1; i < baseLines.length; i++) {
+        final raw = baseLines[i];
+        if (!RegExp(r'^\s*(Dialogue|Comment):').hasMatch(raw)) continue;
+        final parts = _splitAssFields(raw);
+        if (parts.length < 10) continue;
+        parts[9] = parts[9].replaceAll(RegExp(r'\{[^}]*\}'), '');
+        baseLines[i] = parts.join(',');
+      }
+    }
+
     final outDir = await _resolveOutputDirectory(preferredDir);
 
     var outPath = p.join(outDir.path, outName);
@@ -129,7 +147,11 @@ class ExportService {
     final outFile = File(outPath);
     await outFile.writeAsString(baseLines.join('\n'));
 
-    return XFile(outFile.path, mimeType: 'text/plain', name: p.basename(outPath));
+    return XFile(
+      outFile.path,
+      mimeType: 'text/plain',
+      name: p.basename(outPath),
+    );
   }
 
   String _buildOutputName({
@@ -281,7 +303,10 @@ class ExportService {
     baseLines.add(styleLine);
   }
 
-  String _buildMinimalAss(List<SubtitleLine> lines) {
+  String _buildMinimalAss(
+    List<SubtitleLine> lines, {
+    bool sourceReview = false,
+  }) {
     final buf = StringBuffer();
     buf.writeln('[Script Info]');
     buf.writeln('ScriptType: v4.00+');
@@ -305,6 +330,10 @@ class ExportService {
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     );
     for (final l in lines) {
+      if (sourceReview) {
+        buf.writeln(sourceReviewEvent(l));
+        continue;
+      }
       final t = (l.selectedText ?? '').trim();
       if (t.isEmpty) continue;
       final start = _assTime(l.startMs);

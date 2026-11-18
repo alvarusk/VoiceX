@@ -124,4 +124,48 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
     await db.close();
   });
+
+  testWidgets('JAP-only review saves a note without selecting a translation', (
+    tester,
+  ) async {
+    await (db.update(db.subtitleLines)..where((t) => t.projectId.equals('one')))
+        .write(const SubtitleLinesCompanion(
+          candFinal: Value(null), candGpt: Value(null),
+          originalText: Value(r'{\i1}着歯！{romaji}'),
+        ));
+    tester.view.physicalSize = const Size(1400, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: ReviewPage(db: db, projectId: 'one'),
+    ));
+    for (var i = 0; i < 15; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(find.text('着歯！'), findsOneWidget);
+    final note = find.byKey(const ValueKey('review-note-one'));
+    expect(note, findsOneWidget);
+    await tester.enterText(note, 'actor distinto');
+    await tester.tap(find.byTooltip('Mark doubt'));
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+    final line = await tester.runAsync(() =>
+      (db.select(db.subtitleLines)..where((t) => t.lineId.equals('one'))).getSingle());
+    expect(line!.reviewNote, 'actor distinto');
+    expect(line.doubt, isTrue);
+    expect(line.selectedText, isNull);
+    expect(line.reviewed, isFalse);
+    expect(find.text('actor distinto'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await tester.pump(const Duration(milliseconds: 1));
+    await db.close();
+  });
 }

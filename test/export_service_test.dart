@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +8,8 @@ import 'package:voicex/db/app_db.dart';
 import 'package:voicex/export/export_service_io.dart';
 import 'package:voicex/import/ass_parser.dart';
 import 'package:voicex/settings/settings_service.dart';
+import 'package:voicex/review/review_service.dart';
+import 'package:voicex/review/source_review.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -88,6 +90,81 @@ void main() {
       expect(text, contains(event(2, 'CARTEL', name: 'CARTEL')));
       expect(text, contains(event(3, 'Adiós editado')));
       expect('Hola editado'.allMatches(text).length, 1);
+    },
+  );
+
+  test('source review exports Japanese, flags and independent notes', () async {
+    final originals = [r'{\i1}着歯！{romaji}{gloss}', 'たのむであります。'];
+    await base.writeAsString(
+      '$header${event(1, originals[0], name: 'Tamama')}\n'
+      '${event(2, r'{tag}CARTEL', name: 'CARTEL')}\n'
+      '${event(3, originals[1], name: 'Keroro')}\n',
+    );
+    for (var i = 0; i < 2; i++) {
+      final actor = ['Tamama', 'Keroro'][i];
+      final prefix = event(i == 0 ? 1 : 3, '', name: actor);
+      await (db.update(
+        db.subtitleLines,
+      )..where((t) => t.lineId.equals('$i'))).write(
+        SubtitleLinesCompanion(
+          originalText: Value(originals[i]),
+          name: Value(actor),
+          dialoguePrefix: Value(prefix),
+          selectedText: const Value(null),
+          reviewed: const Value(false),
+        ),
+      );
+    }
+    final service = ReviewService(db);
+    await service.toggleDoubt('0', true);
+    await service.setReviewNote('0', 'actor distinto');
+    await service.setReviewNote('1', 'comprobar texto');
+    expect(await watchSourceReview(db, 'p').first, isTrue);
+    final output = await ExportService(db).exportCleanAssXFile('p');
+    final text = await output.readAsString();
+    expect(
+      text,
+      contains(
+        event(
+          1,
+          '着歯！(actor distinto)',
+          name: 'Tamama',
+        ).replaceFirst('Dialogue:', 'Comment:'),
+      ),
+    );
+    expect(
+      text,
+      contains(event(3, 'たのむであります。(comprobar texto)', name: 'Keroro')),
+    );
+    expect(text, contains(event(2, 'CARTEL', name: 'CARTEL')));
+    expect(text, isNot(contains('{')));
+    expect(text, isNot(contains('Gen_Italics')));
+    final line = await (db.select(
+      db.subtitleLines,
+    )..where((t) => t.lineId.equals('0'))).getSingle();
+    expect(line.selectedText, isNull);
+    expect(line.reviewed, isFalse);
+    expect(line.originalText, originals[0]);
+    await service.toggleDoubt('0', false);
+    final unflagged = await ExportService(db).exportCleanAssXFile('p');
+    expect(
+      await unflagged.readAsString(),
+      contains(event(1, '着歯！(actor distinto)', name: 'Tamama')),
+    );
+  });
+
+  test(
+    'source review blocks unmatched lines even without selections',
+    () async {
+      await (db.update(
+        db.subtitleLines,
+      )).write(const SubtitleLinesCompanion(selectedText: Value(null)));
+      await base.writeAsString('$header${event(1, 'Changed')}');
+      await expectLater(
+        ExportService(db).exportCleanAssXFile('p'),
+        throwsA(isA<ExportBlockedException>()),
+      );
+      expect(await File('${dir.path}/result.ass').exists(), isFalse);
     },
   );
 

@@ -88,6 +88,7 @@ class SubtitleLines extends Table {
   TextColumn get selectedText => text().nullable()();
   BoolColumn get reviewed => boolean().withDefault(const Constant(false))();
   BoolColumn get doubt => boolean().withDefault(const Constant(false))();
+  TextColumn get reviewNote => text().nullable()();
 
   IntColumn get updatedAtMs => integer()();
 
@@ -125,7 +126,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -148,6 +149,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from == 5) {
         await _safeAddColumn(m, subtitleLines, subtitleLines.candFinal);
+        from = 6;
+      }
+      if (from == 6) {
+        await _safeAddColumn(m, subtitleLines, subtitleLines.reviewNote);
       }
     },
   );

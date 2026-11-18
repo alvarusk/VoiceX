@@ -1236,6 +1236,7 @@ class CloudSyncService {
       'selected_text': l.selectedText,
       'reviewed': l.reviewed,
       'doubt': l.doubt,
+      'review_note': l.reviewNote,
       'updated_at_ms': l.updatedAtMs,
     };
     if (_supportsArchivedColumnLines) {
@@ -1365,6 +1366,7 @@ class CloudSyncService {
             selectedText: Value(m['selected_text'] as String?),
             reviewed: Value(m['reviewed'] as bool? ?? false),
             doubt: Value(m['doubt'] as bool? ?? false),
+            reviewNote: Value(m['review_note'] as String?),
             updatedAtMs: m['updated_at_ms'] as int? ?? 0,
           ),
           mode: InsertMode.insertOrReplace,
@@ -1404,7 +1406,7 @@ class CloudSyncService {
       // defined with SELECT *. Require FINAL explicitly so an older active
       // view falls back to the table instead of silently dropping candidates.
       dynamic query = _scopeSubtitleLinesQuery(
-        _client.from(relation).select('*,cand_final'),
+        _client.from(relation).select('*,cand_final,review_note'),
       );
       query = query.eq('project_id', projectId);
       if (filterArchived) {

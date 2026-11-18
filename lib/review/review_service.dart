@@ -358,6 +358,16 @@ class ReviewService {
     await _touchProjectByLine(lineId, now);
   }
 
+  Future<void> setReviewNote(String lineId, String note) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await (db.update(
+      db.subtitleLines,
+    )..where((t) => t.lineId.equals(lineId))).write(
+      SubtitleLinesCompanion(reviewNote: Value(note), updatedAtMs: Value(now)),
+    );
+    await _touchProjectByLine(lineId, now);
+  }
+
   Future<void> setCandidateText({
     required String lineId,
     required String source,

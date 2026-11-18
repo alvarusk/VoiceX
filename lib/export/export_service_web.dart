@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 
 import '../db/app_db.dart';
 import '../settings/settings_service.dart';
+import '../review/source_review.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -29,7 +30,8 @@ class ExportService {
               ..orderBy([(t) => OrderingTerm(expression: t.dialogueIndex)]))
             .get();
 
-    final text = _buildMinimalAss(lines);
+    final sourceReview = await watchSourceReview(db, projectId).first;
+    final text = _buildMinimalAss(lines, sourceReview: sourceReview);
     return XFile.fromData(
       Uint8List.fromList(utf8.encode(text)),
       mimeType: 'text/plain',
@@ -52,7 +54,10 @@ class ExportService {
     return trimmed == null || trimmed.isEmpty ? 'Default' : trimmed;
   }
 
-  String _buildMinimalAss(List<SubtitleLine> lines) {
+  String _buildMinimalAss(
+    List<SubtitleLine> lines, {
+    bool sourceReview = false,
+  }) {
     final buf = StringBuffer();
     buf.writeln('[Script Info]');
     buf.writeln('ScriptType: v4.00+');
@@ -76,6 +81,10 @@ class ExportService {
       'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     );
     for (final l in lines) {
+      if (sourceReview) {
+        buf.writeln(sourceReviewEvent(l));
+        continue;
+      }
       final t = (l.selectedText ?? '').trim();
       if (t.isEmpty) continue;
       final start = _assTime(l.startMs);
