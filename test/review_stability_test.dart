@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voicex/db/app_db.dart';
 import 'package:voicex/review/review_page.dart';
 import 'package:voicex/review/review_service.dart';
+import 'package:voicex/import/ass_parser.dart';
 import 'package:voicex/settings/settings_service.dart';
 import 'package:voicex/sync/cloud_sync_service.dart';
 import 'package:voicex/sync/sync_prefs.dart';
@@ -265,62 +266,118 @@ void main() {
     await db.close();
   }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-  testWidgets('JAP-only review saves a note without selecting a translation', (
-    tester,
-  ) async {
-    await (db.update(
-      db.subtitleLines,
-    )..where((t) => t.projectId.equals('one'))).write(
-      const SubtitleLinesCompanion(
-        candFinal: Value(null),
-        candGpt: Value(null),
-        originalText: Value(r'{\i1}着歯！{romaji}'),
-      ),
-    );
-    tester.view.physicalSize = const Size(1400, 1100);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ReviewPage(db: db, projectId: 'one'),
-      ),
-    );
-    for (var i = 0; i < 15; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
-    expect(find.text('着歯！'), findsOneWidget);
-    final note = find.byKey(const ValueKey('review-note-one'));
-    expect(note, findsOneWidget);
-    await tester.enterText(note, 'actor distinto');
-    await tester.tap(find.byTooltip('Mark doubt'));
-    for (var i = 0; i < 5; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 10)),
-      );
-      await tester.pump();
-    }
-    final line = await tester.runAsync(
-      () => (db.select(
+  testWidgets(
+    'JAP-only review saves a note without selecting a translation',
+    (tester) async {
+      final parsed = AssParser.parseAssLines([
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+        r'Dialogue: 0,0:07:54.42,0:07:56.93,Gen_Main,Fuyuki,0,0,0,,こんな古いのも売ってんだ……。\N{konna furui no mo uttenda......}',
+      ]).dialogues.single;
+      await (db.update(
         db.subtitleLines,
-      )..where((t) => t.lineId.equals('one'))).getSingle(),
-    );
-    expect(line!.reviewNote, 'actor distinto');
-    expect(line.doubt, isTrue);
-    expect(line.selectedText, isNull);
-    expect(line.reviewed, isFalse);
-    expect(find.text('actor distinto'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 1));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 30)),
-    );
-    await tester.pump(const Duration(milliseconds: 1));
-    await db.close();
-  });
+      )..where((t) => t.projectId.equals('one'))).write(
+        SubtitleLinesCompanion(
+          candFinal: const Value(null),
+          candGpt: const Value(null),
+          originalText: Value(parsed.text),
+          sourceText: Value(parsed.sourceText),
+        ),
+      );
+      tester.view.physicalSize = const Size(1400, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReviewPage(db: db, projectId: 'one'),
+        ),
+      );
+      for (var i = 0; i < 15; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(
+        find.text('こんな古いのも売ってんだ……。\nkonna furui no mo uttenda......'),
+        findsOneWidget,
+      );
+      final note = find.byKey(const ValueKey('review-note-one'));
+      expect(note, findsOneWidget);
+      await tester.enterText(note, 'actor distinto');
+      await tester.tap(find.byTooltip('Mark doubt'));
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      final line = await tester.runAsync(
+        () => (db.select(
+          db.subtitleLines,
+        )..where((t) => t.lineId.equals('one'))).getSingle(),
+      );
+      expect(line!.reviewNote, 'actor distinto');
+      expect(line.doubt, isTrue);
+      expect(line.selectedText, isNull);
+      expect(line.reviewed, isFalse);
+      expect(line.originalText, parsed.text);
+      expect(find.text('actor distinto'), findsOneWidget);
+
+      // Formatting overrides must not be mistaken for the romanization.
+      await tester.runAsync(
+        () =>
+            (db.update(
+              db.subtitleLines,
+            )..where((t) => t.lineId.equals('one'))).write(
+              const SubtitleLinesCompanion(
+                originalText: Value(r'{\i1}着歯！{romaji}'),
+                sourceText: Value(null),
+              ),
+            ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(find.text('着歯！\nromaji'), findsOneWidget);
+
+      // Plain _ja-jp files still display only the Japanese source.
+      await tester.runAsync(
+        () =>
+            (db.update(
+              db.subtitleLines,
+            )..where((t) => t.lineId.equals('one'))).write(
+              const SubtitleLinesCompanion(
+                originalText: Value('こんな古いのも売ってんだ……。'),
+                sourceText: Value('こんな古いのも売ってんだ……。'),
+              ),
+            ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(find.text('こんな古いのも売ってんだ……。'), findsOneWidget);
+      expect(find.text('actor distinto'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 30)),
+      );
+      await tester.pump(const Duration(milliseconds: 1));
+      await db.close();
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.windows,
+    }),
+  );
 }

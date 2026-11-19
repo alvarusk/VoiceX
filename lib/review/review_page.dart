@@ -2373,7 +2373,7 @@ class _LineCard extends StatelessWidget {
               .replaceAll(r'\n', '\n')
               .trim()
         : _textBeforeFirstBraceGroup(line.sourceText ?? line.originalText);
-    final romanDialogue = sourceReview ? '' : displayRomanization.trim();
+    final romanDialogue = displayRomanization.trim();
     final originCombined = [
       if (sourceDialogue.isNotEmpty) sourceDialogue,
       if (romanDialogue.isNotEmpty) romanDialogue,
@@ -2679,12 +2679,12 @@ class _LineCard extends StatelessWidget {
 
   static String? _firstTag(String? text) {
     if (text == null || text.isEmpty) return null;
-    final start = text.indexOf('{');
-    if (start < 0) return null;
-    final end = text.indexOf('}', start + 1);
-    if (end <= start) return null;
-    final content = text.substring(start + 1, end).trim();
-    return content.isEmpty ? null : content;
+    for (final match in RegExp(r'\{([^}]*)\}').allMatches(text)) {
+      final content = match.group(1)!.trim();
+      // ASS formatting is not a romanization annotation.
+      if (content.isNotEmpty && !content.startsWith('\\')) return content;
+    }
+    return null;
   }
 
   static String _textBeforeFirstBraceGroup(String? text) {
