@@ -5,7 +5,6 @@ String normalizeFinalTranslation(String text) => text
     .replaceAll('¿¡', '¿')
     .replaceAll('?!', '?')
     .replaceAll('!?', '?')
-    .replaceAll(RegExp(r'\.{3}|…'), '.')
     .replaceAll('¡', '')
     .replaceAll('!', '.');
 

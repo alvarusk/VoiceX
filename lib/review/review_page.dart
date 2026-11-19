@@ -1476,7 +1476,7 @@ If in doubt, prefer these spellings as-is.
                           minPaneWidth,
                           availableWidth - leftWidth,
                         );
-                        // Keep the five compact rows and voice visible on
+                        // Keep the three grid rows visible on
                         // laptop screens before giving extra height to video.
                         final desktopVideoHeight = math.min(
                           _videoHeight,
@@ -2384,7 +2384,7 @@ class _LineCard extends StatelessWidget {
         defaultTargetPlatform == TargetPlatform.macOS ||
         defaultTargetPlatform == TargetPlatform.linux;
     if (desktop && MediaQuery.sizeOf(context).width >= 720) {
-      return _buildCompact(context, title, originCombined, gptLabel);
+      return _buildDesktopGrid(context, title, originCombined, gptLabel);
     }
 
     return Padding(
@@ -2529,7 +2529,7 @@ class _LineCard extends StatelessWidget {
     );
   }
 
-  Widget _buildCompact(
+  Widget _buildDesktopGrid(
     BuildContext context,
     String title,
     String origin,
@@ -2601,47 +2601,68 @@ class _LineCard extends StatelessWidget {
                     ),
                   ),
                 )
-              else ...[
-                Flexible(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    children: [
-                      for (final candidate in candidates)
-                        _CandidateTile(
-                          compact: true,
-                          label: candidate.label,
-                          text: candidate.text,
-                          cps: _calcCps(line, candidate.text),
-                          cpsColor: _cpsColor(_calcCps(line, candidate.text)),
-                          isSelected: line.selectedSource == candidate.source,
-                          onTap: () => onTapCandidate(
-                            candidate.source,
-                            candidate.text,
-                            'tap',
+              else
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tiles = <Widget>[
+                        for (final candidate in candidates)
+                          _CandidateTile(
+                            grid: true,
+                            label: candidate.label,
+                            text: candidate.text,
+                            cps: _calcCps(line, candidate.text),
+                            cpsColor: _cpsColor(_calcCps(line, candidate.text)),
+                            isSelected: line.selectedSource == candidate.source,
+                            onTap: () => onTapCandidate(
+                              candidate.source,
+                              candidate.text,
+                              'tap',
+                            ),
+                            onEdit: () => onEditCandidate(
+                              candidate.source,
+                              candidate.text,
+                            ),
                           ),
+                        _VoiceTile(
+                          grid: true,
+                          text: line.candVoice ?? '',
+                          isSelected: line.selectedSource == 'voice',
+                          isListening: isLocalListening,
+                          isRecordingOpenAi: isOpenAiRecording,
+                          openAiBusy: openAiBusy,
+                          statusText: statusText,
+                          cps: _calcCps(line, line.candVoice ?? ''),
+                          cpsColor: _cpsColor(
+                            _calcCps(line, line.candVoice ?? ''),
+                          ),
+                          onMic: onMic,
+                          onRefine: onRefine,
+                          onUse: (text) =>
+                              onTapCandidate('voice', text, 'voice'),
                           onEdit: () =>
-                              onEditCandidate(candidate.source, candidate.text),
+                              onEditCandidate('voice', line.candVoice ?? ''),
                         ),
-                    ],
+                      ];
+                      final rows = (tiles.length / 2).ceil();
+                      return GridView.builder(
+                        key: const ValueKey('desktop-review-grid'),
+                        padding: const EdgeInsets.only(top: 4),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          mainAxisExtent: math.max(
+                            96,
+                            (constraints.maxHeight - 4 - (rows - 1) * 8) / rows,
+                          ),
+                        ),
+                        itemCount: tiles.length,
+                        itemBuilder: (context, index) => tiles[index],
+                      );
+                    },
                   ),
                 ),
-                _VoiceTile(
-                  compact: true,
-                  text: line.candVoice ?? '',
-                  isSelected: line.selectedSource == 'voice',
-                  isListening: isLocalListening,
-                  isRecordingOpenAi: isOpenAiRecording,
-                  openAiBusy: openAiBusy,
-                  statusText: statusText,
-                  cps: _calcCps(line, line.candVoice ?? ''),
-                  cpsColor: _cpsColor(_calcCps(line, line.candVoice ?? '')),
-                  onMic: onMic,
-                  onRefine: onRefine,
-                  onUse: (text) => onTapCandidate('voice', text, 'voice'),
-                  onEdit: () => onEditCandidate('voice', line.candVoice ?? ''),
-                ),
-              ],
             ],
           ),
         ),
@@ -2877,7 +2898,7 @@ class _CandidateTile extends StatelessWidget {
     required this.cpsColor,
     required this.onEdit,
     this.isSelected = false,
-    this.compact = false,
+    this.grid = false,
   });
   final String label;
   final String text;
@@ -2886,13 +2907,13 @@ class _CandidateTile extends StatelessWidget {
   final Color? cpsColor;
   final VoidCallback onEdit;
   final bool isSelected;
-  final bool compact;
+  final bool grid;
 
   @override
   Widget build(BuildContext context) {
-    if (compact) {
+    if (grid) {
       return Card(
-        margin: const EdgeInsets.symmetric(vertical: 2),
+        margin: EdgeInsets.zero,
         color: isSelected
             ? Theme.of(context).colorScheme.primaryContainer
             : null,
@@ -2900,41 +2921,41 @@ class _CandidateTile extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Row(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(
-                  width: 24,
-                  child: Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 16,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      isSelected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(label)),
+                    SizedBox(
+                      width: 84,
+                      child: _CpsBadge(cps: cps, color: cpsColor),
+                    ),
+                    IconButton(
+                      tooltip: 'Edit $label',
+                      icon: const Icon(Icons.edit, size: 18),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      padding: const EdgeInsets.all(6),
+                      onPressed: onEdit,
+                    ),
+                  ],
                 ),
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 4),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: _LineLimitPreviewText(text: text),
                   ),
-                ),
-                SizedBox(
-                  width: 84,
-                  child: _CpsBadge(cps: cps, color: cpsColor),
-                ),
-                Expanded(child: _LineLimitPreviewText(text: text)),
-                IconButton(
-                  tooltip: 'Edit $label',
-                  icon: const Icon(Icons.edit, size: 18),
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
-                  padding: const EdgeInsets.all(6),
-                  onPressed: onEdit,
                 ),
               ],
             ),
@@ -3310,7 +3331,7 @@ class _VoiceTile extends StatelessWidget {
     required this.onRefine,
     required this.onUse,
     required this.onEdit,
-    this.compact = false,
+    this.grid = false,
   });
 
   final String text;
@@ -3326,7 +3347,7 @@ class _VoiceTile extends StatelessWidget {
   final VoidCallback onRefine;
   final void Function(String text) onUse;
   final VoidCallback onEdit;
-  final bool compact;
+  final bool grid;
 
   @override
   Widget build(BuildContext context) {
@@ -3345,60 +3366,87 @@ class _VoiceTile extends StatelessWidget {
       tooltip = 'Speak';
     }
 
-    if (compact) {
+    if (grid) {
       return Card(
-        margin: const EdgeInsets.only(top: 4),
+        margin: EdgeInsets.zero,
         color: isSelected
             ? Theme.of(context).colorScheme.primaryContainer
             : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.all(8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
             children: [
+              IconButtonTheme(
+                data: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(32, 32),
+                    padding: const EdgeInsets.all(6),
+                    iconSize: 20,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'My voice',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: tooltip,
+                      icon: Icon(icon),
+                      onPressed: openAiBusy ? null : onMic,
+                    ),
+                    IconButton(
+                      tooltip: 'Refine punctuation',
+                      icon: const Icon(Icons.auto_fix_high),
+                      onPressed: hasText && !openAiBusy ? onRefine : null,
+                    ),
+                    IconButton(
+                      tooltip: 'Edit voice',
+                      icon: const Icon(Icons.edit),
+                      onPressed: onEdit,
+                    ),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(56, 32),
+                      ),
+                      onPressed: hasText ? () => onUse(text) : null,
+                      child: const Text('Use'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: hasText
+                      ? _LineLimitPreviewText(text: text)
+                      : const Text(
+                          'Press the microphone and dictate your translation.',
+                        ),
+                ),
+              ),
               Row(
                 children: [
-                  const SizedBox(
-                    width: 104,
-                    child: Text(
-                      'My voice',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
                   SizedBox(
                     width: 84,
                     child: _CpsBadge(cps: cps, color: cpsColor),
                   ),
                   Expanded(
-                    child: hasText
-                        ? _LineLimitPreviewText(text: text)
-                        : const Text(
-                            'Press the microphone and dictate your translation.',
-                          ),
-                  ),
-                  IconButton(
-                    tooltip: tooltip,
-                    icon: Icon(icon),
-                    onPressed: openAiBusy ? null : onMic,
-                  ),
-                  IconButton(
-                    tooltip: 'Refine punctuation',
-                    icon: const Icon(Icons.auto_fix_high),
-                    onPressed: hasText && !openAiBusy ? onRefine : null,
-                  ),
-                  IconButton(
-                    tooltip: 'Edit voice',
-                    icon: const Icon(Icons.edit),
-                    onPressed: onEdit,
-                  ),
-                  FilledButton(
-                    onPressed: hasText ? () => onUse(text) : null,
-                    child: const Text('Use'),
+                    child: Tooltip(
+                      message: statusText,
+                      child: Text(
+                        statusText,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              Text(statusText, style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ),

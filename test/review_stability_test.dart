@@ -128,7 +128,7 @@ void main() {
     await db.close();
   });
 
-  testWidgets('desktop shows all five candidates and voice without scrolling', (
+  testWidgets('desktop grid keeps five candidates and voice visible', (
     tester,
   ) async {
     await (db.update(
@@ -203,12 +203,28 @@ void main() {
     ]) {
       expect(find.text(label).hitTestable(), findsOneWidget);
     }
+    expect(find.byKey(const ValueKey('desktop-review-grid')), findsOneWidget);
+    for (final (left, right) in [
+      ('FINAL', 'GPT'),
+      ('Claude', 'Gemini'),
+      ('DeepSeek', 'My voice'),
+    ]) {
+      expect(
+        tester.getTopLeft(find.text(left)).dy,
+        closeTo(tester.getTopLeft(find.text(right)).dy, 8),
+      );
+      expect(
+        tester.getTopLeft(find.text(left)).dx,
+        lessThan(tester.getTopLeft(find.text(right)).dx),
+      );
+    }
     expect(
       tester.getTopLeft(find.text('FINAL')).dy,
-      closeTo(
-        tester.getTopLeft(find.text('Ibas a pedirles que te dejaran ir.')).dy,
-        8,
-      ),
+      lessThan(tester.getTopLeft(find.text('Claude')).dy),
+    );
+    expect(
+      tester.getTopLeft(find.text('Claude')).dy,
+      lessThan(tester.getTopLeft(find.text('DeepSeek')).dy),
     );
     if (const bool.fromEnvironment('CAPTURE_REVIEW')) {
       await tester.runAsync(() async {
@@ -218,7 +234,7 @@ void main() {
         final image = await boundary.toImage();
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
         await File(
-          'build/review_compact_desktop.png',
+          'build/review_grid_desktop.png',
         ).writeAsBytes(bytes!.buffer.asUint8List());
         image.dispose();
       });

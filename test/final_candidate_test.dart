@@ -105,7 +105,7 @@ void main() {
         },
       );
       final line = await db.select(db.subtitleLines).getSingle();
-      expect(line.candFinal, '¿Final.?\n¿translation.? Hola.');
+      expect(line.candFinal, '¿Final...?\n¿translation…? Hola.');
       expect(line.candGpt, '¡¿GPT...?!');
       expect(line.originalText, 'Original');
       final files = await db.select(db.projectFiles).get();
@@ -153,7 +153,7 @@ void main() {
       final timedLines = await (db.select(
         db.subtitleLines,
       )..where((t) => t.projectId.equals(timedId))).get();
-      expect(timedLines.first.candFinal, '¿Final.? Hola.');
+      expect(timedLines.first.candFinal, '¿Final...? Hola.');
       expect(timedLines.last.candFinal, isNull);
     },
   );
