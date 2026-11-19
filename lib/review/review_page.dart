@@ -19,6 +19,7 @@ import '../stt/speech_service.dart';
 import '../metrics/metrics_page.dart';
 import 'review_service.dart';
 import 'source_review.dart';
+import 'source_review_flags.dart';
 import 'actor_editor.dart';
 import '../sync/cloud_sync_service.dart';
 
@@ -2330,7 +2331,7 @@ class _LineCard extends StatelessWidget {
   final SubtitleLine line;
   final bool sourceReview;
   final List<String> actors;
-  final ValueChanged<String> onNoteChanged;
+  final Future<void> Function(String) onNoteChanged;
 
   final bool showFinal;
   final bool showGpt;
@@ -2429,15 +2430,9 @@ class _LineCard extends StatelessWidget {
               if (sourceReview)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: TextFormField(
-                    key: ValueKey('review-note-${line.lineId}'),
-                    initialValue: line.reviewNote ?? '',
-                    minLines: 1,
-                    maxLines: null,
-                    decoration: const InputDecoration(
-                      labelText: 'Note',
-                      border: OutlineInputBorder(),
-                    ),
+                  child: SourceReviewFlags(
+                    key: ValueKey('review-flags-${line.lineId}'),
+                    note: line.reviewNote ?? '',
                     onChanged: onNoteChanged,
                   ),
                 ),

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:drift/drift.dart' hide Column, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voicex/db/app_db.dart';
 import 'package:voicex/review/review_page.dart';
 import 'package:voicex/review/review_service.dart';
+import 'package:voicex/review/source_review.dart';
 import 'package:voicex/import/ass_parser.dart';
 import 'package:voicex/settings/settings_service.dart';
 import 'package:voicex/sync/cloud_sync_service.dart';
@@ -304,9 +306,17 @@ void main() {
         find.text('こんな古いのも売ってんだ……。\nkonna furui no mo uttenda......'),
         findsOneWidget,
       );
-      final note = find.byKey(const ValueKey('review-note-one'));
-      expect(note, findsOneWidget);
-      await tester.enterText(note, 'actor distinto');
+      final mobile = defaultTargetPlatform != TargetPlatform.windows;
+      final expectedNote = mobile ? 'Revisar actor y texto' : 'actor distinto';
+      if (mobile) {
+        expect(find.text('Note'), findsNothing);
+        await tester.tap(find.text('Actor').last);
+        await tester.tap(find.text('Text'));
+      } else {
+        final note = find.byKey(const ValueKey('review-note-one'));
+        expect(note, findsOneWidget);
+        await tester.enterText(note, expectedNote);
+      }
       await tester.tap(find.byTooltip('Mark doubt'));
       for (var i = 0; i < 5; i++) {
         await tester.runAsync(
@@ -319,12 +329,16 @@ void main() {
           db.subtitleLines,
         )..where((t) => t.lineId.equals('one'))).getSingle(),
       );
-      expect(line!.reviewNote, 'actor distinto');
+      expect(line!.reviewNote, expectedNote);
+      expect(sourceReviewText(line), endsWith('($expectedNote)'));
       expect(line.doubt, isTrue);
       expect(line.selectedText, isNull);
       expect(line.reviewed, isFalse);
       expect(line.originalText, parsed.text);
-      expect(find.text('actor distinto'), findsOneWidget);
+      expect(
+        find.text(mobile ? '($expectedNote)' : expectedNote),
+        findsOneWidget,
+      );
 
       // Formatting overrides must not be mistaken for the romanization.
       await tester.runAsync(
@@ -365,7 +379,10 @@ void main() {
         await tester.pump();
       }
       expect(find.text('こんな古いのも売ってんだ……。'), findsOneWidget);
-      expect(find.text('actor distinto'), findsOneWidget);
+      expect(
+        find.text(mobile ? '($expectedNote)' : expectedNote),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 1));
@@ -377,6 +394,7 @@ void main() {
     },
     variant: TargetPlatformVariant({
       TargetPlatform.android,
+      TargetPlatform.iOS,
       TargetPlatform.windows,
     }),
   );

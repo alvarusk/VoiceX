@@ -98,6 +98,11 @@ void main() {
       await tester.pump();
       expect(saved.last, '');
     },
+    variant: TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+      TargetPlatform.windows,
+    }),
   );
 
   testWidgets('actor writes stay ordered and finish after leaving the line', (
