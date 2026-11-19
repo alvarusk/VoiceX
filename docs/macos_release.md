@@ -39,7 +39,7 @@ These changes were needed for a successful build/archive flow:
 - `pubspec.yaml`
   - pin `file_picker` to `10.3.10`
 - `macos/Runner.xcodeproj/project.pbxproj`
-  - raise macOS deployment target to `11.0`
+  - use macOS deployment target `12.0` (required by Xcode 27)
 - `macos/Runner/Info.plist`
   - add `LSApplicationCategoryType`
 - `macos/Runner/DebugProfile.entitlements`
@@ -52,7 +52,7 @@ These changes were needed for a successful build/archive flow:
   - add user-selected file read/write
   - add network client
 - `macos/Podfile`
-  - keep `platform :osx, '11.0'`
+  - use `platform :osx, '12.0'` (required by Xcode 27)
 
 ## Build preparation from Terminal
 

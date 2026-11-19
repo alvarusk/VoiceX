@@ -214,6 +214,7 @@ Result:
 - If Apple changes required SDK/Xcode levels, update the GitHub runner image and/or workflow.
 - If signing changes in the Apple Developer portal, the `.p12` or provisioning profile secrets may need refreshing.
 - With Xcode 27, VoiceX requires iOS 15 or later. The app target, Flutter framework metadata, Pods project and pod targets use a minimum deployment target of `15.0`; pods requiring a higher minimum keep it. Swift asset symbol generation remains disabled for pods to avoid resource bundle archive failures.
+- The macOS app requires macOS 12 or later with Xcode 27. All Runner configurations, the CocoaPods platform and Pods project use a minimum deployment target of `12.0`; pod targets requiring a higher version keep it.
 - Keep local files like `ios_public.json` out of Git; the workflow generates its own CI-only defines file.
 
 ## Exact setup steps
