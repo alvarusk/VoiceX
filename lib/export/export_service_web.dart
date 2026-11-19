@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import '../db/app_db.dart';
 import '../settings/settings_service.dart';
 import '../review/source_review.dart';
+import '../utils/subtitle_text.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -31,7 +32,9 @@ class ExportService {
             .get();
 
     final sourceReview = await watchSourceReview(db, projectId).first;
-    final text = _buildMinimalAss(lines, sourceReview: sourceReview);
+    final text = normalizeExportQuotes(
+      _buildMinimalAss(lines, sourceReview: sourceReview),
+    );
     return XFile.fromData(
       Uint8List.fromList(utf8.encode(text)),
       mimeType: 'text/plain',

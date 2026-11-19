@@ -11,6 +11,7 @@ import '../db/app_db.dart';
 import '../settings/settings_service.dart';
 import 'ass_parser.dart';
 import 'engine.dart';
+import '../utils/subtitle_text.dart';
 
 class ImportService {
   ImportService(this.db);
@@ -213,7 +214,11 @@ class ImportService {
         for (int i = 0; i < engDialogues.length; i++) {
           final cand = engDialogues[i].translationCandidate;
           if (cand == null) continue;
-          updates.add(_CandidateUpdate(dialogueIndex: i, text: cand));
+          updates.add(_CandidateUpdate(
+            dialogueIndex: i,
+            text: engine == Engine.finalAss
+                ? normalizeFinalTranslation(cand) : cand,
+          ));
         }
       } else {
         // fallback por tiempo
@@ -226,7 +231,11 @@ class ImportService {
           }
           final cand = d.translationCandidate;
           if (cand == null) continue;
-          updates.add(_CandidateUpdate(dialogueIndex: idx, text: cand));
+          updates.add(_CandidateUpdate(
+            dialogueIndex: idx,
+            text: engine == Engine.finalAss
+                ? normalizeFinalTranslation(cand) : cand,
+          ));
         }
         unmatched += (engDialogues.length - updates.length).clamp(0, 1 << 30);
       }

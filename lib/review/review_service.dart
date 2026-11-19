@@ -322,41 +322,42 @@ class ReviewService {
     await _touchProjectByLine(lineId, now);
   }
 
-  Future<void> toggleDoubt(String lineId, bool value) async {
-    final existing = await (db.select(
-      db.subtitleLines,
-    )..where((t) => t.lineId.equals(lineId))).getSingleOrNull();
-    if (existing == null) return;
+  Future<void> toggleDoubt(String lineId, bool value) =>
+      db.transaction(() async {
+        final existing = await (db.select(
+          db.subtitleLines,
+        )..where((t) => t.lineId.equals(lineId))).getSingleOrNull();
+        if (existing == null) return;
 
-    String prefix = existing.dialoguePrefix;
-    if (value) {
-      // Dialogue -> Comment para marcar duda.
-      if (prefix.startsWith('Dialogue:')) {
-        prefix = prefix.replaceFirst('Dialogue:', 'Comment:');
-      } else if (!prefix.startsWith('Comment:')) {
-        prefix = 'Comment:${prefix.split(':').skip(1).join(':')}';
-      }
-    } else {
-      // Comment -> Dialogue para limpiar duda.
-      if (prefix.startsWith('Comment:')) {
-        prefix = prefix.replaceFirst('Comment:', 'Dialogue:');
-      } else if (!prefix.startsWith('Dialogue:')) {
-        prefix = 'Dialogue:${prefix.split(':').skip(1).join(':')}';
-      }
-    }
+        String prefix = existing.dialoguePrefix;
+        if (value) {
+          // Dialogue -> Comment para marcar duda.
+          if (prefix.startsWith('Dialogue:')) {
+            prefix = prefix.replaceFirst('Dialogue:', 'Comment:');
+          } else if (!prefix.startsWith('Comment:')) {
+            prefix = 'Comment:${prefix.split(':').skip(1).join(':')}';
+          }
+        } else {
+          // Comment -> Dialogue para limpiar duda.
+          if (prefix.startsWith('Comment:')) {
+            prefix = prefix.replaceFirst('Comment:', 'Dialogue:');
+          } else if (!prefix.startsWith('Dialogue:')) {
+            prefix = 'Dialogue:${prefix.split(':').skip(1).join(':')}';
+          }
+        }
 
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await (db.update(
-      db.subtitleLines,
-    )..where((t) => t.lineId.equals(lineId))).write(
-      SubtitleLinesCompanion(
-        doubt: Value(value),
-        dialoguePrefix: Value(prefix),
-        updatedAtMs: Value(now),
-      ),
-    );
-    await _touchProjectByLine(lineId, now);
-  }
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await (db.update(
+          db.subtitleLines,
+        )..where((t) => t.lineId.equals(lineId))).write(
+          SubtitleLinesCompanion(
+            doubt: Value(value),
+            dialoguePrefix: Value(prefix),
+            updatedAtMs: Value(now),
+          ),
+        );
+        await _touchProjectByLine(lineId, now);
+      });
 
   Future<void> setReviewNote(String lineId, String note) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -406,30 +407,57 @@ class ReviewService {
     await _touchProjectByLine(lineId, now);
   }
 
-  Future<void> setActorName(String lineId, String? actor) async {
-    final row = await (db.select(
-      db.subtitleLines,
-    )..where((t) => t.lineId.equals(lineId))).getSingleOrNull();
-    if (row == null) return;
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final normalizedActor = _normalizeActorName(actor);
-    final updatedPrefix = _replaceActorInDialoguePrefix(
-      row.dialoguePrefix,
-      normalizedActor ?? '',
-    );
-
-    await (db.update(
-      db.subtitleLines,
-    )..where((t) => t.lineId.equals(lineId))).write(
-      SubtitleLinesCompanion(
-        name: Value(normalizedActor),
-        dialoguePrefix: Value(updatedPrefix),
-        updatedAtMs: Value(now),
-      ),
-    );
-    await _touchProjectByLine(lineId, now);
+  Stream<List<String>> watchActorNames(String projectId) {
+    final query = db.selectOnly(db.subtitleLines, distinct: true)
+      ..addColumns([db.subtitleLines.name])
+      ..where(db.subtitleLines.projectId.equals(projectId));
+    return query
+        .watch()
+        .map((rows) {
+          final names =
+              rows
+                  .map(
+                    (row) =>
+                        _normalizeActorName(row.read(db.subtitleLines.name)),
+                  )
+                  .whereType<String>()
+                  .toSet()
+                  .toList()
+                ..sort();
+          return names;
+        })
+        .distinct(
+          (a, b) =>
+              a.length == b.length &&
+              Iterable<int>.generate(a.length).every((i) => a[i] == b[i]),
+        );
   }
+
+  Future<void> setActorName(String lineId, String? actor) =>
+      db.transaction(() async {
+        final row = await (db.select(
+          db.subtitleLines,
+        )..where((t) => t.lineId.equals(lineId))).getSingleOrNull();
+        if (row == null) return;
+
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final normalizedActor = _normalizeActorName(actor);
+        final updatedPrefix = _replaceActorInDialoguePrefix(
+          row.dialoguePrefix,
+          normalizedActor ?? '',
+        );
+
+        await (db.update(
+          db.subtitleLines,
+        )..where((t) => t.lineId.equals(lineId))).write(
+          SubtitleLinesCompanion(
+            name: Value(normalizedActor),
+            dialoguePrefix: Value(updatedPrefix),
+            updatedAtMs: Value(now),
+          ),
+        );
+        await _touchProjectByLine(lineId, now);
+      });
 
   Future<String?> getVideoPath(String projectId) async {
     final row =

@@ -10,6 +10,7 @@ import '../db/app_db.dart';
 import '../settings/settings_service.dart';
 import 'ass_export_matching.dart';
 import '../review/source_review.dart';
+import '../utils/subtitle_text.dart';
 
 class ExportService {
   ExportService(this.db);
@@ -41,7 +42,9 @@ class ExportService {
     );
 
     if (basePath.startsWith('web://')) {
-      final text = _buildMinimalAss(lines, sourceReview: sourceReview);
+      final text = normalizeExportQuotes(
+        _buildMinimalAss(lines, sourceReview: sourceReview),
+      );
       return XFile.fromData(
         Uint8List.fromList(utf8.encode(text)),
         mimeType: 'text/plain',
@@ -145,7 +148,7 @@ class ExportService {
     }
 
     final outFile = File(outPath);
-    await outFile.writeAsString(baseLines.join('\n'));
+    await outFile.writeAsString(normalizeExportQuotes(baseLines.join('\n')));
 
     return XFile(
       outFile.path,

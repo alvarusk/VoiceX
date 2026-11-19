@@ -99,14 +99,15 @@ void main() {
         engineAssFiles: {
           Engine.finalAss: await ass(
             'episode_final.ass',
-            r'Final\Ntranslation',
+            r'¡¿Final...?!\N¿¡translation…!? ¡Hola!',
           ),
-          Engine.gpt: await ass('episode_gpt.ass', 'GPT translation'),
+          Engine.gpt: await ass('episode_gpt.ass', '¡¿GPT...?!'),
         },
       );
       final line = await db.select(db.subtitleLines).getSingle();
-      expect(line.candFinal, 'Final\ntranslation');
-      expect(line.candGpt, 'GPT translation');
+      expect(line.candFinal, '¿Final.?\n¿translation.? Hola.');
+      expect(line.candGpt, '¡¿GPT...?!');
+      expect(line.originalText, 'Original');
       final files = await db.select(db.projectFiles).get();
       expect(files.map((f) => f.engine), contains('final'));
       final review = ReviewService(db);
@@ -135,6 +136,25 @@ void main() {
           .timeout(const Duration(seconds: 5));
       expect(metrics.reviewed, 1);
       expect(metrics.bySource['other'] ?? 0, 0);
+
+      // Unequal dialogue counts take the time-matching import path.
+      final timedBase = File('${dir.path}/timed_base.ass');
+      await timedBase.writeAsString(
+        '$header${dialogue('Original')}'
+        '${dialogue('Other').replaceAll('0:00:01', '0:00:03').replaceAll('0:00:02', '0:00:04')}',
+      );
+      final timedId = await ImportService(db).importProject(
+        title: 'Timed FINAL import',
+        baseAss: _LocalAssFile(timedBase),
+        engineAssFiles: {
+          Engine.finalAss: await ass('timed_final.ass', '¿¡Final...!? ¡Hola!'),
+        },
+      );
+      final timedLines = await (db.select(
+        db.subtitleLines,
+      )..where((t) => t.projectId.equals(timedId))).get();
+      expect(timedLines.first.candFinal, '¿Final.? Hola.');
+      expect(timedLines.last.candFinal, isNull);
     },
   );
 }
@@ -153,5 +173,6 @@ final class _LocalAssFile extends PlatformFile {
   @override
   Future<Uint8List> readAsBytes() => file.readAsBytes();
   @override
-  Stream<Uint8List> readAsByteStream() => file.openRead().map(Uint8List.fromList);
+  Stream<Uint8List> readAsByteStream() =>
+      file.openRead().map(Uint8List.fromList);
 }

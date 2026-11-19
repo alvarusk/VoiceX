@@ -19,6 +19,7 @@ import '../stt/speech_service.dart';
 import '../metrics/metrics_page.dart';
 import 'review_service.dart';
 import 'source_review.dart';
+import 'actor_editor.dart';
 import '../sync/cloud_sync_service.dart';
 
 class ReviewPage extends StatefulWidget {
@@ -38,6 +39,9 @@ class _ReviewPageState extends State<ReviewPage> {
   late final Stream<Project> _projectStream;
   late final Stream<int> _totalLinesStream;
   final Map<int, Stream<SubtitleLine>> _lineStreams = {};
+  late final Stream<List<String>> _actorNamesStream = _svc.watchActorNames(
+    widget.projectId,
+  );
   late final Stream<bool> _sourceReviewStream = watchSourceReview(
     widget.db,
     widget.projectId,
@@ -1131,84 +1135,90 @@ If in doubt, prefer these spellings as-is.
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                FutureBuilder<bool>(
-                  future: _cloud.isProjectDirty(project.projectId),
-                  builder: (context, snapDirty) {
-                    final dirty = snapDirty.data ?? true;
-                    final icon = dirty ? Icons.cloud_upload : Icons.cloud_done;
-                    final color = dirty ? Colors.orange : null;
-                    final tooltip = dirty
-                        ? 'Save (local changes not uploaded yet)'
-                        : 'Saved to cloud';
-                    return IconButton(
-                      icon: Icon(icon, color: color),
-                      tooltip: tooltip,
-                      onPressed: _savingCloud
-                          ? null
-                          : () => _saveToCloud(project),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: Icon(
-                    Icons.playlist_play,
-                    color: project.autoPlayLine ? Colors.green : Colors.grey,
-                  ),
-                  tooltip: project.autoPlayLine
-                      ? 'Autoplay line segment: on'
-                      : 'Autoplay line segment: off',
-                  onPressed: () => unawaited(
-                    _svc.setAutoPlayLine(
-                      project.projectId,
-                      !project.autoPlayLine,
-                    ),
-                  ),
-                ),
-                StreamBuilder<int>(
-                  stream: _totalLinesStream,
-                  builder: (context, totalSnap) {
-                    final total = totalSnap.data ?? 0;
-                    final currentLine = project.currentIndex + 1;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: _LineJumpCounter(
-                        currentLine: currentLine,
-                        total: total,
-                        onJump: (lineNumber) =>
-                            _jumpToIndex(project, lineNumber - 1),
-                      ),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.bar_chart),
-                  tooltip: 'Metrics',
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => MetricsPage(
-                          db: widget.db,
-                          projectId: project.projectId,
-                          projectTitle: project.title,
-                          projectFolder: project.folder,
+                        FutureBuilder<bool>(
+                          future: _cloud.isProjectDirty(project.projectId),
+                          builder: (context, snapDirty) {
+                            final dirty = snapDirty.data ?? true;
+                            final icon = dirty
+                                ? Icons.cloud_upload
+                                : Icons.cloud_done;
+                            final color = dirty ? Colors.orange : null;
+                            final tooltip = dirty
+                                ? 'Save (local changes not uploaded yet)'
+                                : 'Saved to cloud';
+                            return IconButton(
+                              icon: Icon(icon, color: color),
+                              tooltip: tooltip,
+                              onPressed: _savingCloud
+                                  ? null
+                                  : () => _saveToCloud(project),
+                            );
+                          },
                         ),
-                      ),
-                    );
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.tune),
-                  onPressed: () => _openTools(project),
-                  tooltip: 'Tools',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.ios_share),
-                  onPressed: () => _svc.exportAndShareProject(
-                    context,
-                    projectId: project.projectId,
-                  ),
-                  tooltip: 'Export final ASS',
-                ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.playlist_play,
+                            color: project.autoPlayLine
+                                ? Colors.green
+                                : Colors.grey,
+                          ),
+                          tooltip: project.autoPlayLine
+                              ? 'Autoplay line segment: on'
+                              : 'Autoplay line segment: off',
+                          onPressed: () => unawaited(
+                            _svc.setAutoPlayLine(
+                              project.projectId,
+                              !project.autoPlayLine,
+                            ),
+                          ),
+                        ),
+                        StreamBuilder<int>(
+                          stream: _totalLinesStream,
+                          builder: (context, totalSnap) {
+                            final total = totalSnap.data ?? 0;
+                            final currentLine = project.currentIndex + 1;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: _LineJumpCounter(
+                                currentLine: currentLine,
+                                total: total,
+                                onJump: (lineNumber) =>
+                                    _jumpToIndex(project, lineNumber - 1),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.bar_chart),
+                          tooltip: 'Metrics',
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => MetricsPage(
+                                  db: widget.db,
+                                  projectId: project.projectId,
+                                  projectTitle: project.title,
+                                  projectFolder: project.folder,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.tune),
+                          onPressed: () => _openTools(project),
+                          tooltip: 'Tools',
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.ios_share),
+                          onPressed: () => _svc.exportAndShareProject(
+                            context,
+                            projectId: project.projectId,
+                          ),
+                          tooltip: 'Export final ASS',
+                        ),
                       ],
                     ),
                   ),
@@ -1419,14 +1429,15 @@ If in doubt, prefer these spellings as-is.
                                                   ? Icons.stop_circle
                                                   : Icons.mic,
                                             ),
-                                            color: _isRecording ||
+                                            color:
+                                                _isRecording ||
                                                     _speech.isListening
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .error
+                                                ? Theme.of(
+                                                    context,
+                                                  ).colorScheme.error
                                                 : null,
-                                            onPressed: _currentLine == null ||
-                                                    _recBusy
+                                            onPressed:
+                                                _currentLine == null || _recBusy
                                                 ? null
                                                 : () => _toggleVoiceInput(
                                                     project,
@@ -1465,6 +1476,12 @@ If in doubt, prefer these spellings as-is.
                           minPaneWidth,
                           availableWidth - leftWidth,
                         );
+                        // Keep the five compact rows and voice visible on
+                        // laptop screens before giving extra height to video.
+                        final desktopVideoHeight = math.min(
+                          _videoHeight,
+                          math.max(112.0, constraints.maxHeight - 440 - 156),
+                        );
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1487,7 +1504,7 @@ If in doubt, prefer these spellings as-is.
                                       getLineText: _textFromTiming,
                                       subtitleStartMs: _currentLine?.startMs,
                                       subtitleEndMs: _currentLine?.endMs,
-                                      height: _videoHeight,
+                                      height: desktopVideoHeight,
                                       onDragResize: (delta) {
                                         final next =
                                             (_videoHeight + delta * 0.8).clamp(
@@ -1602,10 +1619,14 @@ If in doubt, prefer these spellings as-is.
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return _buildSourceAwareLinePager(
-          project: project,
-          total: total,
-          sourceReview: snapshot.data!,
+        return StreamBuilder<List<String>>(
+          stream: _actorNamesStream,
+          builder: (context, actors) => _buildSourceAwareLinePager(
+            project: project,
+            total: total,
+            sourceReview: snapshot.data!,
+            actors: actors.data ?? const [],
+          ),
         );
       },
     );
@@ -1615,6 +1636,7 @@ If in doubt, prefer these spellings as-is.
     required Project project,
     required int total,
     required bool sourceReview,
+    required List<String> actors,
   }) {
     return PageView.builder(
       controller: _pageController,
@@ -1656,6 +1678,7 @@ If in doubt, prefer these spellings as-is.
               project: project,
               line: line,
               sourceReview: sourceReview,
+              actors: actors,
               onNoteChanged: (note) => _svc.setReviewNote(line.lineId, note),
               showFinal: showFinal,
               showGpt: showGpt,
@@ -1941,8 +1964,11 @@ class _VideoPanel extends StatelessWidget {
         ),
         IconButton(
           tooltip: controller?.value.isPlaying == true ? 'Pause' : 'Play',
-          icon: Icon(controller?.value.isPlaying == true
-              ? Icons.pause_circle : Icons.play_circle),
+          icon: Icon(
+            controller?.value.isPlaying == true
+                ? Icons.pause_circle
+                : Icons.play_circle,
+          ),
           iconSize: 36,
           onPressed: controller == null ? null : onPlayPause,
         ),
@@ -2280,6 +2306,7 @@ class _LineCard extends StatelessWidget {
     required this.project,
     required this.line,
     required this.sourceReview,
+    required this.actors,
     required this.onNoteChanged,
     required this.showFinal,
     required this.showGpt,
@@ -2302,6 +2329,7 @@ class _LineCard extends StatelessWidget {
   final Project project;
   final SubtitleLine line;
   final bool sourceReview;
+  final List<String> actors;
   final ValueChanged<String> onNoteChanged;
 
   final bool showFinal;
@@ -2351,6 +2379,14 @@ class _LineCard extends StatelessWidget {
       if (romanDialogue.isNotEmpty) romanDialogue,
     ].join('\n');
 
+    final desktop =
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+    if (desktop && MediaQuery.sizeOf(context).width >= 720) {
+      return _buildCompact(context, title, originCombined, gptLabel);
+    }
+
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Card(
@@ -2380,8 +2416,10 @@ class _LineCard extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: _ActorEditor(
+                child: ActorEditor(
+                  key: ValueKey('actor-${line.lineId}'),
                   initialValue: line.name ?? '',
+                  actors: actors,
                   onSave: onSaveActor,
                 ),
               ),
@@ -2491,6 +2529,126 @@ class _LineCard extends StatelessWidget {
     );
   }
 
+  Widget _buildCompact(
+    BuildContext context,
+    String title,
+    String origin,
+    String gptLabel,
+  ) {
+    final candidates = <({String source, String label, String text})>[
+      if (showFinal && (line.candFinal ?? '').isNotEmpty)
+        (source: 'final', label: 'FINAL', text: line.candFinal!),
+      if (showGpt && (line.candGpt ?? '').isNotEmpty)
+        (source: 'gpt', label: gptLabel, text: line.candGpt!),
+      if (showClaude && (line.candClaude ?? '').isNotEmpty)
+        (source: 'claude', label: 'Claude', text: line.candClaude!),
+      if (showGemini && (line.candGemini ?? '').isNotEmpty)
+        (source: 'gemini', label: 'Gemini', text: line.candGemini!),
+      if (showDeepseek && (line.candDeepseek ?? '').isNotEmpty)
+        (source: 'deepseek', label: 'DeepSeek', text: line.candDeepseek!),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: ActorEditor(
+                      key: ValueKey('actor-${line.lineId}'),
+                      initialValue: line.name ?? '',
+                      actors: actors,
+                      onSave: onSaveActor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: Text(title)),
+                  IconButton(
+                    tooltip: 'Mark doubt',
+                    icon: Icon(line.doubt ? Icons.flag : Icons.outlined_flag),
+                    onPressed: onToggleDoubt,
+                  ),
+                  if (line.reviewed) const Icon(Icons.check_circle, size: 18),
+                ],
+              ),
+              if (origin.isNotEmpty)
+                _SourceBlock(
+                  label: '',
+                  text: origin,
+                  highlight: true,
+                  compact: true,
+                ),
+              if ((line.gloss ?? '').isNotEmpty)
+                _SourceBlock(label: 'Gloss', text: line.gloss!, compact: true),
+              if (sourceReview)
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: TextFormField(
+                      key: ValueKey('review-note-${line.lineId}'),
+                      initialValue: line.reviewNote ?? '',
+                      minLines: 2,
+                      maxLines: null,
+                      decoration: const InputDecoration(
+                        labelText: 'Note',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: onNoteChanged,
+                    ),
+                  ),
+                )
+              else ...[
+                Flexible(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    children: [
+                      for (final candidate in candidates)
+                        _CandidateTile(
+                          compact: true,
+                          label: candidate.label,
+                          text: candidate.text,
+                          cps: _calcCps(line, candidate.text),
+                          cpsColor: _cpsColor(_calcCps(line, candidate.text)),
+                          isSelected: line.selectedSource == candidate.source,
+                          onTap: () => onTapCandidate(
+                            candidate.source,
+                            candidate.text,
+                            'tap',
+                          ),
+                          onEdit: () =>
+                              onEditCandidate(candidate.source, candidate.text),
+                        ),
+                    ],
+                  ),
+                ),
+                _VoiceTile(
+                  compact: true,
+                  text: line.candVoice ?? '',
+                  isSelected: line.selectedSource == 'voice',
+                  isListening: isLocalListening,
+                  isRecordingOpenAi: isOpenAiRecording,
+                  openAiBusy: openAiBusy,
+                  statusText: statusText,
+                  cps: _calcCps(line, line.candVoice ?? ''),
+                  cpsColor: _cpsColor(_calcCps(line, line.candVoice ?? '')),
+                  onMic: onMic,
+                  onRefine: onRefine,
+                  onUse: (text) => onTapCandidate('voice', text, 'voice'),
+                  onEdit: () => onEditCandidate('voice', line.candVoice ?? ''),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   static double _calcCps(SubtitleLine l, String text) {
     final clean = text.trim().replaceAll('\r', '').replaceAll('\n', '');
     if (clean.isEmpty) return 0;
@@ -2542,10 +2700,12 @@ class _SourceBlock extends StatelessWidget {
     required this.label,
     required this.text,
     this.highlight = false,
+    this.compact = false,
   });
   final String label;
   final String text;
   final bool highlight;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -2554,7 +2714,7 @@ class _SourceBlock extends StatelessWidget {
     return Card(
       color: highlight ? const Color(0xFF1E3A8A) : null, // cobalt-ish tone
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(compact ? 8 : 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2717,6 +2877,7 @@ class _CandidateTile extends StatelessWidget {
     required this.cpsColor,
     required this.onEdit,
     this.isSelected = false,
+    this.compact = false,
   });
   final String label;
   final String text;
@@ -2725,9 +2886,62 @@ class _CandidateTile extends StatelessWidget {
   final Color? cpsColor;
   final VoidCallback onEdit;
   final bool isSelected;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        color: isSelected
+            ? Theme.of(context).colorScheme.primaryContainer
+            : null,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: Icon(
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    size: 16,
+                  ),
+                ),
+                SizedBox(
+                  width: 80,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                SizedBox(
+                  width: 84,
+                  child: _CpsBadge(cps: cps, color: cpsColor),
+                ),
+                Expanded(child: _LineLimitPreviewText(text: text)),
+                IconButton(
+                  tooltip: 'Edit $label',
+                  icon: const Icon(Icons.edit, size: 18),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  onPressed: onEdit,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Card(
       color: isSelected ? Colors.green.withAlpha((0.12 * 255).round()) : null,
       child: ListTile(
@@ -2758,98 +2972,27 @@ class _CandidateTile extends StatelessWidget {
   }
 }
 
-class _ActorEditor extends StatefulWidget {
-  const _ActorEditor({required this.initialValue, required this.onSave});
-
-  final String initialValue;
-  final Future<void> Function(String actor) onSave;
-
-  @override
-  State<_ActorEditor> createState() => _ActorEditorState();
-}
-
-class _ActorEditorState extends State<_ActorEditor> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialValue,
-  );
-  bool _saving = false;
-
-  bool get _isDirty =>
-      _normalize(_controller.text) != _normalize(widget.initialValue);
-
-  @override
-  void didUpdateWidget(covariant _ActorEditor oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.initialValue == oldWidget.initialValue) return;
-    if (_normalize(widget.initialValue) == _normalize(_controller.text)) return;
-
-    _controller.value = TextEditingValue(
-      text: widget.initialValue,
-      selection: TextSelection.collapsed(offset: widget.initialValue.length),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleSave() async {
-    if (_saving || !_isDirty) return;
-    setState(() => _saving = true);
-    try {
-      await widget.onSave(_controller.text);
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
-    }
-  }
-
-  String _normalize(String value) {
-    return value.trim().replaceAll(RegExp(r'\s+'), ' ');
-  }
+class _CpsBadge extends StatelessWidget {
+  const _CpsBadge({required this.cps, required this.color});
+  final double cps;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        SizedBox(
-          width: 56,
-          child: Text(
-            'Actor',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+    if (cps <= 0 || color == null) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: color!.withAlpha((0.15 * 255).round()),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Text('CPS ${cps.toStringAsFixed(1)}', maxLines: 1),
         ),
-        Expanded(
-          child: TextField(
-            controller: _controller,
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (_) => _handleSave(),
-            decoration: const InputDecoration(
-              isDense: true,
-              hintText: 'No actor',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        IconButton.filled(
-          tooltip: 'Save actor',
-          onPressed: (!_isDirty || _saving) ? null : _handleSave,
-          icon: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.save),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -3167,6 +3310,7 @@ class _VoiceTile extends StatelessWidget {
     required this.onRefine,
     required this.onUse,
     required this.onEdit,
+    this.compact = false,
   });
 
   final String text;
@@ -3182,6 +3326,7 @@ class _VoiceTile extends StatelessWidget {
   final VoidCallback onRefine;
   final void Function(String text) onUse;
   final VoidCallback onEdit;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -3198,6 +3343,66 @@ class _VoiceTile extends StatelessWidget {
     } else {
       icon = Icons.mic;
       tooltip = 'Speak';
+    }
+
+    if (compact) {
+      return Card(
+        margin: const EdgeInsets.only(top: 4),
+        color: isSelected
+            ? Theme.of(context).colorScheme.primaryContainer
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 104,
+                    child: Text(
+                      'My voice',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 84,
+                    child: _CpsBadge(cps: cps, color: cpsColor),
+                  ),
+                  Expanded(
+                    child: hasText
+                        ? _LineLimitPreviewText(text: text)
+                        : const Text(
+                            'Press the microphone and dictate your translation.',
+                          ),
+                  ),
+                  IconButton(
+                    tooltip: tooltip,
+                    icon: Icon(icon),
+                    onPressed: openAiBusy ? null : onMic,
+                  ),
+                  IconButton(
+                    tooltip: 'Refine punctuation',
+                    icon: const Icon(Icons.auto_fix_high),
+                    onPressed: hasText && !openAiBusy ? onRefine : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Edit voice',
+                    icon: const Icon(Icons.edit),
+                    onPressed: onEdit,
+                  ),
+                  FilledButton(
+                    onPressed: hasText ? () => onUse(text) : null,
+                    child: const Text('Use'),
+                  ),
+                ],
+              ),
+              Text(statusText, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ),
+      );
     }
 
     return Card(

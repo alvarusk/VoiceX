@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voicex/db/app_db.dart';
 import 'package:voicex/export/export_service_io.dart';
+import 'package:voicex/export/export_service_web.dart' as web;
 import 'package:voicex/import/ass_parser.dart';
 import 'package:voicex/settings/settings_service.dart';
 import 'package:voicex/review/review_service.dart';
@@ -80,6 +81,48 @@ void main() {
     await db.close();
     await dir.delete(recursive: true);
   });
+
+  test(
+    'exports straight quotes on desktop and web without editing stored text',
+    () async {
+      const selected = 'Dijo: «Hola», «adiós».';
+      await (db.update(db.subtitleLines)..where((t) => t.lineId.equals('0')))
+          .write(const SubtitleLinesCompanion(selectedText: Value(selected)));
+      final original = await base.readAsString();
+      await base.writeAsString(
+        '$original\nComment: 0,0:00:00.00,0:00:00.00,Default,,0,0,0,,«Nota original»',
+      );
+      final desktop = await ExportService(db).exportCleanAssXFile('p');
+      final desktopText = await desktop.readAsString();
+      expect(desktopText, contains('Dijo: "Hola", "adiós".'));
+      expect(desktopText, contains(',,"Nota original"'));
+      final browser = await web.ExportService(db).exportCleanAssXFile('p');
+      expect(await browser.readAsString(), contains('Dijo: "Hola", "adiós".'));
+      final line = await (db.select(
+        db.subtitleLines,
+      )..where((t) => t.lineId.equals('0'))).getSingle();
+      expect(line.selectedText, selected);
+      expect(await base.readAsString(), contains('«Nota original»'));
+    },
+  );
+
+  test(
+    'source review exports straight quotes in source text and notes',
+    () async {
+      await (db.update(
+        db.subtitleLines,
+      )).write(const SubtitleLinesCompanion(selectedText: Value(null)));
+      await ReviewService(db).setReviewNote('0', 'comprobar «actor»');
+      final desktop = await ExportService(db).exportCleanAssXFile('p');
+      final browser = await web.ExportService(db).exportCleanAssXFile('p');
+      for (final output in [desktop, browser]) {
+        expect(
+          await output.readAsString(),
+          contains('Bonjour(comprobar "actor")'),
+        );
+      }
+    },
+  );
 
   test(
     'does not reuse absolute row indices as relative indices on signs',

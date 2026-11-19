@@ -1,6 +1,9 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:drift/drift.dart' hide Column, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -125,23 +128,152 @@ void main() {
     await db.close();
   });
 
+  testWidgets('desktop shows all five candidates and voice without scrolling', (
+    tester,
+  ) async {
+    await (db.update(
+      db.subtitleLines,
+    )..where((t) => t.projectId.equals('one'))).write(
+      const SubtitleLinesCompanion(
+        name: Value('Natsumi'),
+        sourceText: Value(
+          '僕も仲間に入れって言うんでしょ！{boku mo nakama ni irete tte iun desho!}',
+        ),
+        candFinal: Value('Ibas a pedirles que te dejaran ir.'),
+        candGpt: Value('Ibas a pedirles que te dejaran ir con ellos.'),
+        candClaude: Value('Ibas a pedir que te dejaran unirte, ¿a que sí?'),
+        candGemini: Value('Ibas a decir que te dejaran ir con ellos, ¿verdad?'),
+        candDeepseek: Value(
+          'Seguro que dices que te deje apuntarme a mí también.',
+        ),
+        candVoice: Value('Ibas a pedirles que te dejaran ir con ellos.'),
+      ),
+    );
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1920, 1080);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final captureKey = GlobalKey();
+    const previewFont = String.fromEnvironment('REVIEW_FONT');
+    const previewJapanese = String.fromEnvironment('REVIEW_JAPANESE_FONT');
+    const previewIcons = String.fromEnvironment('REVIEW_ICONS');
+    for (final (family, path) in [
+      ('ReviewUI', previewFont),
+      ('ReviewJapanese', previewJapanese),
+      ('MaterialIcons', previewIcons),
+    ]) {
+      if (path.isNotEmpty) {
+        await tester.runAsync(() async {
+          final loader = FontLoader(family)
+            ..addFont(File(path).readAsBytes().then(ByteData.sublistView));
+          await loader.load();
+        });
+      }
+    }
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: captureKey,
+        child: MaterialApp(
+          theme: ThemeData(
+            brightness: Brightness.dark,
+            useMaterial3: true,
+            fontFamily: previewFont.isEmpty ? null : 'ReviewUI',
+            fontFamilyFallback: previewJapanese.isEmpty
+                ? null
+                : ['ReviewJapanese'],
+          ),
+          home: ReviewPage(db: db, projectId: 'one'),
+        ),
+      ),
+    );
+    for (var i = 0; i < 15; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    for (final label in [
+      'FINAL',
+      'GPT',
+      'Claude',
+      'Gemini',
+      'DeepSeek',
+      'My voice',
+    ]) {
+      expect(find.text(label).hitTestable(), findsOneWidget);
+    }
+    expect(
+      tester.getTopLeft(find.text('FINAL')).dy,
+      closeTo(
+        tester.getTopLeft(find.text('Ibas a pedirles que te dejaran ir.')).dy,
+        8,
+      ),
+    );
+    if (const bool.fromEnvironment('CAPTURE_REVIEW')) {
+      await tester.runAsync(() async {
+        final boundary =
+            captureKey.currentContext!.findRenderObject()!
+                as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await File(
+          'build/review_compact_desktop.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        image.dispose();
+      });
+    }
+    tester.view.physicalSize = const Size(1366, 768);
+    await tester.pumpAndSettle();
+    for (final label in [
+      'FINAL',
+      'GPT',
+      'Claude',
+      'Gemini',
+      'DeepSeek',
+      'My voice',
+    ]) {
+      expect(
+        find.text(label).hitTestable(),
+        findsOneWidget,
+        reason: 'Laptop: $label must stay visible',
+      );
+    }
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
+    await tester.pump(const Duration(milliseconds: 1));
+    await db.close();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
   testWidgets('JAP-only review saves a note without selecting a translation', (
     tester,
   ) async {
-    await (db.update(db.subtitleLines)..where((t) => t.projectId.equals('one')))
-        .write(const SubtitleLinesCompanion(
-          candFinal: Value(null), candGpt: Value(null),
-          originalText: Value(r'{\i1}着歯！{romaji}'),
-        ));
+    await (db.update(
+      db.subtitleLines,
+    )..where((t) => t.projectId.equals('one'))).write(
+      const SubtitleLinesCompanion(
+        candFinal: Value(null),
+        candGpt: Value(null),
+        originalText: Value(r'{\i1}着歯！{romaji}'),
+      ),
+    );
     tester.view.physicalSize = const Size(1400, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
-      home: ReviewPage(db: db, projectId: 'one'),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewPage(db: db, projectId: 'one'),
+      ),
+    );
     for (var i = 0; i < 15; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
       await tester.pump();
     }
     await tester.pumpAndSettle();
@@ -151,11 +283,16 @@ void main() {
     await tester.enterText(note, 'actor distinto');
     await tester.tap(find.byTooltip('Mark doubt'));
     for (var i = 0; i < 5; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
       await tester.pump();
     }
-    final line = await tester.runAsync(() =>
-      (db.select(db.subtitleLines)..where((t) => t.lineId.equals('one'))).getSingle());
+    final line = await tester.runAsync(
+      () => (db.select(
+        db.subtitleLines,
+      )..where((t) => t.lineId.equals('one'))).getSingle(),
+    );
     expect(line!.reviewNote, 'actor distinto');
     expect(line.doubt, isTrue);
     expect(line.selectedText, isNull);
@@ -164,7 +301,9 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 30)),
+    );
     await tester.pump(const Duration(milliseconds: 1));
     await db.close();
   });
