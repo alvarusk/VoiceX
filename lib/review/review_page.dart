@@ -1933,6 +1933,31 @@ class _VideoPanel extends StatelessWidget {
         );
       }
 
+      final controls = <Widget>[
+        IconButton(
+          tooltip: 'Rewind 5s',
+          icon: const Icon(Icons.replay_5),
+          onPressed: controller == null ? null : onBack,
+        ),
+        IconButton(
+          tooltip: controller?.value.isPlaying == true ? 'Pause' : 'Play',
+          icon: Icon(controller?.value.isPlaying == true
+              ? Icons.pause_circle : Icons.play_circle),
+          iconSize: 36,
+          onPressed: controller == null ? null : onPlayPause,
+        ),
+        IconButton(
+          tooltip: 'Play only the current line',
+          icon: const Icon(Icons.playlist_play),
+          onPressed: controller == null ? null : onPlaySegment,
+        ),
+        IconButton(
+          tooltip: 'Forward 5s',
+          icon: const Icon(Icons.forward_5),
+          onPressed: controller == null ? null : onForward,
+        ),
+      ];
+
       return Card(
         margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Padding(
@@ -1941,91 +1966,67 @@ class _VideoPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                height: height,
-                child: Center(child: player),
-              ),
-              const SizedBox(height: 4),
-              GestureDetector(
-                onPanUpdate: (details) => onDragResize(details.delta.dy),
+                // Reuse the space previously occupied by the two control rows.
+                height: height + 80,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [Icon(Icons.drag_handle, size: 16)],
-                ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  '$positionText / $durationText',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    tooltip: 'Rewind 5s',
-                    icon: const Icon(Icons.replay_5),
-                    onPressed: controller == null ? null : onBack,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
-                  ),
-                  IconButton(
-                    tooltip: controller?.value.isPlaying == true
-                        ? 'Pause'
-                        : 'Play',
-                    icon: Icon(
-                      controller?.value.isPlaying == true
-                          ? Icons.pause_circle
-                          : Icons.play_circle,
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: IconButtonTheme(
+                        data: IconButtonThemeData(
+                          style: IconButton.styleFrom(
+                            iconSize: 30,
+                            minimumSize: const Size(48, 48),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: controls,
+                        ),
+                      ),
                     ),
-                    onPressed: controller == null ? null : onPlayPause,
-                    iconSize: 28,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
-                  ),
-                  IconButton(
-                    tooltip: 'Play only the current line',
-                    icon: const Icon(Icons.playlist_play),
-                    onPressed: controller == null ? null : onPlaySegment,
-                    iconSize: 22,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
-                  ),
-                  IconButton(
-                    tooltip: 'Forward 5s',
-                    icon: const Icon(Icons.forward_5),
-                    onPressed: controller == null ? null : onForward,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Previous line',
+                      icon: const Icon(Icons.skip_previous),
+                      iconSize: 44,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(64, 64),
+                      ),
+                      onPressed: onPrevLine,
+                    ),
+                    Expanded(child: Center(child: player)),
+                    IconButton(
+                      tooltip: 'Next line',
+                      icon: const Icon(Icons.skip_next),
+                      iconSize: 44,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(64, 64),
+                      ),
+                      onPressed: onNextLine,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  IconButton(
-                    tooltip: 'Previous line',
-                    icon: const Icon(Icons.skip_previous),
-                    onPressed: onPrevLine,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
+                  const SizedBox(width: 64),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanUpdate: (details) => onDragResize(details.delta.dy),
+                      child: const SizedBox(
+                        height: 24,
+                        child: Center(child: Icon(Icons.drag_handle, size: 16)),
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    tooltip: 'Next line',
-                    icon: const Icon(Icons.skip_next),
-                    onPressed: onNextLine,
-                    iconSize: 20,
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.all(6),
+                  Text(
+                    '$positionText / $durationText',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),

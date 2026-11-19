@@ -400,7 +400,7 @@ jobs:
             --skip_upload_screenshots true
 
   build-apple:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 120
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -508,21 +508,21 @@ jobs:
             exit 1
           fi
 
-      - name: Select Xcode 26
+      - name: Select Xcode 27
         shell: bash
         run: |
           set -euo pipefail
           XCODE_APP="$(
-            find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' \
+            find /Applications -maxdepth 1 -type d -name 'Xcode_27*.app' \
               ! -name '*beta*' \
               | sort -V \
               | tail -n1
           )"
           if [ -z "$XCODE_APP" ]; then
-            XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n1)"
+            XCODE_APP="$(find /Applications -maxdepth 1 -type d -name 'Xcode_27*.app' | sort -V | tail -n1)"
           fi
           if [ -z "$XCODE_APP" ]; then
-            echo "No Xcode 26 installation found on this runner."
+            echo "No Xcode 27 installation found on this runner."
             ls -1 /Applications | grep '^Xcode' || true
             exit 1
           fi
